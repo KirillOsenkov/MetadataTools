@@ -34,8 +34,10 @@ namespace PEFile
         [Benchmark]
         public void ReadUsingCecil()
         {
-            var module = Mono.Cecil.ModuleDefinition.ReadModule(filePath);
-            var mvid = module.Mvid;
+            using (var module = Mono.Cecil.ModuleDefinition.ReadModule(filePath))
+            {
+                var mvid = module.Mvid;
+            }
         }
 
         [Benchmark]
