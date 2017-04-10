@@ -72,15 +72,11 @@ namespace PEFile
             ReadSections(sections);
             ReadCLIHeader();
             ReadMetadata();
-            //ReadDebugHeader();
-
-            //image.Kind = GetModuleKind(characteristics, subsystem);
-            //image.Characteristics = (ModuleCharacteristics)dll_characteristics;
         }
 
         TargetArchitecture ReadArchitecture()
         {
-            return (TargetArchitecture)ReadUInt16();
+            return ReadUInt16();
         }
 
         //static ModuleKind GetModuleKind(ushort characteristics, ushort subsystem)
@@ -259,7 +255,7 @@ namespace PEFile
             metadata = ReadDataDirectory();
             // Flags					4
             //image.Attributes = 
-                ReadUInt32();
+            ReadUInt32();
             // EntryPointToken			4
             image.EntryPointToken = ReadUInt32();
             // Resources				8
@@ -299,12 +295,6 @@ namespace PEFile
 
             for (int i = 0; i < streams; i++)
                 ReadMetadataStream(section);
-
-            //if (image.PdbHeap != null)
-            //    ReadPdbHeap();
-
-            //if (image.TableHeap != null)
-            //    ReadTableHeap();
         }
 
         void ReadDebugHeader()
@@ -320,7 +310,7 @@ namespace PEFile
 
             for (int i = 0; i < entries; i++)
             {
-                var directory = new 
+                var directory = new
                 {
                     Characteristics = ReadInt32(),
                     TimeDateStamp = ReadInt32(),
@@ -348,8 +338,6 @@ namespace PEFile
                     Position = position;
                 }
             }
-
-            //image.DebugHeader = new ImageDebugHeader(entries);
         }
 
         public Guid Mvid;
@@ -421,337 +409,12 @@ namespace PEFile
 
             // Valid			8
             //heap.Valid = 
-                ReadInt64();
+            ReadInt64();
 
             // Sorted			8
             //heap.Sorted = 
-                ReadInt64();
-
-            //if (image.PdbHeap != null)
-            //{
-            //    for (int i = 0; i < Mixin.TableCount; i++)
-            //    {
-            //        if (!image.PdbHeap.HasTable((Table)i))
-            //            continue;
-
-            //        heap.Tables[i].Length = image.PdbHeap.TypeSystemTableRows[i];
-            //    }
-            //}
-
-            //for (int i = 0; i < 58; i++)
-            //{
-            //    if (!heap.HasTable((Table)i))
-            //        continue;
-
-            //    heap.Tables[i].Length = ReadUInt32();
-            //}
-
-            //SetIndexSize(image.StringHeap, sizes, 0x1);
-            //SetIndexSize(image.GuidHeap, sizes, 0x2);
-            //SetIndexSize(image.BlobHeap, sizes, 0x4);
-
-            //ComputeTableInformations();
+            ReadInt64();
         }
-
-        //static void SetIndexSize(Heap heap, uint sizes, byte flag)
-        //{
-        //    if (heap == null)
-        //        return;
-
-        //    heap.IndexSize = (sizes & flag) > 0 ? 4 : 2;
-        //}
-
-        //int GetTableIndexSize(Table table)
-        //{
-        //    return image.GetTableIndexSize(table);
-        //}
-
-        //int GetCodedIndexSize(CodedIndex index)
-        //{
-        //    return image.GetCodedIndexSize(index);
-        //}
-
-        //void ComputeTableInformations()
-        //{
-        //    uint offset = (uint)BaseStream.Position - table_heap_offset - image.MetadataSection.PointerToRawData; // header
-
-        //    int stridx_size = image.StringHeap.IndexSize;
-        //    int guididx_size = image.GuidHeap != null ? image.GuidHeap.IndexSize : 2;
-        //    int blobidx_size = image.BlobHeap != null ? image.BlobHeap.IndexSize : 2;
-
-        //    var heap = image.TableHeap;
-        //    var tables = heap.Tables;
-
-        //    for (int i = 0; i < Mixin.TableCount; i++)
-        //    {
-        //        var table = (Table)i;
-        //        if (!heap.HasTable(table))
-        //            continue;
-
-        //        int size;
-        //        switch (table)
-        //        {
-        //            case Table.Module:
-        //                size = 2    // Generation
-        //                    + stridx_size   // Name
-        //                    + (guididx_size * 3);   // Mvid, EncId, EncBaseId
-        //                break;
-        //            case Table.TypeRef:
-        //                size = GetCodedIndexSize(CodedIndex.ResolutionScope)    // ResolutionScope
-        //                    + (stridx_size * 2);    // Name, Namespace
-        //                break;
-        //            case Table.TypeDef:
-        //                size = 4    // Flags
-        //                    + (stridx_size * 2) // Name, Namespace
-        //                    + GetCodedIndexSize(CodedIndex.TypeDefOrRef)    // BaseType
-        //                    + GetTableIndexSize(Table.Field)    // FieldList
-        //                    + GetTableIndexSize(Table.Method);  // MethodList
-        //                break;
-        //            case Table.FieldPtr:
-        //                size = GetTableIndexSize(Table.Field);  // Field
-        //                break;
-        //            case Table.Field:
-        //                size = 2    // Flags
-        //                    + stridx_size   // Name
-        //                    + blobidx_size; // Signature
-        //                break;
-        //            case Table.MethodPtr:
-        //                size = GetTableIndexSize(Table.Method); // Method
-        //                break;
-        //            case Table.Method:
-        //                size = 8    // Rva 4, ImplFlags 2, Flags 2
-        //                    + stridx_size   // Name
-        //                    + blobidx_size  // Signature
-        //                    + GetTableIndexSize(Table.Param); // ParamList
-        //                break;
-        //            case Table.ParamPtr:
-        //                size = GetTableIndexSize(Table.Param); // Param
-        //                break;
-        //            case Table.Param:
-        //                size = 4    // Flags 2, Sequence 2
-        //                    + stridx_size;  // Name
-        //                break;
-        //            case Table.InterfaceImpl:
-        //                size = GetTableIndexSize(Table.TypeDef) // Class
-        //                    + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // Interface
-        //                break;
-        //            case Table.MemberRef:
-        //                size = GetCodedIndexSize(CodedIndex.MemberRefParent)    // Class
-        //                    + stridx_size   // Name
-        //                    + blobidx_size; // Signature
-        //                break;
-        //            case Table.Constant:
-        //                size = 2    // Type
-        //                    + GetCodedIndexSize(CodedIndex.HasConstant) // Parent
-        //                    + blobidx_size; // Value
-        //                break;
-        //            case Table.CustomAttribute:
-        //                size = GetCodedIndexSize(CodedIndex.HasCustomAttribute) // Parent
-        //                    + GetCodedIndexSize(CodedIndex.CustomAttributeType) // Type
-        //                    + blobidx_size; // Value
-        //                break;
-        //            case Table.FieldMarshal:
-        //                size = GetCodedIndexSize(CodedIndex.HasFieldMarshal)    // Parent
-        //                    + blobidx_size; // NativeType
-        //                break;
-        //            case Table.DeclSecurity:
-        //                size = 2    // Action
-        //                    + GetCodedIndexSize(CodedIndex.HasDeclSecurity) // Parent
-        //                    + blobidx_size; // PermissionSet
-        //                break;
-        //            case Table.ClassLayout:
-        //                size = 6    // PackingSize 2, ClassSize 4
-        //                    + GetTableIndexSize(Table.TypeDef); // Parent
-        //                break;
-        //            case Table.FieldLayout:
-        //                size = 4    // Offset
-        //                    + GetTableIndexSize(Table.Field);   // Field
-        //                break;
-        //            case Table.StandAloneSig:
-        //                size = blobidx_size;    // Signature
-        //                break;
-        //            case Table.EventMap:
-        //                size = GetTableIndexSize(Table.TypeDef) // Parent
-        //                    + GetTableIndexSize(Table.Event);   // EventList
-        //                break;
-        //            case Table.EventPtr:
-        //                size = GetTableIndexSize(Table.Event);  // Event
-        //                break;
-        //            case Table.Event:
-        //                size = 2    // Flags
-        //                    + stridx_size // Name
-        //                    + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // EventType
-        //                break;
-        //            case Table.PropertyMap:
-        //                size = GetTableIndexSize(Table.TypeDef) // Parent
-        //                    + GetTableIndexSize(Table.Property);    // PropertyList
-        //                break;
-        //            case Table.PropertyPtr:
-        //                size = GetTableIndexSize(Table.Property);   // Property
-        //                break;
-        //            case Table.Property:
-        //                size = 2    // Flags
-        //                    + stridx_size   // Name
-        //                    + blobidx_size; // Type
-        //                break;
-        //            case Table.MethodSemantics:
-        //                size = 2    // Semantics
-        //                    + GetTableIndexSize(Table.Method)   // Method
-        //                    + GetCodedIndexSize(CodedIndex.HasSemantics);   // Association
-        //                break;
-        //            case Table.MethodImpl:
-        //                size = GetTableIndexSize(Table.TypeDef) // Class
-        //                    + GetCodedIndexSize(CodedIndex.MethodDefOrRef)  // MethodBody
-        //                    + GetCodedIndexSize(CodedIndex.MethodDefOrRef); // MethodDeclaration
-        //                break;
-        //            case Table.ModuleRef:
-        //                size = stridx_size; // Name
-        //                break;
-        //            case Table.TypeSpec:
-        //                size = blobidx_size;    // Signature
-        //                break;
-        //            case Table.ImplMap:
-        //                size = 2    // MappingFlags
-        //                    + GetCodedIndexSize(CodedIndex.MemberForwarded) // MemberForwarded
-        //                    + stridx_size   // ImportName
-        //                    + GetTableIndexSize(Table.ModuleRef);   // ImportScope
-        //                break;
-        //            case Table.FieldRVA:
-        //                size = 4    // RVA
-        //                    + GetTableIndexSize(Table.Field);   // Field
-        //                break;
-        //            case Table.EncLog:
-        //                size = 8;
-        //                break;
-        //            case Table.EncMap:
-        //                size = 4;
-        //                break;
-        //            case Table.Assembly:
-        //                size = 16 // HashAlgId 4, Version 4 * 2, Flags 4
-        //                    + blobidx_size  // PublicKey
-        //                    + (stridx_size * 2);    // Name, Culture
-        //                break;
-        //            case Table.AssemblyProcessor:
-        //                size = 4;   // Processor
-        //                break;
-        //            case Table.AssemblyOS:
-        //                size = 12;  // Platform 4, Version 2 * 4
-        //                break;
-        //            case Table.AssemblyRef:
-        //                size = 12   // Version 2 * 4 + Flags 4
-        //                    + (blobidx_size * 2)    // PublicKeyOrToken, HashValue
-        //                    + (stridx_size * 2);    // Name, Culture
-        //                break;
-        //            case Table.AssemblyRefProcessor:
-        //                size = 4    // Processor
-        //                    + GetTableIndexSize(Table.AssemblyRef); // AssemblyRef
-        //                break;
-        //            case Table.AssemblyRefOS:
-        //                size = 12   // Platform 4, Version 2 * 4
-        //                    + GetTableIndexSize(Table.AssemblyRef); // AssemblyRef
-        //                break;
-        //            case Table.File:
-        //                size = 4    // Flags
-        //                    + stridx_size   // Name
-        //                    + blobidx_size; // HashValue
-        //                break;
-        //            case Table.ExportedType:
-        //                size = 8    // Flags 4, TypeDefId 4
-        //                    + (stridx_size * 2) // Name, Namespace
-        //                    + GetCodedIndexSize(CodedIndex.Implementation); // Implementation
-        //                break;
-        //            case Table.ManifestResource:
-        //                size = 8    // Offset, Flags
-        //                    + stridx_size   // Name
-        //                    + GetCodedIndexSize(CodedIndex.Implementation); // Implementation
-        //                break;
-        //            case Table.NestedClass:
-        //                size = GetTableIndexSize(Table.TypeDef) // NestedClass
-        //                    + GetTableIndexSize(Table.TypeDef); // EnclosingClass
-        //                break;
-        //            case Table.GenericParam:
-        //                size = 4    // Number, Flags
-        //                    + GetCodedIndexSize(CodedIndex.TypeOrMethodDef) // Owner
-        //                    + stridx_size;  // Name
-        //                break;
-        //            case Table.MethodSpec:
-        //                size = GetCodedIndexSize(CodedIndex.MethodDefOrRef) // Method
-        //                    + blobidx_size; // Instantiation
-        //                break;
-        //            case Table.GenericParamConstraint:
-        //                size = GetTableIndexSize(Table.GenericParam)    // Owner
-        //                    + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // Constraint
-        //                break;
-        //            case Table.Document:
-        //                size = blobidx_size // Name
-        //                    + guididx_size  // HashAlgorithm
-        //                    + blobidx_size  // Hash
-        //                    + guididx_size; // Language
-        //                break;
-        //            case Table.MethodDebugInformation:
-        //                size = GetTableIndexSize(Table.Document)  // Document
-        //                    + blobidx_size; // SequencePoints
-        //                break;
-        //            case Table.LocalScope:
-        //                size = GetTableIndexSize(Table.Method)  // Method
-        //                    + GetTableIndexSize(Table.ImportScope)  // ImportScope
-        //                    + GetTableIndexSize(Table.LocalVariable)    // VariableList
-        //                    + GetTableIndexSize(Table.LocalConstant)    // ConstantList
-        //                    + 4 * 2;    // StartOffset, Length
-        //                break;
-        //            case Table.LocalVariable:
-        //                size = 2    // Attributes
-        //                    + 2     // Index
-        //                    + stridx_size;  // Name
-        //                break;
-        //            case Table.LocalConstant:
-        //                size = stridx_size  // Name
-        //                    + blobidx_size; // Signature
-        //                break;
-        //            case Table.ImportScope:
-        //                size = GetTableIndexSize(Table.ImportScope) // Parent
-        //                    + blobidx_size;
-        //                break;
-        //            case Table.StateMachineMethod:
-        //                size = GetTableIndexSize(Table.Method) // MoveNextMethod
-        //                    + GetTableIndexSize(Table.Method);  // KickOffMethod
-        //                break;
-        //            case Table.CustomDebugInformation:
-        //                size = GetCodedIndexSize(CodedIndex.HasCustomDebugInformation) // Parent
-        //                    + guididx_size  // Kind
-        //                    + blobidx_size; // Value
-        //                break;
-        //            default:
-        //                throw new NotSupportedException();
-        //        }
-
-        //        tables[i].RowSize = (uint)size;
-        //        tables[i].Offset = offset;
-
-        //        offset += (uint)size * tables[i].Length;
-        //    }
-        //}
-
-        //void ReadPdbHeap()
-        //{
-        //    var heap = image.PdbHeap;
-
-        //    var buffer = new ByteBuffer(heap.data);
-
-        //    heap.Id = buffer.ReadBytes(20);
-        //    heap.EntryPoint = buffer.ReadUInt32();
-        //    heap.TypeSystemTables = buffer.ReadInt64();
-        //    heap.TypeSystemTableRows = new uint[Mixin.TableCount];
-
-        //    for (int i = 0; i < Mixin.TableCount; i++)
-        //    {
-        //        var table = (Table)i;
-        //        if (!heap.HasTable(table))
-        //            continue;
-
-        //        heap.TypeSystemTableRows[i] = buffer.ReadUInt32();
-        //    }
-        //}
     }
 
     public class BinaryStreamReader : BinaryReader
@@ -816,7 +479,6 @@ namespace PEFile
     {
         public string Name;
         public RVA VirtualAddress;
-        public uint VirtualSize;
         public uint SizeOfRawData;
         public uint PointerToRawData;
     }
@@ -824,14 +486,9 @@ namespace PEFile
     sealed class Image : IDisposable
     {
         public Stream Stream;
-        public string FileName;
 
-        //public ModuleKind Kind;
         public string RuntimeVersion;
         public TargetArchitecture Architecture;
-        //public ModuleCharacteristics Characteristics;
-
-        //public ImageDebugHeader DebugHeader;
 
         public Section[] Sections;
 
@@ -839,52 +496,10 @@ namespace PEFile
 
         public uint EntryPointToken;
         public uint Timestamp;
-        //public ModuleAttributes Attributes;
 
         public DataDirectory Debug;
         public DataDirectory Resources;
         public DataDirectory StrongName;
-
-        //public StringHeap StringHeap;
-        //public BlobHeap BlobHeap;
-        //public UserStringHeap UserStringHeap;
-        //public GuidHeap GuidHeap;
-        //public TableHeap TableHeap;
-        //public PdbHeap PdbHeap;
-
-        readonly int[] coded_index_sizes = new int[14];
-
-        //readonly Func<Table, int> counter;
-
-        public Image()
-        {
-            //counter = GetTableLength;
-        }
-
-        //public bool HasTable(Table table)
-        //{
-        //    return GetTableLength(table) > 0;
-        //}
-
-        //public int GetTableLength(Table table)
-        //{
-        //    return (int)TableHeap[table].Length;
-        //}
-
-        //public int GetTableIndexSize(Table table)
-        //{
-        //    return GetTableLength(table) < 65536 ? 2 : 4;
-        //}
-
-        //public int GetCodedIndexSize(CodedIndex coded_index)
-        //{
-        //    var index = (int)coded_index;
-        //    var size = coded_index_sizes[index];
-        //    if (size != 0)
-        //        return size;
-
-        //    return coded_index_sizes[index] = coded_index.GetSize(counter);
-        //}
 
         public uint ResolveVirtualAddress(RVA rva)
         {
@@ -900,19 +515,6 @@ namespace PEFile
             return rva + section.PointerToRawData - section.VirtualAddress;
         }
 
-        public Section GetSection(string name)
-        {
-            var sections = this.Sections;
-            for (int i = 0; i < sections.Length; i++)
-            {
-                var section = sections[i];
-                if (section.Name == name)
-                    return section;
-            }
-
-            return null;
-        }
-
         public Section GetSectionAtVirtualAddress(RVA rva)
         {
             var sections = this.Sections;
@@ -925,45 +527,6 @@ namespace PEFile
 
             return null;
         }
-
-        BinaryStreamReader GetReaderAt(RVA rva)
-        {
-            var section = GetSectionAtVirtualAddress(rva);
-            if (section == null)
-                return null;
-
-            var reader = new BinaryStreamReader(Stream);
-            reader.MoveTo(ResolveVirtualAddressInSection(rva, section));
-            return reader;
-        }
-
-        public TRet GetReaderAt<TItem, TRet>(RVA rva, TItem item, Func<TItem, BinaryStreamReader, TRet> read) where TRet : class
-        {
-            var position = Stream.Position;
-            try
-            {
-                var reader = GetReaderAt(rva);
-                if (reader == null)
-                    return null;
-
-                return read(item, reader);
-            }
-            finally
-            {
-                Stream.Position = position;
-            }
-        }
-
-        //public bool HasDebugTables()
-        //{
-        //    return HasTable(Table.Document)
-        //        || HasTable(Table.MethodDebugInformation)
-        //        || HasTable(Table.LocalScope)
-        //        || HasTable(Table.LocalVariable)
-        //        || HasTable(Table.LocalConstant)
-        //        || HasTable(Table.StateMachineMethod)
-        //        || HasTable(Table.CustomDebugInformation);
-        //}
 
         public void Dispose()
         {
