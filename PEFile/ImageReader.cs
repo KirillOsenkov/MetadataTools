@@ -25,6 +25,8 @@ namespace PEFile
         DataDirectory cli;
         DataDirectory metadata;
 
+        uint table_heap_offset;
+
         public ImageReader(Stream stream)
             : base(stream)
         {
@@ -331,7 +333,8 @@ namespace PEFile
             {
                 case "#~":
                 case "#-":
-                    //image.TableHeap = new TableHeap(data);
+                    var tableHeapData = ReadHeapData(offset, size);
+                    table_heap_offset = offset;
                     break;
                 case "#Strings":
                     //image.StringHeap = new StringHeap(data);
@@ -344,7 +347,12 @@ namespace PEFile
                     var data = ReadHeapData(offset, size);
                     if (data.Length >= 16)
                     {
-                        Mvid = new Guid(data.Take(16).ToArray());
+                        uint mvidIndex = GetMvidIndexInGuidStream();
+
+                        byte[] guidBytes = new byte[16];
+                        Buffer.BlockCopy(data, (int)(mvidIndex - 1) * 16, guidBytes, 0, 16);
+
+                        Mvid = new Guid(guidBytes);
                     }
                     break;
                 case "#US":
@@ -354,6 +362,51 @@ namespace PEFile
                     //image.PdbHeap = new PdbHeap(data);
                     break;
             }
+        }
+
+        private uint GetMvidIndexInGuidStream()
+        {
+            var oldPosition = BaseStream.Position;
+
+            MoveTo(table_heap_offset + image.MetadataSection.PointerToRawData);
+            Advance(6);
+            var sizes = ReadByte();
+            Advance(1);
+            var valid = ReadInt64();
+            var sorted = ReadInt64();
+
+            for (int i = 0; i < 58; i++)
+            {
+                if ((valid & (1L << i)) == 0)
+                {
+                    continue;
+                }
+
+                var tableLength = ReadUInt32();
+            }
+
+            Advance(2);
+            if ((sizes & 1) != 0)
+            {
+                Advance(4);
+            }
+            else
+            {
+                Advance(2);
+            }
+
+            uint mvidIndex = 0;
+            if ((sizes & 2) != 0)
+            {
+                mvidIndex = ReadUInt32();
+            }
+            else
+            {
+                mvidIndex = ReadUInt16();
+            }
+
+            BaseStream.Position = oldPosition;
+            return mvidIndex;
         }
 
         byte[] ReadHeapData(uint offset, uint size)
