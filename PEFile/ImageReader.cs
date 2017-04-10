@@ -304,10 +304,7 @@ namespace PEFile
             var streams = ReadUInt16();
 
             var section = image.GetSectionAtVirtualAddress(metadata.VirtualAddress);
-            if (section == null)
-                throw new BadImageFormatException();
-
-            image.MetadataSection = section;
+            image.MetadataSection = section ?? throw new BadImageFormatException();
 
             for (int i = 0; i < streams; i++)
                 ReadMetadataStream(section);
@@ -430,7 +427,7 @@ namespace PEFile
         public uint PointerToRawData;
     }
 
-    sealed class Image : IDisposable
+    sealed class Image
     {
         public Stream Stream;
 
@@ -473,11 +470,6 @@ namespace PEFile
             }
 
             return null;
-        }
-
-        public void Dispose()
-        {
-            Stream.Dispose();
         }
     }
 }
