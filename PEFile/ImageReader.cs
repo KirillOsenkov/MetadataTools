@@ -9,6 +9,8 @@ namespace PEFile
     public sealed class ImageReader : BinaryStreamReader
     {
         readonly Image image;
+        public Guid Mvid;
+        public uint Timestamp;
 
         DataDirectory cli;
         DataDirectory metadata;
@@ -80,6 +82,8 @@ namespace PEFile
 
             // TimeDateStamp		4
             image.Timestamp = ReadUInt32();
+            Timestamp = image.Timestamp;
+
             // PointerToSymbolTable	4
             // NumberOfSymbols		4
             // OptionalHeaderSize	2
@@ -101,17 +105,6 @@ namespace PEFile
         {
             return ReadUInt16();
         }
-
-        //static ModuleKind GetModuleKind(ushort characteristics, ushort subsystem)
-        //{
-        //    if ((characteristics & 0x2000) != 0) // ImageCharacteristics.Dll
-        //        return ModuleKind.Dll;
-
-        //    if (subsystem == 0x2 || subsystem == 0x9) // SubSystem.WindowsGui || SubSystem.WindowsCeGui
-        //        return ModuleKind.Windows;
-
-        //    return ModuleKind.Console;
-        //}
 
         void ReadOptionalHeaders(out ushort subsystem, out ushort dll_characteristics)
         {
@@ -320,51 +313,6 @@ namespace PEFile
                 ReadMetadataStream(section);
         }
 
-        void ReadDebugHeader()
-        {
-            if (image.Debug.IsZero)
-            {
-                return;
-            }
-
-            MoveTo(image.Debug);
-
-            var entries = (int)image.Debug.Size / 28;
-
-            for (int i = 0; i < entries; i++)
-            {
-                var directory = new
-                {
-                    Characteristics = ReadInt32(),
-                    TimeDateStamp = ReadInt32(),
-                    MajorVersion = ReadInt16(),
-                    MinorVersion = ReadInt16(),
-                    Type = ReadInt32(),
-                    SizeOfData = ReadInt32(),
-                    AddressOfRawData = ReadInt32(),
-                    PointerToRawData = ReadInt32(),
-                };
-
-                if (directory.AddressOfRawData == 0)
-                {
-                    continue;
-                }
-
-                var position = Position;
-                try
-                {
-                    MoveTo((uint)directory.PointerToRawData);
-                    var data = ReadBytes(directory.SizeOfData);
-                }
-                finally
-                {
-                    Position = position;
-                }
-            }
-        }
-
-        public Guid Mvid;
-
         void ReadMetadataStream(Section section)
         {
             // Offset		4
@@ -413,30 +361,6 @@ namespace PEFile
             BaseStream.Position = position;
 
             return data;
-        }
-
-        void ReadTableHeap()
-        {
-            MoveTo(table_heap_offset + image.MetadataSection.PointerToRawData);
-
-            // Reserved			4
-            // MajorVersion		1
-            // MinorVersion		1
-            Advance(6);
-
-            // HeapSizes		1
-            var sizes = ReadByte();
-
-            // Reserved2		1
-            Advance(1);
-
-            // Valid			8
-            //heap.Valid = 
-            ReadInt64();
-
-            // Sorted			8
-            //heap.Sorted = 
-            ReadInt64();
         }
     }
 
