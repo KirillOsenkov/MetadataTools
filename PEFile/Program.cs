@@ -13,7 +13,7 @@ namespace PEFile
             //return;
 
             //var sw = Stopwatch.StartNew();
-            //new MvidBenchmark().ReadUsingReflection();
+            //new MvidBenchmark().ReadUsingImageReader();
             //var elapsed = sw.Elapsed;
             //Console.WriteLine(elapsed);
             //return;

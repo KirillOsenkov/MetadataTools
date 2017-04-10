@@ -25,8 +25,6 @@ namespace PEFile
         DataDirectory cli;
         DataDirectory metadata;
 
-        uint table_heap_offset;
-
         public ImageReader(Stream stream)
             : base(stream)
         {
@@ -328,15 +326,12 @@ namespace PEFile
             // Size			4
             uint size = ReadUInt32();
 
-            var data = ReadHeapData(offset, size);
-
             var name = ReadAlignedString(16);
             switch (name)
             {
                 case "#~":
                 case "#-":
                     //image.TableHeap = new TableHeap(data);
-                    table_heap_offset = offset;
                     break;
                 case "#Strings":
                     //image.StringHeap = new StringHeap(data);
@@ -346,6 +341,7 @@ namespace PEFile
                     break;
                 case "#GUID":
                     //image.GuidHeap = new GuidHeap(data);
+                    var data = ReadHeapData(offset, size);
                     if (data.Length >= 16)
                     {
                         Mvid = new Guid(data.Take(16).ToArray());
