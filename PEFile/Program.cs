@@ -49,13 +49,8 @@ namespace PEFile
         private static void ReadImageReader(string filePath)
         {
             var sw = Stopwatch.StartNew();
-            using (var stream = File.OpenRead(filePath))
-            {
-                var imageReader = new ImageReader(stream);
-                imageReader.ReadImage();
-                var mvid = imageReader.Mvid;
-                var elapsed = sw.Elapsed;
-            }
+            var mvid = ImageReader.ReadAssemblyMvid(filePath);
+            var elapsed = sw.Elapsed;
         }
 
         private static void ReadManually(string filePath)

@@ -22,15 +22,36 @@ namespace PEFile
             image.Stream = stream;
         }
 
+        public static Guid ReadAssemblyMvid(string filePath)
+        {
+            Guid mvid = Guid.Empty;
+            try
+            {
+                using (var stream = File.OpenRead(filePath))
+                {
+                    var imageReader = new ImageReader(stream);
+                    if (imageReader.ReadImage())
+                    {
+                        mvid = imageReader.Mvid;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return mvid;
+        }
+
         void MoveTo(DataDirectory directory)
         {
             BaseStream.Position = image.ResolveVirtualAddress(directory.VirtualAddress);
         }
 
-        public void ReadImage()
+        public bool ReadImage()
         {
             if (BaseStream.Length < 128)
-                throw new BadImageFormatException();
+                return false;
 
             // - DOSHeader
 
@@ -40,14 +61,14 @@ namespace PEFile
             // End					64
 
             if (ReadUInt16() != 0x5a4d)
-                throw new BadImageFormatException();
+                return false;
 
             Advance(58);
 
             MoveTo(ReadUInt32());
 
             if (ReadUInt32() != 0x00004550)
-                throw new BadImageFormatException();
+                return false;
 
             // - PEFileHeader
 
@@ -72,6 +93,8 @@ namespace PEFile
             ReadSections(sections);
             ReadCLIHeader();
             ReadMetadata();
+
+            return true;
         }
 
         TargetArchitecture ReadArchitecture()
