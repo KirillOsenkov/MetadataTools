@@ -124,6 +124,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ImageReader.cs" />
+    <Compile Include="IsManagedAssembly.cs" />
     <Compile Include="MvidBenchmark.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ReadHeaders.cs" />
