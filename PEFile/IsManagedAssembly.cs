@@ -13,13 +13,15 @@ using System.IO;
 
 namespace PEFile
 {
+    // Known issues: returns a false positive for System.Private.CoreLib.ni.dll
+    // returns a false positive for an incorrect test binary from the Roslyn testbed
     public class PEFileReader
     {
-        public static bool IsManagedAssembly(string fileName)
+        public static bool IsManagedAssembly(string filePath)
         {
             try
             {
-                using (Stream fileStream = new FileStream(fileName, FileMode.Open, FileAccess.Read))
+                using (Stream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                 using (BinaryReader binaryReader = new BinaryReader(fileStream))
                 {
                     if (fileStream.Length < 64)
