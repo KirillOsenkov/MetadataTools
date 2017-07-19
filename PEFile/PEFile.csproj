@@ -126,6 +126,7 @@
     <Compile Include="GetAssemblyVersion.cs" />
     <Compile Include="ImageReader.cs" />
     <Compile Include="IsManagedAssembly.cs" />
+    <Compile Include="LargeAddressAware.cs" />
     <Compile Include="MvidBenchmark.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ReadHeaders.cs" />

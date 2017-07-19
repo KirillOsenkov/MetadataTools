@@ -6,7 +6,9 @@ namespace PEFile.Tests
     {
         static void Main(string[] args)
         {
-            BenchmarkRunner.Run<IsManagedAssemblyBenchmark>();
+            //BenchmarkRunner.Run<IsManagedAssemblyBenchmark>();
+            // bool b = LargeAddressAware.IsLargeAddressAware(@"C:\temp\2.exe");
+            //LargeAddressAware.SetLargeAddressAware(@"C:\temp\listbinaryinfo2.exe");
         }
     }
 }
