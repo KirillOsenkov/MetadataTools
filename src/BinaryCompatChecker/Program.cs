@@ -33,13 +33,13 @@ namespace BinaryCompatChecker
 
             foreach (var file in files)
             {
-                var module = Load(file);
-                if (module == null)
+                var assemblyDefinition = Load(file);
+                if (assemblyDefinition == null)
                 {
                     continue;
                 }
 
-                var references = module.MainModule.AssemblyReferences;
+                var references = assemblyDefinition.MainModule.AssemblyReferences;
                 foreach (var reference in references)
                 {
                     var resolved = Resolve(reference);
@@ -49,8 +49,10 @@ namespace BinaryCompatChecker
                         continue;
                     }
 
-                    Check(module, resolved);
+                    Check(assemblyDefinition, resolved);
                 }
+
+                CheckMembers(assemblyDefinition);
             }
 
             if (sb.Length > 0)
@@ -60,6 +62,23 @@ namespace BinaryCompatChecker
         }
 
         public void Check(AssemblyDefinition referencing, AssemblyDefinition reference)
+        {
+            CheckTypes(referencing, reference);
+        }
+
+        private void CheckMembers(AssemblyDefinition assembly)
+        {
+            foreach (var memberReference in assembly.MainModule.GetMemberReferences())
+            {
+                var resolved = memberReference.Resolve();
+                if (resolved == null)
+                {
+                    Log($"Failed to resolve member reference {memberReference.FullName} from {assembly.Name.Name}");
+                }
+            }
+        }
+
+        private void CheckTypes(AssemblyDefinition referencing, AssemblyDefinition reference)
         {
             foreach (var referencedType in referencing.MainModule.GetTypeReferences())
             {
