@@ -15,6 +15,8 @@ namespace BinaryCompatChecker
         StringBuilder sb = new StringBuilder();
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
+        HashSet<string> unresolvedAssemblies = new HashSet<string>();
+        HashSet<string> diagnostics = new HashSet<string>();
 
         [STAThread]
         static void Main(string[] args)
@@ -45,7 +47,8 @@ namespace BinaryCompatChecker
                     var resolved = Resolve(reference);
                     if (resolved == null)
                     {
-                        Log($"Unable to resolve reference from {file} to {reference.FullName}");
+                        unresolvedAssemblies.Add(reference.Name);
+                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.Name}': unable to resolve reference to '{reference.FullName}'");
                         continue;
                     }
 
@@ -53,6 +56,11 @@ namespace BinaryCompatChecker
                 }
 
                 CheckMembers(assemblyDefinition);
+            }
+
+            foreach (var ex in diagnostics.OrderBy(s => s))
+            {
+                Log(ex);
             }
 
             if (sb.Length > 0)
@@ -70,10 +78,23 @@ namespace BinaryCompatChecker
         {
             foreach (var memberReference in assembly.MainModule.GetMemberReferences())
             {
-                var resolved = memberReference.Resolve();
-                if (resolved == null)
+                try
                 {
-                    Log($"Failed to resolve member reference {memberReference.FullName} from {assembly.Name.Name}");
+                    if (memberReference.DeclaringType.Scope.MetadataScopeType == MetadataScopeType.AssemblyNameReference && unresolvedAssemblies.Contains(memberReference.DeclaringType.Scope.Name))
+                    {
+                        // already reported an unresolved assembly; just ignore this one
+                        continue;
+                    }
+
+                    var resolved = memberReference.Resolve();
+                    if (resolved == null)
+                    {
+                        diagnostics.Add($"In assembly '{assembly.Name.Name}': Unable to resolve member reference '{memberReference.FullName}'");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    diagnostics.Add($"In assembly '{assembly.Name.Name}': {ex.Message}");
                 }
             }
         }
@@ -90,7 +111,7 @@ namespace BinaryCompatChecker
                 var types = GetTypes(reference);
                 if (!types.Contains(referencedType.FullName))
                 {
-                    Log($"Unable to find type {referencedType.FullName} needed by {referencing.Name} in {reference.Name}");
+                    diagnostics.Add($"In assembly '{referencing.Name.Name}': Unable to resolve type reference '{referencedType.FullName}' in '{reference.Name}'");
                 }
             }
         }
