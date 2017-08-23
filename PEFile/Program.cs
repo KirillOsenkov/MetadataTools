@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using BenchmarkDotNet.Running;
 
 namespace PEFile
@@ -9,6 +10,9 @@ namespace PEFile
     {
         static void Main(string[] args)
         {
+            //DownloadPdb();
+            //return;
+
             //BenchmarkRunner.Run<MvidBenchmark>();
             //return;
 
@@ -33,6 +37,19 @@ namespace PEFile
 
             filePath = Path.GetFullPath(filePath);
             Console.WriteLine(ImageReader.ReadAssemblyMvid(filePath));
+        }
+
+        private static void DownloadPdb(string assemblyFilePath)
+        {
+            var pdbInfo = PdbInfo.Read(assemblyFilePath);
+            HttpClient client = new HttpClient();
+            var text = client.GetStringAsync(pdbInfo.SymbolsUrl).Result;
+            if (text.StartsWith("PATH:"))
+            {
+                text = text.Substring(5);
+            }
+
+            //File.Copy(text, @"C:\Temp\1.pdb", overwrite: true);
         }
     }
 }
