@@ -23,10 +23,15 @@ namespace BinaryCompatChecker
         {
             var root = Environment.CurrentDirectory;
             var pattern = "*.dll";
-            IEnumerable<string> files = Directory.GetFiles(root, pattern);
+            IEnumerable<string> files = GetFiles(root, pattern);
             pattern = "*.exe";
-            files = files.Concat(Directory.GetFiles(root, pattern));
+            files = files.Concat(GetFiles(root, pattern));
             new Checker().Check(files);
+        }
+
+        private static string[] GetFiles(string root, string pattern)
+        {
+            return Directory.GetFiles(root, pattern, SearchOption.AllDirectories);
         }
 
         public void Check(IEnumerable<string> files)
@@ -65,7 +70,9 @@ namespace BinaryCompatChecker
 
             if (sb.Length > 0)
             {
-                Clipboard.SetText(sb.ToString());
+                var text = sb.ToString();
+                Clipboard.SetText(text);
+                File.WriteAllText("report.txt", text);
             }
         }
 
