@@ -1,8 +1,7 @@
 ﻿using System;
 using System.IO;
-using PEFile;
 
-namespace Pdb
+namespace MetadataTools
 {
     class Program
     {

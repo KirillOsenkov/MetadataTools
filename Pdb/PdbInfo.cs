@@ -5,8 +5,9 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using Microsoft.DiaSymReader;
 
-namespace PEFile
+namespace MetadataTools
 {
     public class PdbInfo
     {
@@ -17,6 +18,7 @@ namespace PEFile
         public string AssemblyFilePath { get; set; }
         public string AssemblyShortName => System.IO.Path.GetFileNameWithoutExtension(AssemblyFilePath).ToLowerInvariant();
         public Guid Guid { get; set; }
+        public uint Stamp { get; set; }
         public int Age { get; set; }
         public string Path { get; set; }
         public string SymbolsUrl => $"{SymbolsPath}/{AssemblyShortName}.pdb/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
@@ -67,7 +69,23 @@ namespace PEFile
 
         private static bool IsMatchWindowsPdb(string assemblyFilePath, string pdbFilePath)
         {
-            throw new NotImplementedException();
+            var list = Read(assemblyFilePath);
+            using (var pdbStream = File.OpenRead(pdbFilePath))
+            {
+                var metadataProvider = new SymReaderMetadataProvider();
+                var reader = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(pdbStream, metadataProvider);
+                foreach (var item in list)
+                {
+                    bool isMatch = false;
+                    int result = reader.MatchesModule(item.Guid, item.Stamp, item.Age, out isMatch);
+                    if (isMatch)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static IEnumerable<PdbInfo> ReadList(string assemblyFilePath)
@@ -87,7 +105,8 @@ namespace PEFile
                             AssemblyFilePath = assemblyFilePath,
                             Guid = codeViewDebugDirectoryData.Guid,
                             Age = codeViewDebugDirectoryData.Age,
-                            Path = codeViewDebugDirectoryData.Path
+                            Path = codeViewDebugDirectoryData.Path,
+                            Stamp = debugDirectoryEntry.Stamp
                         };
                         Log(info.ToString());
                         yield return info;
