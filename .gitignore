@@ -251,3 +251,4 @@ paket-files/
 .idea/
 *.sln.iml
 /src/BinaryCompatChecker/Properties/launchSettings.json
+/Pdb/Properties/launchSettings.json
