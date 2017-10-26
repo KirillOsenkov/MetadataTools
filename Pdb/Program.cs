@@ -17,7 +17,8 @@ namespace MetadataTools
 
             if (args.Length == 2)
             {
-                if (args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                if (args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                    args[0].EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 {
                     var dll = Path.GetFullPath(args[0]);
                     if (!File.Exists(dll))
@@ -50,15 +51,15 @@ namespace MetadataTools
         private static void FindMatchingPdb(string dll, string directory)
         {
             var pdbs = Directory.GetFiles(
-                directory, 
-                Path.GetFileNameWithoutExtension(dll) + ".pdb", 
+                directory,
+                Path.GetFileNameWithoutExtension(dll) + ".pdb",
                 SearchOption.AllDirectories);
             var debugDirectory = PdbInfo.Read(dll);
             foreach (var pdb in pdbs)
             {
                 if (PdbInfo.IsMatch(debugDirectory, pdb))
                 {
-                    Log("Match: " + pdb);
+                    Log("Match: " + pdb, ConsoleColor.Green);
                 }
             }
         }
@@ -67,11 +68,11 @@ namespace MetadataTools
         {
             if (PdbInfo.IsMatch(dll, pdb))
             {
-                Log("Match");
+                Log("Match", ConsoleColor.Green);
             }
             else
             {
-                Log("No match");
+                Log("No match", ConsoleColor.Red);
             }
         }
 
@@ -88,7 +89,26 @@ namespace MetadataTools
 
         private static void Log(string text)
         {
-            Console.WriteLine(text);
+            Log(text, ConsoleColor.DarkGray);
+        }
+
+        private static void Log(string text, ConsoleColor color)
+        {
+            lock (typeof(Program))
+            {
+                var oldColor = Console.ForegroundColor;
+                if (oldColor != color)
+                {
+                    Console.ForegroundColor = color;
+                }
+
+                Console.WriteLine(text);
+
+                if (oldColor != color)
+                {
+                    Console.ForegroundColor = oldColor;
+                }
+            }
         }
     }
 }

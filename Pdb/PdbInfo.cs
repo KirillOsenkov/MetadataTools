@@ -151,11 +151,8 @@ namespace MetadataTools
                         stream.ReadByte() != 'B')
                     {
                         // not a portable Pdb
-                        Log("Not a portable Pdb");
                         return Guid.Empty;
                     }
-
-                    Log("Portable Pdb");
 
                     stream.Position = 0;
 
