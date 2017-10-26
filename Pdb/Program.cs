@@ -15,26 +15,51 @@ namespace MetadataTools
 
             PdbInfo.LogAction = Log;
 
-            if (args.Length == 2 && 
-                args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-                args[1].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+            if (args.Length == 2)
             {
-                var dll = Path.GetFullPath(args[0]);
-                var pdb = Path.GetFullPath(args[1]);
-
-                if (!File.Exists(dll))
+                if (args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
-                    Error("dll file not found: " + dll);
-                    return;
-                }
+                    var dll = Path.GetFullPath(args[0]);
+                    if (!File.Exists(dll))
+                    {
+                        Error("dll file not found: " + dll);
+                        return;
+                    }
 
-                if (!File.Exists(pdb))
+                    if (args[1].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var pdb = Path.GetFullPath(args[1]);
+                        if (!File.Exists(pdb))
+                        {
+                            Error("pdb file not found: " + pdb);
+                            return;
+                        }
+
+                        CheckMatch(dll, pdb);
+                    }
+
+                    var directory = Path.GetFullPath(args[1]);
+                    if (Directory.Exists(directory))
+                    {
+                        FindMatchingPdb(dll, directory);
+                    }
+                }
+            }
+        }
+
+        private static void FindMatchingPdb(string dll, string directory)
+        {
+            var pdbs = Directory.GetFiles(
+                directory, 
+                Path.GetFileNameWithoutExtension(dll) + ".pdb", 
+                SearchOption.AllDirectories);
+            var debugDirectory = PdbInfo.Read(dll);
+            foreach (var pdb in pdbs)
+            {
+                if (PdbInfo.IsMatch(debugDirectory, pdb))
                 {
-                    Error("pdb file not found: " + pdb);
-                    return;
+                    Log("Match: " + pdb);
                 }
-
-                CheckMatch(dll, pdb);
             }
         }
 

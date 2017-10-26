@@ -64,17 +64,36 @@ namespace MetadataTools
                 return false;
             }
 
-            return IsMatchWindowsPdb(assemblyFilePath, pdbFilePath);
+            return IsMatchWindowsPdb(list, pdbFilePath);
         }
 
-        private static bool IsMatchWindowsPdb(string assemblyFilePath, string pdbFilePath)
+        public static bool IsMatch(IEnumerable<PdbInfo> debugDirectory, string pdbFilePath)
         {
-            var list = Read(assemblyFilePath);
+            var pdbGuid = TryReadPdbGuid(pdbFilePath);
+            if (pdbGuid != Guid.Empty)
+            {
+                foreach (var debugDirectoryEntry in debugDirectory)
+                {
+                    if (debugDirectoryEntry.Guid == pdbGuid)
+                    {
+                        Log("Guid match: " + pdbGuid.ToString());
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            return IsMatchWindowsPdb(debugDirectory, pdbFilePath);
+        }
+
+        private static bool IsMatchWindowsPdb(IEnumerable<PdbInfo> debugDirectory, string pdbFilePath)
+        {
             using (var pdbStream = File.OpenRead(pdbFilePath))
             {
                 var metadataProvider = new SymReaderMetadataProvider();
                 var reader = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(pdbStream, metadataProvider);
-                foreach (var item in list)
+                foreach (var item in debugDirectory)
                 {
                     bool isMatch = false;
                     int result = reader.MatchesModule(item.Guid, item.Stamp, item.Age, out isMatch);
