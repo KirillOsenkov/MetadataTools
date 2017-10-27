@@ -2,7 +2,11 @@
 
 Included features:
  * **BinaryCompatChecker** - a tool that given a set of managed assemblies will detect binary incompatibilities, such as types missing from referenced assemblies, missing methods, etc.
- * **GetPdbInfo** - extracts .pdb information from a .dll (Pdb Signature GUID, age and path to .pdb), download the .pdb from symbol server
+ * **Pdb**
+   - extract .pdb information from a .dll/.exe debug directory (Pdb Guid, age, path to .pdb)
+   - download the .pdb from symbol server
+   - determine if a .dll matches a .pdb
+   - find a matching .pdb in a folder for a given .dll
  * **IsManagedAssembly.cs** - a single .cs file to very quickly determine if a .dll or .exe represents a managed assembly.
  * **ReadAssemblyVersion** - quickly read an assembly's version
  * **LargeAddressAware** - sets the LargeAddressAware bit in a 32-bit executable to unlock 4GB memory space
