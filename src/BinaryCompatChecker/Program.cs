@@ -18,21 +18,35 @@ namespace BinaryCompatChecker
         HashSet<string> diagnostics = new HashSet<string>();
 
         [STAThread]
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             if (args.Length != 3)
             {
                 PrintUsage();
-                return;
+                return 0;
             }
 
             string root = args[0];
             string configFile = args[1];
             string reportFile = args[2];
 
+            if (!Directory.Exists(root))
+            {
+                Console.Error.WriteLine("Specified root directory doesn't exist: " + root);
+                return 1;
+            }
+
+            if (!File.Exists(configFile))
+            {
+                Console.Error.WriteLine("Specified config file doesn't exist: " + configFile);
+                return 2;
+            }
+
             var files = GetFiles(root, configFile);
 
             new Checker().Check(files, reportFile);
+
+            return 0;
         }
 
         private static void PrintUsage()
