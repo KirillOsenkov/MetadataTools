@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Windows.Forms;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
@@ -21,20 +20,51 @@ namespace BinaryCompatChecker
         [STAThread]
         static void Main(string[] args)
         {
-            var root = Environment.CurrentDirectory;
-            var pattern = "*.dll";
-            IEnumerable<string> files = GetFiles(root, pattern);
-            pattern = "*.exe";
-            files = files.Concat(GetFiles(root, pattern));
-            new Checker().Check(files);
+            if (args.Length != 3)
+            {
+                PrintUsage();
+                return;
+            }
+
+            string root = args[0];
+            string configFile = args[1];
+            string reportFile = args[2];
+
+            var files = GetFiles(root, configFile);
+
+            new Checker().Check(files, reportFile);
         }
 
-        private static string[] GetFiles(string root, string pattern)
+        private static void PrintUsage()
         {
-            return Directory.GetFiles(root, pattern, SearchOption.AllDirectories);
+            Console.WriteLine(@"Usage: BinaryCompatChecker <root-folder> <config-file> <output-report-file>
+    <root-folder>: root directory where to start searching for files
+    <config-file>: a file with include/exclude patterns
+    <output-report-file>: where to write the output report");
         }
 
-        public void Check(IEnumerable<string> files)
+        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, string pattern = "*.dll")
+        {
+            var list = new List<string>();
+            var includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
+
+            foreach (var file in Directory.GetFiles(rootDirectory, pattern, SearchOption.AllDirectories))
+            {
+                if (includeExclude.Includes(file))
+                {
+                    list.Add(file);
+                }
+            }
+
+            return list;
+        }
+
+        public bool ShouldIncludeFile(string file)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Check(IEnumerable<string> files, string reportFile)
         {
             this.files = files;
 
@@ -71,8 +101,7 @@ namespace BinaryCompatChecker
             if (sb.Length > 0)
             {
                 var text = sb.ToString();
-                Clipboard.SetText(text);
-                File.WriteAllText("report.txt", text);
+                File.WriteAllText(reportFile, text);
             }
         }
 
@@ -158,7 +187,6 @@ namespace BinaryCompatChecker
 
         private void Log(string text)
         {
-            Console.WriteLine(text);
             sb.AppendLine(text);
         }
 
