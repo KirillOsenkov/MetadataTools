@@ -20,26 +20,25 @@ namespace BinaryCompatChecker
         [STAThread]
         static int Main(string[] args)
         {
-            if (args.Length != 3)
+            if (args.Length != 2 && args.Length != 3)
             {
                 PrintUsage();
                 return 0;
             }
 
             string root = args[0];
-            string configFile = args[1];
-            string reportFile = args[2];
+            string reportFile = args[1];
+            string configFile = null;
+
+            if (args.Length == 3)
+            {
+                configFile = args[2];
+            }
 
             if (!Directory.Exists(root))
             {
                 Console.Error.WriteLine("Specified root directory doesn't exist: " + root);
                 return 1;
-            }
-
-            if (!File.Exists(configFile))
-            {
-                Console.Error.WriteLine("Specified config file doesn't exist: " + configFile);
-                return 2;
             }
 
             var files = GetFiles(root, configFile);
@@ -51,20 +50,25 @@ namespace BinaryCompatChecker
 
         private static void PrintUsage()
         {
-            Console.WriteLine(@"Usage: BinaryCompatChecker <root-folder> <config-file> <output-report-file>
+            Console.WriteLine(@"Usage: BinaryCompatChecker <root-folder> <output-report-file> [<config-file>]
     <root-folder>: root directory where to start searching for files
-    <config-file>: a file with include/exclude patterns
-    <output-report-file>: where to write the output report");
+    <output-report-file>: where to write the output report
+    <config-file>: (optional) a file with include/exclude patterns");
         }
 
         public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, string pattern = "*.dll")
         {
             var list = new List<string>();
-            var includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
+            IncludeExcludePattern includeExclude = null;
+
+            if (File.Exists(configFilePath))
+            {
+                includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
+            }
 
             foreach (var file in Directory.GetFiles(rootDirectory, pattern, SearchOption.AllDirectories))
             {
-                if (includeExclude.Includes(file))
+                if (includeExclude == null || includeExclude.Includes(file))
                 {
                     list.Add(file);
                 }
