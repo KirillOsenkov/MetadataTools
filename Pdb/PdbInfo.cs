@@ -11,8 +11,6 @@ namespace MetadataTools
 {
     public class PdbInfo
     {
-        public string SymbolsPath => "http://<path-to-symbols>";
-
         public static Action<string> LogAction;
 
         public string AssemblyFilePath { get; set; }
@@ -21,7 +19,6 @@ namespace MetadataTools
         public uint Stamp { get; set; }
         public int Age { get; set; }
         public string Path { get; set; }
-        public string SymbolsUrl => $"{SymbolsPath}/{AssemblyShortName}.pdb/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
 
         public static void Log(string text)
         {
@@ -30,14 +27,14 @@ namespace MetadataTools
 
         public override string ToString()
         {
-            return $"{Guid.ToString("D")} {Age} {Path}";
+            return $"{Guid.ToString("D")} {Age} {Path} {Guid.ToString("N").ToUpperInvariant()}{Age}";
         }
 
         public static IEnumerable<PdbInfo> Read(string assemblyFilePath)
         {
             try
             {
-                var list = ReadList(assemblyFilePath).ToArray();
+                var list = ReadDebugDirectory(assemblyFilePath).ToArray();
                 return list;
             }
             catch
@@ -48,23 +45,8 @@ namespace MetadataTools
 
         public static bool IsMatch(string assemblyFilePath, string pdbFilePath)
         {
-            var list = Read(assemblyFilePath);
-            var pdbGuid = TryReadPdbGuid(pdbFilePath);
-            if (pdbGuid != Guid.Empty)
-            {
-                foreach (var debugDirectoryEntry in list)
-                {
-                    if (debugDirectoryEntry.Guid == pdbGuid)
-                    {
-                        Log("Guid match: " + pdbGuid.ToString());
-                        return true;
-                    }
-                }
-
-                return false;
-            }
-
-            return IsMatchWindowsPdb(list, pdbFilePath);
+            var debugDirectory = Read(assemblyFilePath);
+            return IsMatch(debugDirectory, pdbFilePath);
         }
 
         public static bool IsMatch(IEnumerable<PdbInfo> debugDirectory, string pdbFilePath)
@@ -76,7 +58,6 @@ namespace MetadataTools
                 {
                     if (debugDirectoryEntry.Guid == pdbGuid)
                     {
-                        Log("Guid match: " + pdbGuid.ToString());
                         return true;
                     }
                 }
@@ -107,7 +88,7 @@ namespace MetadataTools
             return false;
         }
 
-        private static IEnumerable<PdbInfo> ReadList(string assemblyFilePath)
+        private static IEnumerable<PdbInfo> ReadDebugDirectory(string assemblyFilePath)
         {
             using (var stream = File.OpenRead(assemblyFilePath))
             {
@@ -127,7 +108,6 @@ namespace MetadataTools
                             Path = codeViewDebugDirectoryData.Path,
                             Stamp = debugDirectoryEntry.Stamp
                         };
-                        Log(info.ToString());
                         yield return info;
                     }
                 }
@@ -162,7 +142,6 @@ namespace MetadataTools
                         var id = metadataReader.DebugMetadataHeader.Id;
                         var guid = new Guid(id.Take(16).ToArray());
                         var stamp = id.Skip(16).ToArray();
-                        Log("Portable Pdb Guid: " + guid.ToString("D"));
                         return guid;
                     }
                 }
@@ -178,23 +157,51 @@ namespace MetadataTools
             throw new NotImplementedException();
         }
 
-        public static void DownloadPdb(string assemblyFilePath)
-        {
-            var pdbInfo = Read(assemblyFilePath);
-            foreach (var item in pdbInfo)
-            {
-                DownloadPdb(item); 
-            }
-        }
+        //public static void DownloadPdb(string assemblyFilePath)
+        //{
+        //    var pdbInfo = Read(assemblyFilePath);
+        //    foreach (var item in pdbInfo)
+        //    {
+        //        DownloadPdb(item);
+        //    }
+        //}
 
-        public static void DownloadPdb(PdbInfo pdbInfo)
+        public bool DownloadPdb(string serverUrl)
         {
             var client = new HttpClient();
-            var text = client.GetStringAsync(pdbInfo.SymbolsUrl).Result;
+            var url = $"{serverUrl}/{AssemblyShortName}.pdb/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
+            string text = null;
+            try
+            {
+                text = client.GetStringAsync(url).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                 Log("Error: " + ex.Message);
+                return false;
+            }
+
             if (text.StartsWith("PATH:"))
             {
                 text = text.Substring(5);
+                if (File.Exists(text))
+                {
+                    var destinationPdb = System.IO.Path.ChangeExtension(AssemblyFilePath, ".pdb");
+                    if (!File.Exists(destinationPdb))
+                    {
+                        File.Copy(text, destinationPdb);
+                        Log($"Downloaded {destinationPdb}");
+                        return true;
+                    }
+                    else
+                    {
+                        Log($"{destinationPdb} already exists.");
+                        return true;
+                    }
+                }
             }
+
+            return false;
 
             //File.Copy(text, @"C:\Temp\1.pdb", overwrite: true);
         }

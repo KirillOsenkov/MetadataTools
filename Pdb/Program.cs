@@ -5,17 +5,17 @@ namespace MetadataTools
 {
     class Program
     {
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             if (args.Length == 0)
             {
                 PrintHelp();
-                return;
+                return 0;
             }
 
             PdbInfo.LogAction = Log;
 
-            if (args.Length == 2)
+            if (args.Length == 1)
             {
                 if (args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                     args[0].EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -24,7 +24,27 @@ namespace MetadataTools
                     if (!File.Exists(dll))
                     {
                         Error("dll file not found: " + dll);
-                        return;
+                        return 1;
+                    }
+
+                    PrintAssemblyInfo(dll);
+                }
+                else
+                {
+                    Error("Expected a .dll or .exe file as first argument");
+                    return 2;
+                }
+            }
+            else if (args.Length == 2)
+            {
+                if (args[0].EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                    args[0].EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dll = Path.GetFullPath(args[0]);
+                    if (!File.Exists(dll))
+                    {
+                        Error("dll file not found: " + dll);
+                        return 3;
                     }
 
                     if (args[1].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
@@ -33,10 +53,16 @@ namespace MetadataTools
                         if (!File.Exists(pdb))
                         {
                             Error("pdb file not found: " + pdb);
-                            return;
+                            return 4;
                         }
 
                         CheckMatch(dll, pdb);
+                        return 0;
+                    }
+                    else if (args[1].StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        DownloadSymbols(dll, args[1]);
+                        return 0;
                     }
 
                     var directory = Path.GetFullPath(args[1]);
@@ -44,8 +70,53 @@ namespace MetadataTools
                     {
                         FindMatchingPdb(dll, directory);
                     }
+                    else
+                    {
+                        Error("Second argument must be an existing directory with .pdb files");
+                        return 6;
+                    }
+                }
+                else
+                {
+                    Error("Expected a .dll or .exe file as first argument");
+                    return 5;
                 }
             }
+
+            return 0;
+        }
+
+        private static void DownloadSymbols(string dll, string url)
+        {
+            var pdbInfo = PdbInfo.Read(dll);
+            foreach (var record in pdbInfo)
+            {
+                if (record.DownloadPdb(url))
+                {
+                    return;
+                }
+            }
+
+            Log($"Couldn't find symbols for {dll} at {url}");
+        }
+
+        private static void PrintAssemblyInfo(string dll)
+        {
+            var debugDirectory = PdbInfo.Read(dll);
+            foreach (var pdb in debugDirectory)
+            {
+                PrintNameValue("Guid", pdb.Guid.ToString());
+                PrintNameValue("Age", pdb.Age.ToString());
+                PrintNameValue("Pdb path", pdb.Path.ToString());
+                PrintNameValue("Stamp", pdb.Stamp.ToString("X8"));
+                Console.WriteLine();
+            }
+        }
+
+        private static void PrintNameValue(string name, string value)
+        {
+            Log((name + ":").PadRight(10, ' '), ConsoleColor.DarkGray, lineBreak: false);
+            Log(value, ConsoleColor.Gray);
         }
 
         private static void FindMatchingPdb(string dll, string directory)
@@ -92,7 +163,7 @@ namespace MetadataTools
             Log(text, ConsoleColor.DarkGray);
         }
 
-        private static void Log(string text, ConsoleColor color)
+        private static void Log(string text, ConsoleColor color, bool lineBreak = true)
         {
             lock (typeof(Program))
             {
@@ -102,7 +173,14 @@ namespace MetadataTools
                     Console.ForegroundColor = color;
                 }
 
-                Console.WriteLine(text);
+                if (lineBreak)
+                {
+                    Console.WriteLine(text);
+                }
+                else
+                {
+                    Console.Write(text);
+                }
 
                 if (oldColor != color)
                 {
