@@ -41,7 +41,20 @@ namespace BinaryCompatChecker
 
         public bool Excludes(string path)
         {
-            return !Includes(path);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return true;
+            }
+
+            path = path.Replace('\\', '/');
+
+            if (path[0] == '/')
+            {
+                path = path.Substring(1);
+            }
+
+            bool isMatch = ExclusionRegex.IsMatch(path);
+            return isMatch;
         }
 
         public static IncludeExcludePattern ParseFromFile(string filePath)

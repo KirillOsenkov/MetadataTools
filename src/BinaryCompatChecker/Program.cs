@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
@@ -11,8 +10,9 @@ namespace BinaryCompatChecker
     public class Checker
     {
         Dictionary<AssemblyDefinition, HashSet<string>> assemblyToTypeList = new Dictionary<AssemblyDefinition, HashSet<string>>();
-        StringBuilder sb = new StringBuilder();
+        List<string> reportLines = new List<string>();
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, AssemblyDefinition> resolveCache = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
         HashSet<string> unresolvedAssemblies = new HashSet<string>();
         HashSet<string> diagnostics = new HashSet<string>();
@@ -43,9 +43,8 @@ namespace BinaryCompatChecker
 
             var files = GetFiles(root, configFile);
 
-            new Checker().Check(files, reportFile);
-
-            return 0;
+            bool success = new Checker().Check(root, files, reportFile);
+            return success ? 0 : 1;
         }
 
         private static void PrintUsage()
@@ -68,21 +67,46 @@ namespace BinaryCompatChecker
 
             foreach (var file in Directory.GetFiles(rootDirectory, pattern, SearchOption.AllDirectories))
             {
-                if (includeExclude == null || includeExclude.Includes(file))
+                var relativeFilePath = file.Substring(rootDirectory.Length);
+
+                if (includeExclude == null || !includeExclude.Excludes(relativeFilePath))
                 {
-                    list.Add(file);
+                    if (PEFile.IsManagedAssembly(file))
+                    {
+                        list.Add(file);
+                    }
                 }
             }
 
             return list;
         }
 
-        public bool ShouldIncludeFile(string file)
+        public class CustomAssemblyResolver : BaseAssemblyResolver
         {
-            throw new NotImplementedException();
+            private readonly Checker checker;
+
+            public CustomAssemblyResolver(Checker checker)
+            {
+                this.checker = checker;
+            }
+
+            public override AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
+            {
+                var resolved = checker.Resolve(name);
+                resolved = resolved ?? base.Resolve(name, parameters);
+                return resolved;
+            }
         }
 
-        public void Check(IEnumerable<string> files, string reportFile)
+        IAssemblyResolver resolver;
+
+        public Checker()
+        {
+            resolver = new CustomAssemblyResolver(this);
+        }
+
+        /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
+        public bool Check(string rootDirectory, IEnumerable<string> files, string reportFile)
         {
             this.files = files;
 
@@ -94,6 +118,9 @@ namespace BinaryCompatChecker
                     continue;
                 }
 
+                // var relativePath = file.Substring(rootDirectory.Length + 1);
+                // Log($"Assembly: {relativePath}: {assemblyDefinition.FullName}");
+
                 var references = assemblyDefinition.MainModule.AssemblyReferences;
                 foreach (var reference in references)
                 {
@@ -101,7 +128,7 @@ namespace BinaryCompatChecker
                     if (resolved == null)
                     {
                         unresolvedAssemblies.Add(reference.Name);
-                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.Name}': unable to resolve reference to '{reference.FullName}'");
+                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': unable to resolve reference to '{reference.FullName}'");
                         continue;
                     }
 
@@ -111,16 +138,80 @@ namespace BinaryCompatChecker
                 CheckMembers(assemblyDefinition);
             }
 
+            Dispose();
+
             foreach (var ex in diagnostics.OrderBy(s => s))
             {
                 Log(ex);
             }
 
-            if (sb.Length > 0)
+            if (reportLines.Count > 0)
             {
-                var text = sb.ToString();
-                File.WriteAllText(reportFile, text);
+                if (!File.Exists(reportFile))
+                {
+                    // initial baseline creation mode
+                    File.WriteAllLines(reportFile, reportLines);
+                }
+                else
+                {
+                    var baseline = File.ReadAllLines(reportFile);
+                    if (!Enumerable.SequenceEqual(baseline, reportLines))
+                    {
+                        OutputError(@"BinaryCompatChecker failed.
+ The current assembly binary compatibility report is different from the checked in baseline.
+ Baseline file: " + reportFile);
+                        OutputDiff(baseline, reportLines);
+                        try
+                        {
+                            File.WriteAllLines(reportFile, reportLines);
+                        }
+                        catch (Exception)
+                        {
+                        }
+
+                        return false;
+                    }
+                }
             }
+
+            return true;
+        }
+
+        private void Dispose()
+        {
+            foreach (var kvp in this.filePathToModuleDefinition)
+            {
+                kvp.Value.Dispose();
+            }
+        }
+
+        private void OutputDiff(IEnumerable<string> baseline, IEnumerable<string> reportLines)
+        {
+            var removed = baseline.Except(reportLines);
+            var added = reportLines.Except(baseline);
+
+            if (removed.Any())
+            {
+                OutputError("These expected lines are missing:");
+                foreach (var removedLine in removed)
+                {
+                    OutputError(removedLine);
+                }
+            }
+
+            if (added.Any())
+            {
+                OutputError("These actual lines are new:");
+                foreach (var addedLine in added)
+                {
+                    OutputError(addedLine);
+                }
+            }
+        }
+
+        private void OutputError(string text)
+        {
+            Console.Error.WriteLine(text);
         }
 
         public void Check(AssemblyDefinition referencing, AssemblyDefinition reference)
@@ -134,21 +225,29 @@ namespace BinaryCompatChecker
             {
                 try
                 {
-                    if (memberReference.DeclaringType.Scope.MetadataScopeType == MetadataScopeType.AssemblyNameReference && unresolvedAssemblies.Contains(memberReference.DeclaringType.Scope.Name))
+                    var scope = memberReference.DeclaringType.Scope;
+                    string referenceToAssembly = scope?.Name;
+
+                    if (referenceToAssembly != null && unresolvedAssemblies.Contains(referenceToAssembly))
                     {
                         // already reported an unresolved assembly; just ignore this one
                         continue;
                     }
 
+                    if (scope is AssemblyNameReference assemblyNameReference)
+                    {
+                        referenceToAssembly = assemblyNameReference.FullName;
+                    }
+
                     var resolved = memberReference.Resolve();
                     if (resolved == null)
                     {
-                        diagnostics.Add($"In assembly '{assembly.Name.Name}': Unable to resolve member reference '{memberReference.FullName}'");
+                        diagnostics.Add($"In assembly '{assembly.Name.FullName}': Unable to resolve member reference '{memberReference.FullName}' from assembly '{referenceToAssembly}'");
                     }
                 }
                 catch (Exception ex)
                 {
-                    diagnostics.Add($"In assembly '{assembly.Name.Name}': {ex.Message}");
+                    diagnostics.Add($"In assembly '{assembly.Name.FullName}': {ex.Message}");
                 }
             }
         }
@@ -157,7 +256,9 @@ namespace BinaryCompatChecker
         {
             foreach (var referencedType in referencing.MainModule.GetTypeReferences())
             {
-                if (referencedType.Scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference || referencedType.Scope.Name != reference.Name.Name)
+                if (referencedType.Scope == null ||
+                    referencedType.Scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference ||
+                    referencedType.Scope.Name != reference.Name.Name)
                 {
                     continue;
                 }
@@ -165,7 +266,7 @@ namespace BinaryCompatChecker
                 var types = GetTypes(reference);
                 if (!types.Contains(referencedType.FullName))
                 {
-                    diagnostics.Add($"In assembly '{referencing.Name.Name}': Unable to resolve type reference '{referencedType.FullName}' in '{reference.Name}'");
+                    diagnostics.Add($"In assembly '{referencing.Name.FullName}': Unable to resolve type reference '{referencedType.FullName}' in '{reference.Name}'");
                 }
             }
         }
@@ -205,17 +306,26 @@ namespace BinaryCompatChecker
 
         private void Log(string text)
         {
-            sb.AppendLine(text);
+            text = text.Replace('\r', ' ').Replace('\n', ' ');
+            reportLines.Add(text);
         }
 
         private AssemblyDefinition Resolve(AssemblyNameReference reference)
         {
+            AssemblyDefinition result = null;
+            if (resolveCache.TryGetValue(reference.FullName, out result))
+            {
+                return result;
+            }
+
             foreach (var assemblyDefinition in filePathToModuleDefinition)
             {
-                if (assemblyDefinition.Value.Name.Name == reference.Name ||
+                if (assemblyDefinition.Value.Name.FullName == reference.FullName ||
                     string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase))
                 {
-                    return assemblyDefinition.Value;
+                    result = assemblyDefinition.Value;
+                    resolveCache[reference.FullName] = result;
+                    return result;
                 }
             }
 
@@ -223,32 +333,48 @@ namespace BinaryCompatChecker
             {
                 if (string.Equals(Path.GetFileNameWithoutExtension(file), reference.Name, StringComparison.OrdinalIgnoreCase))
                 {
-                    return Load(file);
+                    result = Load(file);
+                    resolveCache[reference.FullName] = result;
+                    return result;
                 }
             }
 
             try
             {
                 var assembly = Assembly.Load(reference.FullName);
-                return Load(assembly.Location);
+                result = Load(assembly.Location);
+                resolveCache[reference.FullName] = result;
+                return result;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                resolveCache[reference.FullName] = null;
+                diagnostics.Add(ex.Message);
                 return null;
             }
         }
 
         private AssemblyDefinition Load(string filePath)
         {
+            if (!PEFile.IsManagedAssembly(filePath))
+            {
+                return null;
+            }
+
             if (!filePathToModuleDefinition.TryGetValue(filePath, out var assemblyDefinition))
             {
                 try
                 {
-                    assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath);
+                    var readerParameters = new ReaderParameters
+                    {
+                        AssemblyResolver = this.resolver
+                    };
+                    assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                     filePathToModuleDefinition[filePath] = assemblyDefinition;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    diagnostics.Add(ex.ToString());
                     return null;
                 }
             }

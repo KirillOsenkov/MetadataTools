@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>BinaryCompatChecker</id>
+    <version>1.0.5</version>
+    <authors>Kirill Osenkov, Microsoft</authors>
+    <owners>Kirill Osenkov, Microsoft</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
+    <projectUrl>https://github.com/KirillOsenkov/MetadataTools</projectUrl>
+    <description>A tool to verify binary compatibility of a set of .dll files.</description>
+    <tags>Binary Compat Compatibility Check Checker Validation Metadata Assembly</tags>
+    <repository url="https://github.com/KirillOsenkov/MetadataTools" />
+  </metadata>
+  <files>
+    <file src="bin\Debug\net46\BinaryCompatChecker.exe" target="tools\BinaryCompatChecker.exe" />
+    <file src="bin\Debug\net46\BinaryCompatChecker.pdb" target="tools\BinaryCompatChecker.pdb" />
+    <file src="bin\Debug\net46\Mono.Cecil.dll" target="tools\Mono.Cecil.dll" />
+    <file src="BinaryCompatChecker.props" target="build\BinaryCompatChecker.props" />
+  </files>
+</package>
