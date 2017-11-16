@@ -55,7 +55,7 @@ namespace BinaryCompatChecker
     <config-file>: (optional) a file with include/exclude patterns");
         }
 
-        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, string pattern = "*.dll")
+        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath)
         {
             var list = new List<string>();
             IncludeExcludePattern includeExclude = null;
@@ -65,9 +65,25 @@ namespace BinaryCompatChecker
                 includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
             }
 
-            foreach (var file in Directory.GetFiles(rootDirectory, pattern, SearchOption.AllDirectories))
+            foreach (var file in Directory.GetFiles(rootDirectory, "*", SearchOption.AllDirectories))
             {
+                if (!file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                    !file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                    !file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 var relativeFilePath = file.Substring(rootDirectory.Length);
+
+                if (file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (includeExclude != null && includeExclude.Includes(relativeFilePath))
+                    {
+                        list.Add(file);
+                        continue;
+                    }
+                }
 
                 if (includeExclude == null || !includeExclude.Excludes(relativeFilePath))
                 {
@@ -109,9 +125,16 @@ namespace BinaryCompatChecker
         public bool Check(string rootDirectory, IEnumerable<string> files, string reportFile)
         {
             this.files = files;
+            var appConfigFiles = new List<string>();
 
             foreach (var file in files)
             {
+                if (file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
+                {
+                    appConfigFiles.Add(file);
+                    continue;
+                }
+
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
                 {
@@ -137,6 +160,8 @@ namespace BinaryCompatChecker
 
                 CheckMembers(assemblyDefinition);
             }
+
+            CheckAppConfigFiles(appConfigFiles);
 
             Dispose();
 
@@ -177,6 +202,92 @@ namespace BinaryCompatChecker
             return true;
         }
 
+        private void CheckAppConfigFiles(IEnumerable<string> appConfigFiles)
+        {
+            foreach (var appConfigFilePath in appConfigFiles)
+            {
+                var appConfigFile = AppConfigFile.Read(appConfigFilePath);
+                if (appConfigFile.Errors.Any())
+                {
+                    foreach (var error in appConfigFile.Errors)
+                    {
+                        Log($"In app.config file {appConfigFilePath}: {error}");
+                    }
+
+                    return;
+                }
+
+                foreach (var bindingRedirect in appConfigFile.BindingRedirects)
+                {
+                    CheckBindingRedirect(
+                        appConfigFilePath,
+                        bindingRedirect.Name,
+                        bindingRedirect.PublicKeyToken,
+                        bindingRedirect.OldVersionRangeStart,
+                        bindingRedirect.OldVersionRangeEnd,
+                        bindingRedirect.NewVersion);
+                }
+            }
+        }
+
+        private void CheckBindingRedirect(
+            string appConfigFilePath,
+            string name,
+            string publicKeyToken,
+            Version oldVersionStart,
+            Version oldVersionEnd,
+            Version newVersion)
+        {
+            bool foundNewVersion = false;
+            var foundVersions = new List<Version>();
+
+            foreach (var kvp in this.filePathToModuleDefinition)
+            {
+                var assembly = kvp.Value;
+                if (!string.Equals(assembly.Name?.Name, name))
+                {
+                    continue;
+                }
+
+                foundVersions.Add(assembly.Name.Version);
+
+                if (assembly.Name.Version == newVersion)
+                {
+                    foundNewVersion = true;
+                    var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
+                    if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log($"In {appConfigFilePath}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
+                    }
+
+                    continue;
+                }
+
+                if (assembly.Name.Version < oldVersionStart)
+                {
+                    Log($"In {appConfigFilePath}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
+                    continue;
+                }
+
+                if (assembly.Name.Version > oldVersionEnd)
+                {
+                    Log($"In {appConfigFilePath}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
+                    continue;
+                }
+            }
+
+            if (!foundNewVersion)
+            {
+                var message = $"In {appConfigFilePath}: couldn't find assembly '{name}' with version {newVersion}.";
+                if (foundVersions.Count > 0)
+                {
+                    message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()))}";
+                }
+
+                Log(message);
+            }
+        }
+
         private void Dispose()
         {
             foreach (var kvp in this.filePathToModuleDefinition)
@@ -192,7 +303,7 @@ namespace BinaryCompatChecker
 
             if (removed.Any())
             {
-                OutputError("These expected lines are missing:");
+                OutputError("These lines are missing:");
                 foreach (var removedLine in removed)
                 {
                     OutputError(removedLine);
@@ -201,7 +312,7 @@ namespace BinaryCompatChecker
 
             if (added.Any())
             {
-                OutputError("These actual lines are new:");
+                OutputError("These lines are new:");
                 foreach (var addedLine in added)
                 {
                     OutputError(addedLine);
@@ -225,6 +336,11 @@ namespace BinaryCompatChecker
             {
                 try
                 {
+                    if (memberReference.DeclaringType.IsArray)
+                    {
+                        continue;
+                    }
+
                     var scope = memberReference.DeclaringType.Scope;
                     string referenceToAssembly = scope?.Name;
 

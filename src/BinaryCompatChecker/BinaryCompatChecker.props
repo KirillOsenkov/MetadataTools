@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <BinaryCompatCheckerExe>$(MSBuildThisFileDirectory)\..\tools\BinaryCompatChecker.exe</BinaryCompatCheckerExe>
+  </PropertyGroup>
+</Project>

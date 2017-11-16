@@ -36,7 +36,7 @@ namespace BinaryCompatChecker
                 path = path.Substring(1);
             }
 
-            return !ExclusionRegex.IsMatch(path) || InclusionRegex.IsMatch(path);
+            return InclusionRegex.IsMatch(path);
         }
 
         public bool Excludes(string path)
