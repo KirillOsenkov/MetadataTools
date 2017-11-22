@@ -53,7 +53,7 @@ namespace RefDump
 
             var assemblyDefinition = AssemblyDefinition.ReadAssembly(FilePath, readerParameters);
 
-            Log(assemblyDefinition.Name.FullName);
+            Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
             Log();
             Log("References:", ConsoleColor.Green);
             foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
@@ -262,7 +262,7 @@ namespace RefDump
 
         private static void PrintUsage()
         {
-            Log(@"Usage:", ConsoleColor.Green, lineBreak: false);
+            Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
             Log(@"refdump file.dll [output.xml]", ConsoleColor.White);
 
     Log(@"    Lists all references of the input assembly, 
