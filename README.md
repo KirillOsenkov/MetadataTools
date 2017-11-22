@@ -2,6 +2,7 @@
 
 Included features:
  * **BinaryCompatChecker** - a tool that given a set of managed assemblies will detect binary incompatibilities, such as types missing from referenced assemblies, missing methods, etc.
+ * **RefDump** - given an assembly prints a list of all types from all referenced assemblies used by the current assembly. Can also dump both typerefs and memberrefs to an Xml file.
  * **Pdb**
    - extract .pdb information from a .dll/.exe debug directory (Pdb Guid, age, path to .pdb)
    - download the .pdb from symbol server
