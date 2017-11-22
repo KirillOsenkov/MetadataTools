@@ -7,9 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BinaryCompatChecker", "src\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Pdb", "src\Pdb\Pdb.csproj", "{F0B0CBD7-476C-44F9-87EE-DC56E238AC9C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PEFile", "src\PEFile\PEFile.csproj", "{D282C9B2-E4A1-4E14-AF44-61D0D2221F63}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PEFile", "src\PEFile\PEFile.csproj", "{D282C9B2-E4A1-4E14-AF44-61D0D2221F63}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PEFile.Tests", "src\PEFile.Tests\PEFile.Tests.csproj", "{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PEFile.Tests", "src\PEFile.Tests\PEFile.Tests.csproj", "{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RefDump", "RefDump\RefDump.csproj", "{D914402D-04ED-478E-B8E3-5A225681AEAB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

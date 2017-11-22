@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net46</TargetFramework>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

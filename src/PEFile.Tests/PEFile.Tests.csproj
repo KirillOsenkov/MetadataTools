@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AssemblyName>PEFile.Tests</AssemblyName>
     <TargetFramework>net461</TargetFramework>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\PEFile\PEFile.csproj" />
