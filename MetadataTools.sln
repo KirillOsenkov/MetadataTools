@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PEFile", "src\PEFile\PEFile
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PEFile.Tests", "src\PEFile.Tests\PEFile.Tests.csproj", "{29BCCBE3-9D9F-4EF6-9B49-B33C0672EC20}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RefDump", "RefDump\RefDump.csproj", "{D914402D-04ED-478E-B8E3-5A225681AEAB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RefDump", "src\RefDump\RefDump.csproj", "{D914402D-04ED-478E-B8E3-5A225681AEAB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
