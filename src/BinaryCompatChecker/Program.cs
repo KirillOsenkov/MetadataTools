@@ -81,8 +81,9 @@ namespace BinaryCompatChecker
                     if (includeExclude != null && includeExclude.Includes(relativeFilePath))
                     {
                         list.Add(file);
-                        continue;
                     }
+
+                    continue;
                 }
 
                 if (includeExclude == null || !includeExclude.Excludes(relativeFilePath))
@@ -163,8 +164,6 @@ namespace BinaryCompatChecker
 
             CheckAppConfigFiles(appConfigFiles);
 
-            Dispose();
-
             foreach (var ex in diagnostics.OrderBy(s => s))
             {
                 Log(ex);
@@ -183,7 +182,7 @@ namespace BinaryCompatChecker
                     if (!Enumerable.SequenceEqual(baseline, reportLines))
                     {
                         OutputError(@"BinaryCompatChecker failed.
- The current assembly binary compatibility report is different from the checked in baseline.
+ The current assembly binary compatibility report is different from the checked-in baseline.
  Baseline file: " + reportFile);
                         OutputDiff(baseline, reportLines);
                         try
@@ -206,12 +205,13 @@ namespace BinaryCompatChecker
         {
             foreach (var appConfigFilePath in appConfigFiles)
             {
+                var appConfigFileName = Path.GetFileName(appConfigFilePath);
                 var appConfigFile = AppConfigFile.Read(appConfigFilePath);
                 if (appConfigFile.Errors.Any())
                 {
                     foreach (var error in appConfigFile.Errors)
                     {
-                        Log($"In app.config file {appConfigFilePath}: {error}");
+                        Log($"In app.config file {appConfigFileName}: {error}");
                     }
 
                     return;
@@ -220,7 +220,7 @@ namespace BinaryCompatChecker
                 foreach (var bindingRedirect in appConfigFile.BindingRedirects)
                 {
                     CheckBindingRedirect(
-                        appConfigFilePath,
+                        appConfigFileName,
                         bindingRedirect.Name,
                         bindingRedirect.PublicKeyToken,
                         bindingRedirect.OldVersionRangeStart,
@@ -231,7 +231,7 @@ namespace BinaryCompatChecker
         }
 
         private void CheckBindingRedirect(
-            string appConfigFilePath,
+            string appConfigFileName,
             string name,
             string publicKeyToken,
             Version oldVersionStart,
@@ -257,7 +257,7 @@ namespace BinaryCompatChecker
                     var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
                     if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
                     {
-                        Log($"In {appConfigFilePath}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
+                        Log($"In {appConfigFileName}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
                     }
 
                     continue;
@@ -265,34 +265,26 @@ namespace BinaryCompatChecker
 
                 if (assembly.Name.Version < oldVersionStart)
                 {
-                    Log($"In {appConfigFilePath}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
+                    Log($"In {appConfigFileName}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
                     continue;
                 }
 
                 if (assembly.Name.Version > oldVersionEnd)
                 {
-                    Log($"In {appConfigFilePath}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
+                    Log($"In {appConfigFileName}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
                     continue;
                 }
             }
 
             if (!foundNewVersion)
             {
-                var message = $"In {appConfigFilePath}: couldn't find assembly '{name}' with version {newVersion}.";
+                var message = $"In {appConfigFileName}: couldn't find assembly '{name}' with version {newVersion}.";
                 if (foundVersions.Count > 0)
                 {
                     message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()))}";
                 }
 
                 Log(message);
-            }
-        }
-
-        private void Dispose()
-        {
-            foreach (var kvp in this.filePathToModuleDefinition)
-            {
-                kvp.Value.Dispose();
             }
         }
 
@@ -303,7 +295,7 @@ namespace BinaryCompatChecker
 
             if (removed.Any())
             {
-                OutputError("These lines are missing:");
+                OutputError("These expected lines are missing:");
                 foreach (var removedLine in removed)
                 {
                     OutputError(removedLine);
@@ -312,7 +304,7 @@ namespace BinaryCompatChecker
 
             if (added.Any())
             {
-                OutputError("These lines are new:");
+                OutputError("These actual lines are new:");
                 foreach (var addedLine in added)
                 {
                     OutputError(addedLine);
@@ -483,7 +475,8 @@ namespace BinaryCompatChecker
                 {
                     var readerParameters = new ReaderParameters
                     {
-                        AssemblyResolver = this.resolver
+                        AssemblyResolver = this.resolver,
+                        InMemory = true
                     };
                     assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                     filePathToModuleDefinition[filePath] = assemblyDefinition;

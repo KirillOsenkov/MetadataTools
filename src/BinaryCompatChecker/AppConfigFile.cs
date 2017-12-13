@@ -10,14 +10,14 @@ namespace BinaryCompatChecker
         public IEnumerable<string> Errors => errors;
 
         private List<BindingRedirect> bindingRedirects = new List<BindingRedirect>();
+        public IEnumerable<BindingRedirect> BindingRedirects => bindingRedirects;
+
         private string filePath;
 
         private AppConfigFile(string filePath)
         {
             this.filePath = filePath;
         }
-
-        public IEnumerable<BindingRedirect> BindingRedirects => bindingRedirects;
 
         public class BindingRedirect
         {
@@ -27,6 +27,11 @@ namespace BinaryCompatChecker
             public Version OldVersionRangeStart { get; set; }
             public Version OldVersionRangeEnd { get; set; }
             public Version NewVersion { get; set; }
+
+            public override string ToString()
+            {
+                return $"Name={Name} Culture={Culture} PublicKeyToken={PublicKeyToken} OldVersion={OldVersionRangeStart}-{OldVersionRangeEnd} NewVersion={NewVersion}";
+            }
         }
 
         public static AppConfigFile Read(string filePath)
