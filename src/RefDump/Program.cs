@@ -183,22 +183,24 @@ namespace RefDump
         {
             public Dictionary<string, RefAssembly> Assemblies { get; set; } = new Dictionary<string, RefAssembly>();
 
-            public void AddType(TypeReference typeReference)
+            public RefType AddType(TypeReference typeReference)
             {
                 RefAssembly refAssembly = GetAssembly(typeReference);
                 if (refAssembly != null)
                 {
-                    refAssembly.AddType(typeReference);
+                    return refAssembly.AddType(typeReference);
                 }
+
+                return null;
             }
 
             public void AddMember(MemberReference memberReference)
             {
                 var typeReference = memberReference.DeclaringType;
-                RefAssembly refAssembly = GetAssembly(typeReference);
-                if (refAssembly != null)
+                var refType = AddType(typeReference);
+                if (refType != null)
                 {
-                    refAssembly.AddMember(memberReference);
+                    refType.AddMember(memberReference);
                 }
             }
 
@@ -225,17 +227,18 @@ namespace RefDump
         {
             public Dictionary<string, RefType> Types { get; set; } = new Dictionary<string, RefType>();
 
-            public void AddMember(MemberReference memberReference)
-            {
-                RefType typeRef = AddType(memberReference.DeclaringType);
-                if (typeRef != null)
-                {
-                    typeRef.AddMember(memberReference);
-                }
-            }
-
             public RefType AddType(TypeReference typeReference)
             {
+                if (typeReference == null)
+                {
+                    return null;
+                }
+
+                if (typeReference is GenericInstanceType generic)
+                {
+                    typeReference = generic.ElementType;
+                }
+
                 if (!Types.TryGetValue(typeReference.FullName, out var refType))
                 {
                     if (!IsValidType(typeReference))
@@ -253,7 +256,7 @@ namespace RefDump
 
         class RefType
         {
-            public List<MemberReference> Members { get; set; } = new List<MemberReference>();
+            public HashSet<MemberReference> Members { get; set; } = new HashSet<MemberReference>();
 
             public void AddMember(MemberReference memberReference)
             {
