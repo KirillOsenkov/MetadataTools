@@ -9,16 +9,10 @@ namespace RefDump
 {
     class Dumper
     {
-        private string[] args;
-
         public string FilePath { get; private set; }
         public string OutputXml { get; set; }
-
-        public Dumper(string[] args)
-        {
-            this.args = args;
-            ParseArgs();
-        }
+        public bool OutputTypes { get; set; } = false;
+        public bool OutputMembers { get; set; } = false;
 
         static void Main(string[] args)
         {
@@ -28,11 +22,17 @@ namespace RefDump
                 return;
             }
 
-            var dumper = new Dumper(args);
-            dumper.Dump();
+            var dumper = new Dumper();
+            if (!dumper.ParseArgs(args))
+            {
+                PrintUsage();
+                return;
+            }
+
+            dumper.DoWork();
         }
 
-        private void Dump()
+        private void DoWork()
         {
             if (string.IsNullOrEmpty(FilePath))
             {
@@ -52,8 +52,8 @@ namespace RefDump
             };
 
             var assemblyDefinition = AssemblyDefinition.ReadAssembly(FilePath, readerParameters);
-
             Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
+
             Log();
             Log("References:", ConsoleColor.Green);
             foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
@@ -61,40 +61,50 @@ namespace RefDump
                 PrintWithHighlight(reference.FullName, reference.FullName.IndexOf(','), ConsoleColor.White, ConsoleColor.Gray);
             }
 
-            Log("");
+            var refTree = GetRefTree(assemblyDefinition);
 
-            var typeReferencesByScope = new Dictionary<string, List<string>>();
-            foreach (var typeReference in assemblyDefinition.MainModule.GetTypeReferences())
+            if (OutputTypes || OutputMembers)
             {
-                if (typeReference.IsArray)
-                {
-                    continue;
-                }
-
-                var scope = typeReference.Scope?.ToString() ?? "<null>";
-                if (!typeReferencesByScope.TryGetValue(scope, out var bucket))
-                {
-                    bucket = new List<string>();
-                    typeReferencesByScope[scope] = bucket;
-                }
-
-                bucket.Add(typeReference.FullName);
-            }
-
-            foreach (var kvp in typeReferencesByScope.OrderBy(kvp => kvp.Key))
-            {
-                Log(kvp.Key + ":", ConsoleColor.Cyan);
-                foreach (var typeRef in kvp.Value.OrderBy(t => t))
-                {
-                    var text = "    " + typeRef;
-                    PrintWithHighlight(text, text.LastIndexOf('.'), ConsoleColor.Gray, ConsoleColor.White);
-                }
+                DumpToConsole(refTree);
             }
 
             if (OutputXml != null)
             {
-                var refTree = GetRefTree(assemblyDefinition);
                 DumpToXml(refTree, OutputXml);
+            }
+        }
+
+        private void DumpToConsole(RefTree refTree)
+        {
+            Log();
+
+            foreach (var kvp in refTree.Assemblies.OrderBy(a => a.Key))
+            {
+                Log(kvp.Key + ":", ConsoleColor.Cyan);
+
+                if (OutputTypes || OutputMembers)
+                {
+                    foreach (var typeRef in kvp.Value.Types.OrderBy(t => t.Key))
+                    {
+                        var text = "    " + typeRef.Key;
+
+                        if (OutputMembers)
+                        {
+                            PrintWithHighlight(text, text.LastIndexOf('.'), ConsoleColor.DarkGreen, ConsoleColor.Green);
+                            foreach (var memberRef in typeRef.Value.Members.OrderBy(m => m.FullName))
+                            {
+                                text = "        " + memberRef.FullName;
+                                PrintWithHighlight(text, text.LastIndexOf('.'), ConsoleColor.Gray, ConsoleColor.White);
+                            }
+                        }
+                        else
+                        {
+                            PrintWithHighlight(text, text.LastIndexOf('.'), ConsoleColor.DarkGray, ConsoleColor.Gray);
+                        }
+                    }
+
+                    Log();
+                }
             }
         }
 
@@ -114,9 +124,13 @@ namespace RefDump
         {
             var referenceElement = new XElement("Reference");
             referenceElement.SetAttributeValue("Name", asm.Key);
-            foreach (var type in asm.Value.Types.OrderBy(t => t.Key))
+
+            if (OutputTypes)
             {
-                Dump(referenceElement, type);
+                foreach (var type in asm.Value.Types.OrderBy(t => t.Key))
+                {
+                    Dump(referenceElement, type);
+                }
             }
 
             root.Add(referenceElement);
@@ -126,9 +140,13 @@ namespace RefDump
         {
             var typeElement = new XElement("Type");
             typeElement.SetAttributeValue("Name", type.Key);
-            foreach (var item in type.Value.Members.OrderBy(m => m.FullName))
+
+            if (OutputMembers)
             {
-                Dump(typeElement, item);
+                foreach (var item in type.Value.Members.OrderBy(m => m.FullName))
+                {
+                    Dump(typeElement, item);
+                }
             }
 
             referenceElement.Add(typeElement);
@@ -146,18 +164,41 @@ namespace RefDump
         {
             public Dictionary<string, RefAssembly> Assemblies { get; set; } = new Dictionary<string, RefAssembly>();
 
+            public void AddType(TypeReference typeReference)
+            {
+                RefAssembly refAssembly = GetAssembly(typeReference);
+                if (refAssembly != null)
+                {
+                    refAssembly.AddType(typeReference);
+                }
+            }
+
             public void AddMember(MemberReference memberReference)
             {
                 var typeReference = memberReference.DeclaringType;
-                var assembly = typeReference.Scope.ToString() ?? "<null>";
-
-                if (!Assemblies.TryGetValue(assembly, out var refAssembly))
+                RefAssembly refAssembly = GetAssembly(typeReference);
+                if (refAssembly != null)
                 {
-                    refAssembly = new RefAssembly();
-                    Assemblies[assembly] = refAssembly;
+                    refAssembly.AddMember(memberReference);
+                }
+            }
+
+            public RefAssembly GetAssembly(TypeReference typeReference)
+            {
+                if (!IsValidType(typeReference))
+                {
+                    return null;
                 }
 
-                refAssembly.AddMember(memberReference);
+                var assemblyName = typeReference.Scope.ToString() ?? "<null>";
+
+                if (!Assemblies.TryGetValue(assemblyName, out var refAssembly))
+                {
+                    refAssembly = new RefAssembly();
+                    Assemblies[assemblyName] = refAssembly;
+                }
+
+                return refAssembly;
             }
         }
 
@@ -167,15 +208,27 @@ namespace RefDump
 
             public void AddMember(MemberReference memberReference)
             {
-                var typeReference = memberReference.DeclaringType;
-
-                if (!Types.TryGetValue(typeReference.FullName, out var typeRef))
+                RefType typeRef = AddType(memberReference.DeclaringType);
+                if (typeRef != null)
                 {
-                    typeRef = new RefType();
-                    Types[typeReference.FullName] = typeRef;
+                    typeRef.AddMember(memberReference);
+                }
+            }
+
+            public RefType AddType(TypeReference typeReference)
+            {
+                if (!Types.TryGetValue(typeReference.FullName, out var refType))
+                {
+                    if (!IsValidType(typeReference))
+                    {
+                        return null;
+                    }
+
+                    refType = new RefType();
+                    Types[typeReference.FullName] = refType;
                 }
 
-                typeRef.AddMember(memberReference);
+                return refType;
             }
         }
 
@@ -193,13 +246,13 @@ namespace RefDump
         {
             var refTree = new RefTree();
 
+            foreach (var typeReference in assemblyDefinition.MainModule.GetTypeReferences())
+            {
+                refTree.AddType(typeReference);
+            }
+
             foreach (var memberReference in assemblyDefinition.MainModule.GetMemberReferences())
             {
-                if (memberReference.DeclaringType.IsArray)
-                {
-                    continue;
-                }
-
                 if (memberReference.DeclaringType.Scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference)
                 {
                     continue;
@@ -209,6 +262,13 @@ namespace RefDump
             }
 
             return refTree;
+        }
+
+        public static bool IsValidType(TypeReference typeReference)
+        {
+            return typeReference != null &&
+                !typeReference.IsArray &&
+                typeReference.Scope.MetadataScopeType == MetadataScopeType.AssemblyNameReference;
         }
 
         private void PrintWithHighlight(string originalString, int splitPosition, ConsoleColor firstPart, ConsoleColor secondPart)
@@ -241,7 +301,7 @@ namespace RefDump
             Console.ResetColor();
         }
 
-        private void ParseArgs()
+        private bool ParseArgs(string[] args)
         {
             foreach (var arg in args)
             {
@@ -257,16 +317,35 @@ namespace RefDump
                     OutputXml = Path.GetFullPath(arg);
                     continue;
                 }
+
+                if (arg == "-t" || arg == "/t")
+                {
+                    OutputTypes = true;
+                    continue;
+                }
+
+                if (arg == "-m" || arg == "/m")
+                {
+                    OutputMembers = true;
+                    continue;
+                }
+
+                Log("Unknown argument: " + arg, ConsoleColor.Red);
+                return false;
             }
+
+            return true;
         }
 
         private static void PrintUsage()
         {
             Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
-            Log(@"refdump file.dll [output.xml]", ConsoleColor.White);
+            Log(@"refdump file.dll [-t] [-m] [output.xml]", ConsoleColor.White);
 
-    Log(@"    Lists all references of the input assembly, 
-    all types and all members consumed from each reference.
+            Log(@"    Lists all references of the input assembly.
+    -t    List all used types
+    -m    List all used members
+
     If an output.xml file name is specified, dump detailed 
     report into that xml.", ConsoleColor.Gray);
         }
