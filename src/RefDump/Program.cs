@@ -11,17 +11,12 @@ namespace RefDump
     {
         public string FilePath { get; private set; }
         public string OutputXml { get; set; }
+        public string FilterToAssembly { get; set; }
         public bool OutputTypes { get; set; } = false;
         public bool OutputMembers { get; set; } = false;
 
         static void Main(string[] args)
         {
-            if (args.Length == 0)
-            {
-                PrintUsage();
-                return;
-            }
-
             var dumper = new Dumper();
             if (!dumper.ParseArgs(args))
             {
@@ -55,9 +50,23 @@ namespace RefDump
             Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
 
             Log();
-            Log("References:", ConsoleColor.Green);
+
+            if (FilterToAssembly == null)
+            {
+                Log("References:", ConsoleColor.Green);
+            }
+            else
+            {
+                Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
+            }
+
             foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
             {
+                if (FilterToAssembly != null && reference.FullName.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
+                {
+                    continue;
+                }
+
                 PrintWithHighlight(reference.FullName, reference.FullName.IndexOf(','), ConsoleColor.White, ConsoleColor.Gray);
             }
 
@@ -80,6 +89,11 @@ namespace RefDump
 
             foreach (var kvp in refTree.Assemblies.OrderBy(a => a.Key))
             {
+                if (FilterToAssembly != null && kvp.Key.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
+                {
+                    continue;
+                }
+
                 Log(kvp.Key + ":", ConsoleColor.Cyan);
 
                 if (OutputTypes || OutputMembers)
@@ -122,6 +136,11 @@ namespace RefDump
 
         private void Dump(XElement root, KeyValuePair<string, RefAssembly> asm)
         {
+            if (FilterToAssembly != null && asm.Key.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
+            {
+                return;
+            }
+
             var referenceElement = new XElement("Reference");
             referenceElement.SetAttributeValue("Name", asm.Key);
 
@@ -303,6 +322,11 @@ namespace RefDump
 
         private bool ParseArgs(string[] args)
         {
+            if (args.Length == 0)
+            {
+                return false;
+            }
+
             foreach (var arg in args)
             {
                 if ((arg.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
@@ -330,6 +354,14 @@ namespace RefDump
                     continue;
                 }
 
+                if ((arg.StartsWith("-a:", StringComparison.OrdinalIgnoreCase) ||
+                    arg.StartsWith("/a:", StringComparison.OrdinalIgnoreCase)) &&
+                    arg.Length > 3)
+                {
+                    FilterToAssembly = arg.Substring(3);
+                    continue;
+                }
+
                 Log("Unknown argument: " + arg, ConsoleColor.Red);
                 return false;
             }
@@ -340,11 +372,14 @@ namespace RefDump
         private static void PrintUsage()
         {
             Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
-            Log(@"refdump file.dll [-t] [-m] [output.xml]", ConsoleColor.White);
+            Log(@"refdump file.dll [-a:<refname>] [-t] [-m] [output.xml]", ConsoleColor.White);
 
             Log(@"    Lists all references of the input assembly.
     -t    List all used types
     -m    List all used members
+    -a:   Narrow results to a particular reference assembly,
+          <refname> is a substring of the reference assembly
+          name.
 
     If an output.xml file name is specified, dump detailed 
     report into that xml.", ConsoleColor.Gray);
