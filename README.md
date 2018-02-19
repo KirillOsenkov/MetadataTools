@@ -20,7 +20,7 @@ Here are the various ways to retrieve the MVID of an assembly:
 
 ## ImageReader
 Just embed this file:
-https://github.com/KirillOsenkov/MetadataTools/blob/master/PEFile/ImageReader.cs
+https://github.com/KirillOsenkov/MetadataTools/blob/master/src/PEFile/ImageReader.cs
 ```
 var mvid = ImageReader.ReadAssemblyMvid(filePath);
 ```
