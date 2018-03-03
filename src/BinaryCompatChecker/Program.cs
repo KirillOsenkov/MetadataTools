@@ -11,6 +11,7 @@ namespace BinaryCompatChecker
     {
         Dictionary<AssemblyDefinition, HashSet<string>> assemblyToTypeList = new Dictionary<AssemblyDefinition, HashSet<string>>();
         List<string> reportLines = new List<string>();
+        List<string> assembliesExamined = new List<string>();
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, AssemblyDefinition> resolveCache = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
@@ -196,9 +197,18 @@ namespace BinaryCompatChecker
                         return false;
                     }
                 }
+
+                ListExaminedAssemblies(reportFile);
             }
 
             return true;
+        }
+
+        private void ListExaminedAssemblies(string reportFile)
+        {
+            string filePath = Path.ChangeExtension(reportFile, ".report.txt");
+            assembliesExamined.Sort();
+            File.WriteAllLines(filePath, assembliesExamined);
         }
 
         private void CheckAppConfigFiles(IEnumerable<string> appConfigFiles)
@@ -281,7 +291,7 @@ namespace BinaryCompatChecker
                 var message = $"In {appConfigFileName}: couldn't find assembly '{name}' with version {newVersion}.";
                 if (foundVersions.Count > 0)
                 {
-                    message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()))}";
+                    message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct())}";
                 }
 
                 Log(message);
@@ -295,20 +305,26 @@ namespace BinaryCompatChecker
 
             if (removed.Any())
             {
+                OutputError("=================================");
                 OutputError("These expected lines are missing:");
                 foreach (var removedLine in removed)
                 {
                     OutputError(removedLine);
                 }
+
+                OutputError("=================================");
             }
 
             if (added.Any())
             {
+                OutputError("=================================");
                 OutputError("These actual lines are new:");
                 foreach (var addedLine in added)
                 {
                     OutputError(addedLine);
                 }
+
+                OutputError("=================================");
             }
         }
 
@@ -480,6 +496,7 @@ namespace BinaryCompatChecker
                     };
                     assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                     filePathToModuleDefinition[filePath] = assemblyDefinition;
+                    assembliesExamined.Add($"{filePath}; {assemblyDefinition.FullName}");
                 }
                 catch (Exception ex)
                 {

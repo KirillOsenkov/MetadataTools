@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>BinaryCompatChecker</id>
-    <version>1.0.9</version>
+    <version>1.0.10</version>
     <authors>Kirill Osenkov, Microsoft</authors>
     <owners>Kirill Osenkov, Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
