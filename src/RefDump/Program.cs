@@ -275,7 +275,13 @@ namespace RefDump
 
             foreach (var memberReference in assemblyDefinition.MainModule.GetMemberReferences())
             {
-                if (memberReference.DeclaringType.Scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference)
+                var scope = memberReference.DeclaringType.Scope;
+                if (scope == null)
+                {
+                    continue;
+                }
+
+                if (scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference)
                 {
                     continue;
                 }
