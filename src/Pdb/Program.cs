@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace MetadataTools
 {
@@ -28,6 +30,11 @@ namespace MetadataTools
                     }
 
                     PrintAssemblyInfo(dll);
+                }
+                else if (args[0].StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    DownloadSymbolsForAllFiles(Environment.CurrentDirectory, args[0]);
+                    return 0;
                 }
                 else
                 {
@@ -84,6 +91,31 @@ namespace MetadataTools
             }
 
             return 0;
+        }
+
+        private static void DownloadSymbolsForAllFiles(string currentDirectory, string symbolPath)
+        {
+            IEnumerable<string> dlls = Directory.GetFiles(currentDirectory, "*.dll", SearchOption.AllDirectories);
+            dlls = dlls.Concat(Directory.GetFiles(currentDirectory, "*.exe", SearchOption.AllDirectories));
+
+            foreach (var file in dlls)
+            {
+                if (!PEFile.PEFileReader.IsManagedAssembly(file))
+                {
+                    continue;
+                }
+
+                var pdb = Path.ChangeExtension(file, ".pdb");
+                if (!File.Exists(pdb))
+                {
+                    DownloadSymbols(file, symbolPath);
+                }
+                else if (!PdbInfo.IsMatch(file, pdb))
+                {
+                    File.Delete(pdb);
+                    DownloadSymbols(file, pdb);
+                }
+            }
         }
 
         private static void DownloadSymbols(string dll, string url)

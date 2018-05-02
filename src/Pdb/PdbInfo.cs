@@ -177,7 +177,7 @@ namespace MetadataTools
             }
             catch (Exception ex)
             {
-                 Log("Error: " + ex.Message);
+                Log("Error: " + ex.Message);
                 return false;
             }
 
