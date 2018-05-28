@@ -136,19 +136,26 @@ namespace MetadataTools
         private static void PrintAssemblyInfo(string dll)
         {
             var debugDirectory = PdbInfo.ReadDebugDirectoryEntries(dll);
-            foreach (var pdb in debugDirectory)
+            foreach (var debugDirectoryEntry in debugDirectory)
             {
-                PrintNameValue("Debug directory entry", pdb.entry.Type.ToString());
-                if (pdb.entry.Type == DebugDirectoryEntryType.CodeView)
+                PrintNameValue("Debug directory entry", debugDirectoryEntry.entry.Type.ToString());
+                if (debugDirectoryEntry.entry.Type == DebugDirectoryEntryType.CodeView)
                 {
-                    CodeViewDebugDirectoryData data = (CodeViewDebugDirectoryData)pdb.data;
+                    CodeViewDebugDirectoryData data = (CodeViewDebugDirectoryData)debugDirectoryEntry.data;
                     PrintNameValue("Guid", data.Guid.ToString());
                     PrintNameValue("Age", data.Age.ToString());
                     PrintNameValue("Pdb path", data.Path.ToString());
-                    PrintNameValue("Stamp", pdb.entry.Stamp.ToString("X8"));
+                    PrintNameValue("Stamp", debugDirectoryEntry.entry.Stamp.ToString("X8"));
                 }
 
                 Console.WriteLine();
+            }
+
+            var pdb = Path.ChangeExtension(dll, ".pdb");
+            if (File.Exists(pdb))
+            {
+                Console.WriteLine("Found " + Path.GetFileName(pdb) + ":");
+                CheckMatch(dll, pdb);
             }
         }
 
