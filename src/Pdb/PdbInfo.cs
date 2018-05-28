@@ -32,15 +32,9 @@ namespace MetadataTools
 
         public static IEnumerable<PdbInfo> Read(string assemblyFilePath)
         {
-            try
-            {
-                var list = ReadDebugDirectory(assemblyFilePath).ToArray();
-                return list;
-            }
-            catch
-            {
-                return null;
-            }
+            var debugDirectory = ReadDebugDirectoryEntries(assemblyFilePath);
+            var list = ReadDebugDirectory(assemblyFilePath, debugDirectory).ToArray();
+            return list;
         }
 
         public static bool IsMatch(string assemblyFilePath, string pdbFilePath)
@@ -88,30 +82,54 @@ namespace MetadataTools
             return false;
         }
 
-        private static IEnumerable<PdbInfo> ReadDebugDirectory(string assemblyFilePath)
+        private static IEnumerable<PdbInfo> ReadDebugDirectory(string assemblyFilePath, IEnumerable<(DebugDirectoryEntry entry, object data)> entries)
         {
-            using (var stream = File.OpenRead(assemblyFilePath))
+            foreach (var debugDirectoryEntry in entries)
             {
-                PEReader reader = new PEReader(stream);
-                var metadataReader = reader.GetMetadataReader();
-                var debugDirectory = reader.ReadDebugDirectory();
-                foreach (var debugDirectoryEntry in debugDirectory)
+                if (debugDirectoryEntry.entry.Type == DebugDirectoryEntryType.CodeView)
                 {
-                    if (debugDirectoryEntry.Type == DebugDirectoryEntryType.CodeView)
+                    var codeViewDebugDirectoryData = (CodeViewDebugDirectoryData)debugDirectoryEntry.data;
+                    var info = new PdbInfo
                     {
-                        var codeViewDebugDirectoryData = reader.ReadCodeViewDebugDirectoryData(debugDirectoryEntry);
-                        var info = new PdbInfo
+                        AssemblyFilePath = assemblyFilePath,
+                        Guid = codeViewDebugDirectoryData.Guid,
+                        Age = codeViewDebugDirectoryData.Age,
+                        Path = codeViewDebugDirectoryData.Path,
+                        Stamp = debugDirectoryEntry.entry.Stamp
+                    };
+                    yield return info;
+                }
+            }
+        }
+
+        public static IEnumerable<(DebugDirectoryEntry entry, object data)> ReadDebugDirectoryEntries(string assemblyFilePath)
+        {
+            var list = new List<(DebugDirectoryEntry entry, object data)>();
+
+            try
+            {
+                using (var stream = File.OpenRead(assemblyFilePath))
+                {
+                    PEReader reader = new PEReader(stream);
+                    var metadataReader = reader.GetMetadataReader();
+                    var debugDirectory = reader.ReadDebugDirectory();
+                    foreach (var entry in debugDirectory)
+                    {
+                        object data = null;
+                        if (entry.Type == DebugDirectoryEntryType.CodeView)
                         {
-                            AssemblyFilePath = assemblyFilePath,
-                            Guid = codeViewDebugDirectoryData.Guid,
-                            Age = codeViewDebugDirectoryData.Age,
-                            Path = codeViewDebugDirectoryData.Path,
-                            Stamp = debugDirectoryEntry.Stamp
-                        };
-                        yield return info;
+                            data = reader.ReadCodeViewDebugDirectoryData(entry);
+                        }
+
+                        list.Add((entry, data));
                     }
                 }
             }
+            catch
+            {
+            }
+
+            return list;
         }
 
         public static Guid TryReadPdbGuid(string pdbFilePath)

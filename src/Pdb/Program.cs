@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.PortableExecutable;
 
 namespace MetadataTools
 {
@@ -134,20 +135,26 @@ namespace MetadataTools
 
         private static void PrintAssemblyInfo(string dll)
         {
-            var debugDirectory = PdbInfo.Read(dll);
+            var debugDirectory = PdbInfo.ReadDebugDirectoryEntries(dll);
             foreach (var pdb in debugDirectory)
             {
-                PrintNameValue("Guid", pdb.Guid.ToString());
-                PrintNameValue("Age", pdb.Age.ToString());
-                PrintNameValue("Pdb path", pdb.Path.ToString());
-                PrintNameValue("Stamp", pdb.Stamp.ToString("X8"));
+                PrintNameValue("Debug directory entry", pdb.entry.Type.ToString());
+                if (pdb.entry.Type == DebugDirectoryEntryType.CodeView)
+                {
+                    CodeViewDebugDirectoryData data = (CodeViewDebugDirectoryData)pdb.data;
+                    PrintNameValue("Guid", data.Guid.ToString());
+                    PrintNameValue("Age", data.Age.ToString());
+                    PrintNameValue("Pdb path", data.Path.ToString());
+                    PrintNameValue("Stamp", pdb.entry.Stamp.ToString("X8"));
+                }
+
                 Console.WriteLine();
             }
         }
 
         private static void PrintNameValue(string name, string value)
         {
-            Log((name + ":").PadRight(10, ' '), ConsoleColor.DarkGray, lineBreak: false);
+            Log((name + ": ").PadRight(10, ' '), ConsoleColor.DarkGray, lineBreak: false);
             Log(value, ConsoleColor.Gray);
         }
 
