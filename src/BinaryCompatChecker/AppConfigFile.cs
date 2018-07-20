@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml.Linq;
 
 namespace BinaryCompatChecker
@@ -63,8 +64,8 @@ namespace BinaryCompatChecker
                 return;
             }
 
-            var assemblyBinding = runtime.Element(Xmlns("assemblyBinding"));
-            if (assemblyBinding == null)
+            var assemblyBinding = runtime.Elements(Xmlns("assemblyBinding"));
+            if (assemblyBinding == null || !assemblyBinding.Any())
             {
                 Error($"Element 'assemblyBinding' not found");
                 return;

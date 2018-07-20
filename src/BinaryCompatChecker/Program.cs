@@ -21,12 +21,28 @@ namespace BinaryCompatChecker
         [STAThread]
         static int Main(string[] args)
         {
+            bool ignoreNetFrameworkAssemblies = false;
+
+            // Parse parameterized args
+            List<string> arguments = new List<string>(args);
+            foreach (var arg in arguments.ToArray())
+            {
+                if (arg.Equals("/ignoreNetFx", StringComparison.OrdinalIgnoreCase))
+                {
+                    ignoreNetFrameworkAssemblies = true;
+                    arguments.Remove(arg);
+                }
+            }
+
+            args = arguments.ToArray();
+
             if (args.Length != 2 && args.Length != 3)
             {
                 PrintUsage();
                 return 0;
             }
 
+            // Parse positional args
             string root = args[0];
             string reportFile = args[1];
             string configFile = null;
@@ -36,34 +52,45 @@ namespace BinaryCompatChecker
                 configFile = args[2];
             }
 
-            if (!Directory.Exists(root))
+            if (!Directory.Exists(root) && !File.Exists(root))
             {
-                Console.Error.WriteLine("Specified root directory doesn't exist: " + root);
+                Console.Error.WriteLine("Specified root directory or file doesn't exist: " + root);
                 return 1;
             }
 
-            var files = GetFiles(root, configFile);
+            var files = GetFiles(root, configFile, out var startFiles);
 
-            bool success = new Checker().Check(root, files, reportFile);
+            bool success = new Checker().Check(root, files, startFiles, reportFile, ignoreNetFrameworkAssemblies);
             return success ? 0 : 1;
         }
 
         private static void PrintUsage()
         {
-            Console.WriteLine(@"Usage: BinaryCompatChecker <root-folder> <output-report-file> [<config-file>]
-    <root-folder>: root directory where to start searching for files
+            Console.WriteLine(@"Usage: BinaryCompatChecker [options] <root-folder> <output-report-file> [<config-file>]
+    <root-folder|root-file>: root directory or root file where to start searching for files
     <output-report-file>: where to write the output report
-    <config-file>: (optional) a file with include/exclude patterns");
+    <config-file>: (optional) a file with include/exclude patterns
+    Options:
+        /ignoreNetFx: Ignores mismatches from framework assemblies");
         }
 
-        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath)
+        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, out List<string> startFiles)
         {
             var list = new List<string>();
+            startFiles = new List<string>();
             IncludeExcludePattern includeExclude = null;
+            bool isRootFile = false;
 
             if (File.Exists(configFilePath))
             {
                 includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
+            }
+
+            if (File.Exists(rootDirectory))
+            {
+                isRootFile = true;
+                startFiles.Add(rootDirectory);
+                rootDirectory = Path.GetDirectoryName(rootDirectory);
             }
 
             foreach (var file in Directory.GetFiles(rootDirectory, "*", SearchOption.AllDirectories))
@@ -92,6 +119,10 @@ namespace BinaryCompatChecker
                     if (PEFile.IsManagedAssembly(file))
                     {
                         list.Add(file);
+                        if (!isRootFile)
+                        {
+                            startFiles.Add(file);
+                        }
                     }
                 }
             }
@@ -123,11 +154,40 @@ namespace BinaryCompatChecker
             resolver = new CustomAssemblyResolver(this);
         }
 
+        private class VersionMismatch
+        {
+            public AssemblyDefinition Referencer;
+            public AssemblyNameReference ExpectedReference;
+            public AssemblyDefinition ActualAssembly;
+        }
+
+        private readonly List<VersionMismatch> versionMismatches
+            = new List<VersionMismatch>();
+
+        public static bool TryGetTargetFramework(AssemblyDefinition assembly, out string targetFramework)
+        {
+            // The attribute "TargetFramework" is optional.
+            targetFramework = assembly
+                .CustomAttributes
+                .Where(a => a.AttributeType.Name == "TargetFrameworkAttribute")
+                .Select(a => a.ConstructorArguments != null && a.ConstructorArguments.Count != 0 ? a.ConstructorArguments[0].Value.ToString() : (string)null)
+                .FirstOrDefault();
+            return !string.IsNullOrEmpty(targetFramework);
+        }
+
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
-        public bool Check(string rootDirectory, IEnumerable<string> files, string reportFile)
+        public bool Check(
+            string rootDirectory, 
+            IEnumerable<string> files, 
+            IEnumerable<string> startFiles, 
+            string reportFile, 
+            bool ignoreFrameworkAssemblies = false)
         {
             this.files = files;
             var appConfigFiles = new List<string>();
+
+            Queue<string> fileQueue = new Queue<string>(startFiles);
+            HashSet<string> visitedFiles = new HashSet<string>(startFiles, StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in files)
             {
@@ -136,6 +196,11 @@ namespace BinaryCompatChecker
                     appConfigFiles.Add(file);
                     continue;
                 }
+            }
+
+            while (fileQueue.Count != 0)
+            {
+                string file = fileQueue.Dequeue();
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
@@ -156,8 +221,16 @@ namespace BinaryCompatChecker
                         diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': unable to resolve reference to '{reference.FullName}'");
                         continue;
                     }
+                    else
+                    {
+                        var resolvedPath = resolved.MainModule.FileName;
+                        if (resolvedPath != null && visitedFiles.Add(resolvedPath))
+                        {
+                            fileQueue.Enqueue(resolvedPath);
+                        }
+                    }
 
-                    Check(assemblyDefinition, resolved);
+                    Check(assemblyDefinition, resolved, reference, ignoreFrameworkAssemblies);
                 }
 
                 CheckMembers(assemblyDefinition);
@@ -213,6 +286,10 @@ namespace BinaryCompatChecker
 
         private void CheckAppConfigFiles(IEnumerable<string> appConfigFiles)
         {
+            var versionMismatchesByName = versionMismatches
+                .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.ToList(), StringComparer.OrdinalIgnoreCase);
+
             foreach (var appConfigFilePath in appConfigFiles)
             {
                 var appConfigFileName = Path.GetFileName(appConfigFilePath);
@@ -221,10 +298,10 @@ namespace BinaryCompatChecker
                 {
                     foreach (var error in appConfigFile.Errors)
                     {
-                        Log($"In app.config file {appConfigFileName}: {error}");
+                        diagnostics.Add($"In app.config file {appConfigFileName}: {error}");
                     }
 
-                    return;
+                    continue;
                 }
 
                 foreach (var bindingRedirect in appConfigFile.BindingRedirects)
@@ -235,8 +312,14 @@ namespace BinaryCompatChecker
                         bindingRedirect.PublicKeyToken,
                         bindingRedirect.OldVersionRangeStart,
                         bindingRedirect.OldVersionRangeEnd,
-                        bindingRedirect.NewVersion);
+                        bindingRedirect.NewVersion,
+                        versionMismatchesByName);
                 }
+            }
+
+            foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
+            {
+                diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {versionMismatch.ExpectedReference.FullName} but found {versionMismatch.ActualAssembly.FullName} at {versionMismatch.ActualAssembly.MainModule.FileName}");
             }
         }
 
@@ -246,7 +329,8 @@ namespace BinaryCompatChecker
             string publicKeyToken,
             Version oldVersionStart,
             Version oldVersionEnd,
-            Version newVersion)
+            Version newVersion,
+            Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
         {
             bool foundNewVersion = false;
             var foundVersions = new List<Version>();
@@ -267,7 +351,7 @@ namespace BinaryCompatChecker
                     var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
                     if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
                     {
-                        Log($"In {appConfigFileName}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
+                        diagnostics.Add($"In {appConfigFileName}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
                     }
 
                     continue;
@@ -275,14 +359,37 @@ namespace BinaryCompatChecker
 
                 if (assembly.Name.Version < oldVersionStart)
                 {
-                    Log($"In {appConfigFileName}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
+                    diagnostics.Add($"In {appConfigFileName}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
                     continue;
                 }
 
                 if (assembly.Name.Version > oldVersionEnd)
                 {
-                    Log($"In {appConfigFileName}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
+                    diagnostics.Add($"In {appConfigFileName}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
                     continue;
+                }
+            }
+
+            if (versionMismatchesByName.TryGetValue(name, out var mismatches))
+            {
+                versionMismatchesByName.Remove(name);
+                foreach (var versionMismatch in mismatches.ToArray())
+                {
+                    var actualVersion = versionMismatch.ActualAssembly.Name.Version;
+                    if (actualVersion != newVersion)
+                    {
+                        if (actualVersion < oldVersionStart)
+                        {
+                            diagnostics.Add($"In {appConfigFileName}: {versionMismatch.ActualAssembly.FullName} version is less than bindingRedirect range start {oldVersionStart} (Expected by {versionMismatch.Referencer.Name})");
+                            continue;
+                        }
+
+                        if (actualVersion > oldVersionEnd)
+                        {
+                            diagnostics.Add($"In {appConfigFileName}: {versionMismatch.ActualAssembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd} (Expected by {versionMismatch.Referencer.Name})");
+                            continue;
+                        }
+                    }
                 }
             }
 
@@ -294,7 +401,7 @@ namespace BinaryCompatChecker
                     message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct())}";
                 }
 
-                Log(message);
+                diagnostics.Add(message);
             }
         }
 
@@ -333,9 +440,45 @@ namespace BinaryCompatChecker
             Console.Error.WriteLine(text);
         }
 
-        public void Check(AssemblyDefinition referencing, AssemblyDefinition reference)
+        /// <summary>
+        /// Returns true if the <paramref name="assembly"/> is .NET Framework assembly.
+        /// </summary>
+        private static bool IsNetFrameworkAssembly(AssemblyDefinition assembly)
         {
-            CheckTypes(referencing, reference);
+            // Hacky way of detecting it.
+            return assembly
+                .CustomAttributes
+                .FirstOrDefault(a => 
+                    a.AttributeType.Name == "AssemblyProductAttribute" && 
+                    a.ConstructorArguments != null && 
+                    a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null) != null;
+        }
+
+        /// <summary>
+        /// Returns true if the <paramref name="assembly"/> is a facade assembly with type forwarders only.
+        /// </summary>
+        private static bool IsFacadeAssembly(AssemblyDefinition assembly)
+        {
+            return false;
+        }
+
+        public void Check(AssemblyDefinition referencing, AssemblyDefinition referenced, AssemblyNameReference reference, bool ignoreFrameworkAssemblies)
+        {
+            if (!ignoreFrameworkAssemblies || !IsNetFrameworkAssembly(referenced))
+            {
+                if (reference.Version != referenced.Name.Version)
+                {
+                    //diagnostics.Add($"Assembly {referencing.Name.FullName} is referencing {reference.FullName} but found {referenced.FullName}");
+                    versionMismatches.Add(new VersionMismatch()
+                    {
+                        Referencer = referencing,
+                        ExpectedReference = reference,
+                        ActualAssembly = referenced
+                    });
+                }
+            }
+
+            CheckTypes(referencing, referenced);
         }
 
         private void CheckMembers(AssemblyDefinition assembly)
