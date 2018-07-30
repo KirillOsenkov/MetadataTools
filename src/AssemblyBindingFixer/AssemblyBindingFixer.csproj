@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net461</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="RedistLists\net461.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\BinaryCompatChecker\AppConfigFile.cs" Link="AppConfigFile.cs" />
+    <Compile Include="..\BinaryCompatChecker\IsManagedAssembly.cs" Link="IsManagedAssembly.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="RedistLists\net461.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.10.0-beta7" />
+    <PackageReference Include="System.ValueTuple" Version="2.4.0" />
+  </ItemGroup>
+
+</Project>

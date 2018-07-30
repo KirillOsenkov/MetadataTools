@@ -14,6 +14,8 @@ namespace BinaryCompatChecker
         public IEnumerable<BindingRedirect> BindingRedirects => bindingRedirects;
 
         private string filePath;
+        private XDocument document;
+        private XElement assemblyBindingElement = null;
 
         private AppConfigFile(string filePath)
         {
@@ -28,10 +30,60 @@ namespace BinaryCompatChecker
             public Version OldVersionRangeStart { get; set; }
             public Version OldVersionRangeEnd { get; set; }
             public Version NewVersion { get; set; }
+            public XElement DependentAssemblyElement { get; set; }
+            public XElement AssemblyIdentityElement { get; set; }
+            public XElement BindingRedirectElement { get; set; }
 
             public override string ToString()
             {
                 return $"Name={Name} Culture={Culture} PublicKeyToken={PublicKeyToken} OldVersion={OldVersionRangeStart}-{OldVersionRangeEnd} NewVersion={NewVersion}";
+            }
+
+            public void AddOrUpdateElement(XElement parent)
+            {
+                if (NewVersion == null || ( OldVersionRangeStart == NewVersion && OldVersionRangeEnd == NewVersion))
+                {
+                    return;
+                }
+
+                if (NewVersion < OldVersionRangeStart)
+                {
+                    OldVersionRangeStart = NewVersion;
+                }
+
+                if (NewVersion > OldVersionRangeEnd)
+                {
+                    OldVersionRangeEnd = NewVersion;
+                }
+
+                if (DependentAssemblyElement == null)
+                {
+                    DependentAssemblyElement = new XElement(Xmlns("dependentAssembly"));
+                    parent.Add(DependentAssemblyElement);
+                }
+
+                if (AssemblyIdentityElement == null)
+                {
+                    AssemblyIdentityElement = new XElement(Xmlns("assemblyIdentity"));
+                    DependentAssemblyElement.Add(AssemblyIdentityElement);
+                }
+
+                AssemblyIdentityElement.SetAttributeValue("name", Name);
+                if (!string.IsNullOrEmpty(Culture))
+                {
+                    AssemblyIdentityElement.SetAttributeValue("culture", Culture);
+                }
+
+                AssemblyIdentityElement.SetAttributeValue("publicKeyToken", PublicKeyToken);
+
+                if (BindingRedirectElement == null)
+                {
+                    BindingRedirectElement = new XElement(Xmlns("bindingRedirect"));
+                    DependentAssemblyElement.Add(BindingRedirectElement);
+                }
+
+                BindingRedirectElement.SetAttributeValue("oldVersion", $"{OldVersionRangeStart}-{OldVersionRangeEnd}");
+                BindingRedirectElement.SetAttributeValue("newVersion", NewVersion);
             }
         }
 
@@ -50,12 +102,28 @@ namespace BinaryCompatChecker
             return appConfigFile;
         }
 
+        public void Write()
+        {
+            foreach (var bindingRedirect in bindingRedirects)
+            {
+                bindingRedirect.AddOrUpdateElement(assemblyBindingElement);
+            }
+
+            document.Save(filePath);
+        }
+
+        public void AddBindingRedirect(BindingRedirect bindingRedirect)
+        {
+            bindingRedirects.Add(bindingRedirect);
+        }
+
+        private static XName Xmlns(string shortName) => XName.Get(shortName, "urn:schemas-microsoft-com:asm.v1");
+
         private void Parse(string appConfigFilePath)
         {
             void Error(string text) => errors.Add(text);
-            XName Xmlns(string shortName) => XName.Get(shortName, "urn:schemas-microsoft-com:asm.v1");
 
-            var document = XDocument.Load(appConfigFilePath);
+            document = XDocument.Load(appConfigFilePath);
             var configuration = document.Root;
             var runtime = configuration.Element("runtime");
             if (runtime == null)
@@ -70,6 +138,8 @@ namespace BinaryCompatChecker
                 Error($"Element 'assemblyBinding' not found");
                 return;
             }
+
+            assemblyBindingElement = assemblyBinding.FirstOrDefault();
 
             var dependentAssemblyElements = assemblyBinding.Elements(Xmlns("dependentAssembly"));
             foreach (var dependentAssembly in dependentAssemblyElements)
@@ -150,7 +220,10 @@ namespace BinaryCompatChecker
                     PublicKeyToken = publicKeyToken,
                     OldVersionRangeStart = oldVersionStart,
                     OldVersionRangeEnd = oldVersionEnd,
-                    NewVersion = newVersion
+                    NewVersion = newVersion,
+                    DependentAssemblyElement = dependentAssembly,
+                    BindingRedirectElement = bindingRedirect,
+                    AssemblyIdentityElement = assemblyIdentity
                 };
 
                 bindingRedirects.Add(bindingRedirectResult);

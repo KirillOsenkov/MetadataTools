@@ -250,6 +250,4 @@ paket-files/
 # JetBrains Rider
 .idea/
 *.sln.iml
-/src/BinaryCompatChecker/Properties/launchSettings.json
-/Pdb/Properties/launchSettings.json
-/src/RefDump/Properties/launchSettings.json
+launchSettings.json
