@@ -211,7 +211,7 @@ namespace MetadataTools
                         {
                             File.Copy(text, destinationPdb);
                         }
-                        catch (AccessViolationException)
+                        catch (SystemException exception) when (exception is UnauthorizedAccessException || exception is AccessViolationException)
                         {
                             Log($"Couldn't write to {destinationPdb}, trying the Downloads folder.");
                             destinationPdb = System.IO.Path.GetFileNameWithoutExtension(AssemblyFilePath) + ".pdb";
