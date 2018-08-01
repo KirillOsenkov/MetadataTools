@@ -207,7 +207,26 @@ namespace MetadataTools
                     var destinationPdb = System.IO.Path.ChangeExtension(AssemblyFilePath, ".pdb");
                     if (!File.Exists(destinationPdb))
                     {
-                        File.Copy(text, destinationPdb);
+                        try
+                        {
+                            File.Copy(text, destinationPdb);
+                        }
+                        catch (AccessViolationException)
+                        {
+                            Log($"Couldn't write to {destinationPdb}, trying the Downloads folder.");
+                            destinationPdb = System.IO.Path.GetFileNameWithoutExtension(AssemblyFilePath) + ".pdb";
+                            destinationPdb = System.IO.Path.Combine(Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\Downloads"), destinationPdb);
+                            try
+                            {
+                                File.Copy(text, destinationPdb);
+                            }
+                            catch (Exception ex)
+                            {
+                                Log(ex.ToString());
+                                return false;
+                            }
+                        }
+
                         Log($"Downloaded {destinationPdb}");
                         return true;
                     }
