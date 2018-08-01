@@ -156,6 +156,10 @@ namespace BinaryCompatChecker
                         diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': unable to resolve reference to '{reference.FullName}'");
                         continue;
                     }
+                    else if (resolved.FullName != reference.FullName)
+                    {
+                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': unable to resolve reference to '{reference.FullName}'. Found version: {resolved.FullName}.");
+                    }
 
                     Check(assemblyDefinition, resolved);
                 }
@@ -444,8 +448,7 @@ namespace BinaryCompatChecker
 
             foreach (var assemblyDefinition in filePathToModuleDefinition)
             {
-                if (assemblyDefinition.Value.Name.FullName == reference.FullName ||
-                    string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase))
+                if (assemblyDefinition.Value.Name.FullName == reference.FullName)
                 {
                     result = assemblyDefinition.Value;
                     resolveCache[reference.FullName] = result;
@@ -453,14 +456,23 @@ namespace BinaryCompatChecker
                 }
             }
 
+            bool sawAssemblyWithMatchingName = false;
             foreach (var file in files)
             {
                 if (string.Equals(Path.GetFileNameWithoutExtension(file), reference.Name, StringComparison.OrdinalIgnoreCase))
                 {
+                    sawAssemblyWithMatchingName = true;
                     result = Load(file);
-                    resolveCache[reference.FullName] = result;
-                    return result;
+                    if (result.FullName == reference.FullName)
+                    {
+                        resolveCache[reference.FullName] = result;
+                    }
                 }
+            }
+
+            if (sawAssemblyWithMatchingName)
+            {
+                return null;
             }
 
             try
