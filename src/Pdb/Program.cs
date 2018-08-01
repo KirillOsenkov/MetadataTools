@@ -201,11 +201,11 @@ namespace MetadataTools
         private static void PrintHelp()
         {
             Log(@"Usages:
-    Pdb.exe <input.dll>                  -- Print assembly info and debug directory.
-    Pdb.exe <http://symweb>              -- Download symbols for all .dll/.exe in current directory.
-    Pdb.exe <input.dll> <input.pdb>      -- Check if the .dll matches the .pdb.
-    Pdb.exe <input.dll> <http://symweb>  -- Try to download .pdb for input.dll from the URL.
-    Pdb.exe <input.dll> <Directory>      -- Find matching .pdb for input.dll in Directory.");
+    Pdb.exe <input.dll>                  - Print assembly info and debug directory.
+    Pdb.exe <http://symweb>              - Download symbols for all .dll/.exe in current directory.
+    Pdb.exe <input.dll> <input.pdb>      - Check if the .dll matches the .pdb.
+    Pdb.exe <input.dll> <http://symweb>  - Try to download .pdb for input.dll from the URL.
+    Pdb.exe <input.dll> <Directory>      - Find matching .pdb for input.dll in Directory.");
         }
 
         private static void Log(string text)

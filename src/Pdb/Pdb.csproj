@@ -4,12 +4,11 @@
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
+    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="..\PEFile\IsManagedAssembly.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.DiaSymReader" Version="1.3.0-beta-62225-02" />
     <PackageReference Include="Microsoft.DiaSymReader.Native" Version="1.7.0-private-25621" />
