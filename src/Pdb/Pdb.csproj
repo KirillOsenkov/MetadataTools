@@ -5,6 +5,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <Prefer32Bit>true</Prefer32Bit>
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\PEFile\IsManagedAssembly.cs" />
