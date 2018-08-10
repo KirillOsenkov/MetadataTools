@@ -4,6 +4,7 @@
     <AssemblyName>mvid</AssemblyName>
     <TargetFramework>net46</TargetFramework>
     <LangVersion>latest</LangVersion>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>

@@ -10,6 +10,9 @@ namespace PEFile
     {
         static void Main(string[] args)
         {
+            //File.Copy(@"C:\temp\testrunner.exe", @"C:\temp\1.exe", true);
+            //Corflags.Set32BitPreferred(@"C:\temp\1.exe", false);
+            //return;
             //BenchmarkRunner.Run<MvidBenchmark>();
             //return;
 
