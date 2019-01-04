@@ -9,11 +9,12 @@ namespace RefDump
 {
     class Dumper
     {
-        public string FilePath { get; private set; }
+        public string FileSpec { get; private set; }
         public string OutputXml { get; set; }
         public string FilterToAssembly { get; set; }
         public bool OutputTypes { get; set; } = false;
         public bool OutputMembers { get; set; } = false;
+        public bool Recursive { get; set; } = false;
 
         static void Main(string[] args)
         {
@@ -29,15 +30,66 @@ namespace RefDump
 
         private void DoWork()
         {
-            if (string.IsNullOrEmpty(FilePath))
+            XDocument document = null;
+            XElement rootXml = null;
+
+            if (OutputXml != null)
+            {
+                document = new XDocument();
+                rootXml = new XElement("Assemblies");
+            }
+
+            if (FileSpec.Contains("*") || FileSpec.Contains("?"))
+            {
+                var root = Environment.CurrentDirectory;
+                var separator = FileSpec.LastIndexOf('\\');
+                if (separator > -1)
+                {
+                    root = FileSpec.Substring(0, separator);
+                    root = Path.GetFullPath(root);
+
+                    if (separator == FileSpec.Length - 1)
+                    {
+                        FileSpec = "*.dll";
+                    }
+                    else
+                    {
+                        FileSpec = FileSpec.Substring(separator + 1);
+                    }
+                }
+
+                var files = Directory.GetFiles(root, FileSpec, Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+                foreach (var file in files)
+                {
+                    DumpAssembly(file, rootXml);
+                }
+            }
+            else if (File.Exists(FileSpec))
+            {
+                DumpAssembly(FileSpec, rootXml);
+            }
+            else
+            {
+                Console.Error.WriteLine("File(s) not found: " + FileSpec);
+            }
+
+            if (OutputXml != null)
+            {
+                document.Save(OutputXml);
+            }
+        }
+
+        private void DumpAssembly(string filePath, XElement rootXml = null)
+        {
+            if (string.IsNullOrEmpty(filePath))
             {
                 Console.WriteLine("Need to specify an input assembly.");
                 return;
             }
 
-            if (!File.Exists(FilePath))
+            if (!File.Exists(filePath))
             {
-                Console.WriteLine($"File {FilePath} does not exist");
+                Console.WriteLine($"File {filePath} does not exist");
                 return;
             }
 
@@ -46,10 +98,8 @@ namespace RefDump
                 InMemory = true
             };
 
-            var assemblyDefinition = AssemblyDefinition.ReadAssembly(FilePath, readerParameters);
+            var assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
             Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
-
-            Log();
 
             if (FilterToAssembly == null)
             {
@@ -77,9 +127,11 @@ namespace RefDump
                 DumpToConsole(refTree);
             }
 
-            if (OutputXml != null)
+            Log();
+
+            if (rootXml != null)
             {
-                DumpToXml(refTree, OutputXml);
+                DumpToXml(filePath, refTree, rootXml);
             }
         }
 
@@ -122,16 +174,15 @@ namespace RefDump
             }
         }
 
-        private void DumpToXml(RefTree refTree, string outputXml)
+        private void DumpToXml(string filePath, RefTree refTree, XElement rootXml)
         {
-            var document = new XDocument();
-            document.Add(new XElement("Assembly"));
+            var root = new XElement("Assembly", new XAttribute("File", filePath));
+            rootXml.Add(root);
+
             foreach (var asm in refTree.Assemblies.OrderBy(a => a.Key))
             {
-                Dump(document.Root, asm);
+                Dump(root, asm);
             }
-
-            document.Save(OutputXml);
         }
 
         private void Dump(XElement root, KeyValuePair<string, RefAssembly> asm)
@@ -338,10 +389,12 @@ namespace RefDump
 
             foreach (var arg in args)
             {
-                if ((arg.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-                    arg.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) && File.Exists(arg))
+                if (arg.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+                    arg.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Contains("*") ||
+                    arg.Contains("?"))
                 {
-                    FilePath = Path.GetFullPath(arg);
+                    FileSpec = arg;
                     continue;
                 }
 
@@ -363,6 +416,12 @@ namespace RefDump
                     continue;
                 }
 
+                if (string.Equals(arg, "-s") || string.Equals(arg, "/s"))
+                {
+                    Recursive = true;
+                    continue;
+                }
+
                 if ((arg.StartsWith("-a:", StringComparison.OrdinalIgnoreCase) ||
                     arg.StartsWith("/a:", StringComparison.OrdinalIgnoreCase)) &&
                     arg.Length > 3)
@@ -381,14 +440,18 @@ namespace RefDump
         private static void PrintUsage()
         {
             Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
-            Log(@"refdump file.dll [-a:<refname>] [-t] [-m] [output.xml]", ConsoleColor.White);
+            Log(@"refdump file.dll [-a:<refname>] [-t] [-m] [-s] [output.xml]", ConsoleColor.White);
 
-            Log(@"    Lists all references of the input assembly.
+            Log(@"    Lists all references of the input assembly(ies).
+    (could be a file mask such as *.dll)
     -t    List all used types
     -m    List all used members
     -a:   Narrow results to a particular reference assembly,
           <refname> is a substring of the reference assembly
           name.
+    -s    If the file pattern is specified, such as *.dll, 
+          -s or /s indicates that the pattern should recurse
+          into all subdirectories to find *.dll files.
 
     If an output.xml file name is specified, dump detailed 
     report into that xml.", ConsoleColor.Gray);
