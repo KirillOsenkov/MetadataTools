@@ -93,45 +93,59 @@ namespace RefDump
                 return;
             }
 
+            if (!PEFile.PEFileReader.IsManagedAssembly(filePath))
+            {
+                Console.WriteLine($"{filePath} is not a managed assembly.");
+                return;
+            }
+
             var readerParameters = new ReaderParameters
             {
                 InMemory = true
             };
 
-            var assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
-            Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
-
-            if (FilterToAssembly == null)
+            try
             {
-                Log("References:", ConsoleColor.Green);
-            }
-            else
-            {
-                Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
-            }
-
-            foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
-            {
-                if (FilterToAssembly != null && reference.FullName.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
+                using (var assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters))
                 {
-                    continue;
+                    Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
+
+                    if (FilterToAssembly == null)
+                    {
+                        Log("References:", ConsoleColor.Green);
+                    }
+                    else
+                    {
+                        Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
+                    }
+
+                    foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
+                    {
+                        if (FilterToAssembly != null && reference.FullName.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
+                        {
+                            continue;
+                        }
+
+                        PrintWithHighlight(reference.FullName, reference.FullName.IndexOf(','), ConsoleColor.White, ConsoleColor.Gray);
+                    }
+
+                    var refTree = GetRefTree(assemblyDefinition);
+
+                    if (OutputTypes || OutputMembers)
+                    {
+                        DumpToConsole(refTree);
+                    }
+
+                    Log();
+
+                    if (rootXml != null)
+                    {
+                        DumpToXml(filePath, refTree, rootXml);
+                    }
                 }
-
-                PrintWithHighlight(reference.FullName, reference.FullName.IndexOf(','), ConsoleColor.White, ConsoleColor.Gray);
             }
-
-            var refTree = GetRefTree(assemblyDefinition);
-
-            if (OutputTypes || OutputMembers)
+            catch
             {
-                DumpToConsole(refTree);
-            }
-
-            Log();
-
-            if (rootXml != null)
-            {
-                DumpToXml(filePath, refTree, rootXml);
             }
         }
 
