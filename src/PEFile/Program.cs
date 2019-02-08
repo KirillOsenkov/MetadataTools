@@ -22,20 +22,44 @@ namespace PEFile
             //Console.WriteLine(elapsed);
             //return;
 
-            if (args.Length != 1)
+            if (args.Length == 0)
             {
-                Console.WriteLine("Usage: mvid.exe <path-to-assembly>");
+                var files = Directory.GetFiles(Environment.CurrentDirectory, "*.dll", SearchOption.AllDirectories);
+                foreach (var file in files)
+                {
+                    Process(file);
+                }
+            }
+            else if (args.Length == 1)
+            {
+                var filePath = args[0];
+                if (!File.Exists(filePath))
+                {
+                    if (filePath.Contains("*") || filePath.Contains("?"))
+                    {
+                        var files = Directory.GetFiles(Environment.CurrentDirectory, filePath, SearchOption.AllDirectories);
+                        foreach (var file in files)
+                        {
+                            Process(file);
+                        }
+
+                        return;
+                    }
+
+                    Console.Error.WriteLine($"File {filePath} not found.");
+                    return;
+                }
+            }
+            else
+            {
+                Console.WriteLine("Usage: mvid.exe [<path-to-assembly>]");
                 return;
             }
+        }
 
-            var filePath = args[0];
-            if (!File.Exists(filePath))
-            {
-                Console.Error.WriteLine($"File {filePath} not found.");
-                return;
-            }
-
-            filePath = Path.GetFullPath(filePath);
+        private static void Process(string filePath)
+        {
+            Console.WriteLine(filePath);
             Console.WriteLine(ImageReader.ReadAssemblyMvid(filePath));
         }
     }
