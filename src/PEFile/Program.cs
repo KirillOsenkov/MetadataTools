@@ -49,6 +49,10 @@ namespace PEFile
                     Console.Error.WriteLine($"File {filePath} not found.");
                     return;
                 }
+                else
+                {
+                    Process(filePath);
+                }
             }
             else
             {
