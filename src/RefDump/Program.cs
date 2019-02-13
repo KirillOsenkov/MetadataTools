@@ -39,6 +39,11 @@ namespace RefDump
                 rootXml = new XElement("Assemblies");
             }
 
+            if (FilterToAssembly != null)
+            {
+                Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
+            }
+
             if (FileSpec.Contains("*") || FileSpec.Contains("?"))
             {
                 var root = Environment.CurrentDirectory;
@@ -108,24 +113,22 @@ namespace RefDump
             {
                 using (var assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters))
                 {
+                    var references = assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName).ToArray();
+                    if (FilterToAssembly != null)
+                    {
+                        references = references.Where(r => r.FullName.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) != -1).ToArray();
+                    }
+
+                    if (references.Length == 0)
+                    {
+                        // don't output anything if none of the references match the desired one
+                        return;
+                    }
+
                     Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
 
-                    if (FilterToAssembly == null)
+                    foreach (var reference in references)
                     {
-                        Log("References:", ConsoleColor.Green);
-                    }
-                    else
-                    {
-                        Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
-                    }
-
-                    foreach (var reference in assemblyDefinition.MainModule.AssemblyReferences.OrderBy(r => r.FullName))
-                    {
-                        if (FilterToAssembly != null && reference.FullName.IndexOf(FilterToAssembly, StringComparison.OrdinalIgnoreCase) == -1)
-                        {
-                            continue;
-                        }
-
                         PrintWithHighlight(reference.FullName, reference.FullName.IndexOf(','), ConsoleColor.White, ConsoleColor.Gray);
                     }
 
