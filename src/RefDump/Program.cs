@@ -100,7 +100,7 @@ namespace RefDump
 
             if (!PEFile.PEFileReader.IsManagedAssembly(filePath))
             {
-                Console.WriteLine($"{filePath} is not a managed assembly.");
+                // Console.WriteLine($"{filePath} is not a managed assembly.");
                 return;
             }
 
