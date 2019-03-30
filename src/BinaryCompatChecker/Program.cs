@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
@@ -141,6 +142,7 @@ namespace BinaryCompatChecker
 
             public override AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
             {
+                RuntimeHelpers.EnsureSufficientExecutionStack(); // see https://github.com/KirillOsenkov/MetadataTools/issues/4
                 var resolved = checker.Resolve(name);
                 resolved = resolved ?? base.Resolve(name, parameters);
                 return resolved;
