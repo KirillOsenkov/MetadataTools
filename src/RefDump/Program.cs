@@ -415,7 +415,7 @@ namespace RefDump
                     continue;
                 }
 
-                if (arg.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                if (arg.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && !arg.StartsWith("-") && !arg.StartsWith("/"))
                 {
                     OutputXml = Path.GetFullPath(arg);
                     continue;
