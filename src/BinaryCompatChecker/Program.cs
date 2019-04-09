@@ -166,17 +166,6 @@ namespace BinaryCompatChecker
         private readonly List<VersionMismatch> versionMismatches
             = new List<VersionMismatch>();
 
-        public static bool TryGetTargetFramework(AssemblyDefinition assembly, out string targetFramework)
-        {
-            // The attribute "TargetFramework" is optional.
-            targetFramework = assembly
-                .CustomAttributes
-                .Where(a => a.AttributeType.Name == "TargetFrameworkAttribute")
-                .Select(a => a.ConstructorArguments != null && a.ConstructorArguments.Count != 0 ? a.ConstructorArguments[0].Value.ToString() : (string)null)
-                .FirstOrDefault();
-            return !string.IsNullOrEmpty(targetFramework);
-        }
-
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
         public bool Check(
             string rootDirectory, 

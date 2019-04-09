@@ -66,10 +66,33 @@ namespace AssemblyBindingFixer
             AssemblyQueue.Enqueue(assembly);
         }
 
+        public static bool TryGetTargetFramework(AssemblyDefinition assembly, out string targetFramework)
+        {
+            // The attribute "TargetFramework" is optional.
+            targetFramework = assembly
+                .CustomAttributes
+                .Where(a => a.AttributeType.Name == "TargetFrameworkAttribute")
+                .Select(a => a.ConstructorArguments != null && a.ConstructorArguments.Count != 0 ? a.ConstructorArguments[0].Value.ToString() : (string)null)
+                .FirstOrDefault();
+            return !string.IsNullOrEmpty(targetFramework);
+        }
+
         private void FixCore()
         {
             ApplicationAssembly = AssemblyDefinition.ReadAssembly(Arguments.ApplicationPath);
             AddAssembly(ApplicationAssembly);
+
+            if (!Arguments.FrameworkDefinitions.Any())
+            {
+                if (TryGetTargetFramework(ApplicationAssembly, out string targetFramework))
+                {
+                    string redistList = FindRedistList(targetFramework);
+                    if (redistList != null)
+                    {
+                        Arguments.FrameworkDefinitions.Add((redistList, FrameworkDefinitionFileKind.RedistList));
+                    }
+                }
+            }
 
             foreach (var frameworkDefinition in Arguments.FrameworkDefinitions)
             {
@@ -102,6 +125,47 @@ namespace AssemblyBindingFixer
 
             AppConfigFile?.Write();
             File.WriteAllLines(Arguments.ApplicationPath + ".refs.txt", References.OrderBy(s => s));
+        }
+
+        private static readonly Dictionary<string, string> frameworkNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "net35", "v3.5" },
+            { "net40", "v4.0" },
+            { "net45", "v4.5" },
+            { "net451", "v4.5.1" },
+            { "net452", "v4.5.2" },
+            { "net46", "v4.6" },
+            { "net461", "v4.6.1" },
+            { "net462", "v4.6.2" },
+            { "net47", "v4.7" },
+            { "net471", "v4.7.1" },
+            { "net472", "v4.7.2" },
+        };
+
+        private string FindRedistList(string targetFramework)
+        {
+            var parts = targetFramework.Split(',');
+            if (parts.Length != 2)
+            {
+                return null;
+            }
+
+            var root = @"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework";
+            var frameworkFolder = Path.Combine(root, parts[0]);
+            var version = parts[1].Substring("Version=".Length);
+            var versionFolder = Path.Combine(frameworkFolder, version);
+            if (!Directory.Exists(versionFolder))
+            {
+                return null;
+            }
+
+            var frameworkList = Path.Combine(versionFolder, "RedistList", "FrameworkList.xml");
+            if (!File.Exists(frameworkList))
+            {
+                return null;
+            }
+
+            return frameworkList;
         }
 
         private FrameworkDefinitionFile ReadFrameworkDefinition((string path, FrameworkDefinitionFileKind kind) frameworkDefinition)
