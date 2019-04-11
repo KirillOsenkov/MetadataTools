@@ -4,20 +4,29 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
 {
     public class Checker
     {
-        Dictionary<AssemblyDefinition, HashSet<string>> assemblyToTypeList = new Dictionary<AssemblyDefinition, HashSet<string>>();
+        Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new Dictionary<AssemblyDefinition, Dictionary<string, bool>>();
         List<string> reportLines = new List<string>();
         List<string> assembliesExamined = new List<string>();
+        List<IVTUsage> ivtUsages = new List<IVTUsage>();
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, AssemblyDefinition> resolveCache = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
         HashSet<string> unresolvedAssemblies = new HashSet<string>();
         HashSet<string> diagnostics = new HashSet<string>();
+
+        public class IVTUsage
+        {
+            public string ExposingAssembly { get; set; }
+            public string ConsumingAssembly { get; set; }
+            public string Member { get; set; }
+        }
 
         [STAThread]
         static int Main(string[] args)
@@ -90,7 +99,7 @@ namespace BinaryCompatChecker
             if (File.Exists(rootDirectory))
             {
                 isRootFile = true;
-                startFiles.Add(rootDirectory);
+                startFiles.Add(Path.GetFullPath(rootDirectory));
                 rootDirectory = Path.GetDirectoryName(rootDirectory);
             }
 
@@ -109,7 +118,7 @@ namespace BinaryCompatChecker
                 {
                     if (includeExclude != null && includeExclude.Includes(relativeFilePath))
                     {
-                        list.Add(file);
+                        list.Add(Path.GetFullPath(file));
                     }
 
                     continue;
@@ -119,10 +128,11 @@ namespace BinaryCompatChecker
                 {
                     if (PEFile.IsManagedAssembly(file))
                     {
-                        list.Add(file);
+                        var filePath = Path.GetFullPath(file);
+                        list.Add(filePath);
                         if (!isRootFile)
                         {
-                            startFiles.Add(file);
+                            startFiles.Add(filePath);
                         }
                     }
                 }
@@ -265,7 +275,38 @@ namespace BinaryCompatChecker
                 ListExaminedAssemblies(reportFile);
             }
 
+            WriteIVTReport(reportFile);
+
             return true;
+        }
+
+        private void WriteIVTReport(string reportFile)
+        {
+            string filePath = Path.ChangeExtension(reportFile, ".ivt.txt");
+            var sb = new StringBuilder();
+
+            foreach (var exposingAssembly in ivtUsages
+                // .Where(u => u.ConsumingAssembly.Contains(""))
+                .GroupBy(u => u.ExposingAssembly)
+                .OrderBy(g => g.Key))
+            {
+                sb.AppendLine($"{exposingAssembly.Key}");
+                sb.AppendLine($"{new string('=', exposingAssembly.Key.Length)}");
+                foreach (var consumingAssembly in exposingAssembly.GroupBy(u => u.ConsumingAssembly).OrderBy(g => g.Key))
+                {
+                    sb.AppendLine($"  Consumed in: {consumingAssembly.Key}");
+                    foreach (var ivt in consumingAssembly.Select(s => s.Member).Distinct().OrderBy(s => s))
+                    {
+                        sb.AppendLine("    " + ivt);
+                    }
+
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine();
+            }
+
+            File.WriteAllText(filePath, sb.ToString());
         }
 
         private void ListExaminedAssemblies(string reportFile)
@@ -502,12 +543,103 @@ namespace BinaryCompatChecker
                     {
                         diagnostics.Add($"In assembly '{assembly.Name.FullName}': Unable to resolve member reference '{memberReference.FullName}' from assembly '{referenceToAssembly}'");
                     }
+                    else
+                    {
+                        var ivtUsage = TryGetIVTUsage(memberReference, resolved);
+                        if (ivtUsage != null)
+                        {
+                            ivtUsages.Add(ivtUsage);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     diagnostics.Add($"In assembly '{assembly.Name.FullName}': {ex.Message}");
                 }
             }
+        }
+
+        private IVTUsage TryGetIVTUsage(MemberReference memberReference, IMemberDefinition definition)
+        {
+            string consumingAssembly = memberReference.Module.FileName;
+
+            if (definition is MethodDefinition methodDefinition)
+            {
+                if (consumingAssembly == methodDefinition.Module.FileName)
+                {
+                    return null;
+                }
+
+                if (AllPublic(methodDefinition))
+                {
+                    return null;
+                }
+
+                return new IVTUsage
+                {
+                    ExposingAssembly = methodDefinition.Module.FileName,
+                    ConsumingAssembly = consumingAssembly,
+                    Member = methodDefinition.ToString()
+                };
+            }
+            else if (definition is FieldDefinition fieldDefinition)
+            {
+                if (consumingAssembly == fieldDefinition.Module.FileName)
+                {
+                    return null;
+                }
+
+                if (AllPublic(fieldDefinition))
+                {
+                    return null;
+                }
+
+                return new IVTUsage
+                {
+                    ExposingAssembly = fieldDefinition.Module.FileName,
+                    ConsumingAssembly = consumingAssembly,
+                    Member = fieldDefinition.ToString()
+                };
+            }
+
+            return null;
+        }
+
+        private bool AllPublic(FieldDefinition field)
+        {
+            if (!field.IsPublic)
+            {
+                return false;
+            }
+
+            var type = field.DeclaringType;
+            return AllPublic(type);
+        }
+
+        private bool AllPublic(MethodDefinition method)
+        {
+            if (!method.IsPublic)
+            {
+                return false;
+            }
+
+            var type = method.DeclaringType;
+            return AllPublic(type);
+        }
+
+        private static bool AllPublic(TypeDefinition type)
+        {
+            while (type != null)
+            {
+                if (!type.IsPublic && !type.IsNestedPublic)
+                {
+                    return false;
+                }
+
+                type = type.DeclaringType;
+            }
+
+            return true;
         }
 
         private void CheckTypes(AssemblyDefinition referencing, AssemblyDefinition reference)
@@ -522,42 +654,55 @@ namespace BinaryCompatChecker
                 }
 
                 var types = GetTypes(reference);
-                if (!types.Contains(referencedType.FullName))
+                if (types.TryGetValue(referencedType.FullName, out bool isPublic))
+                {
+                    if (!isPublic)
+                    {
+                        var ivtUsage = new IVTUsage
+                        {
+                            ConsumingAssembly = referencing.MainModule.FileName,
+                            ExposingAssembly = reference.MainModule.FileName,
+                            Member = referencedType.FullName
+                        };
+                        ivtUsages.Add(ivtUsage);
+                    }
+                }
+                else
                 {
                     diagnostics.Add($"In assembly '{referencing.Name.FullName}': Unable to resolve type reference '{referencedType.FullName}' in '{reference.Name}'");
                 }
             }
         }
 
-        private HashSet<string> GetTypes(AssemblyDefinition assembly)
+        private Dictionary<string, bool> GetTypes(AssemblyDefinition assembly)
         {
             if (assemblyToTypeList.TryGetValue(assembly, out var types))
             {
                 return types;
             }
 
-            types = new HashSet<string>();
+            types = new Dictionary<string, bool>();
             assemblyToTypeList[assembly] = types;
 
             foreach (var topLevelType in assembly.MainModule.Types)
             {
-                types.Add(topLevelType.FullName);
+                types.Add(topLevelType.FullName, topLevelType.IsPublic);
                 AddNestedTypes(topLevelType, types);
             }
 
             foreach (var exportedType in assembly.MainModule.ExportedTypes)
             {
-                types.Add(exportedType.FullName);
+                types.Add(exportedType.FullName, exportedType.IsPublic);
             }
 
             return types;
         }
 
-        private void AddNestedTypes(TypeDefinition type, HashSet<string> types)
+        private void AddNestedTypes(TypeDefinition type, Dictionary<string, bool> types)
         {
             foreach (var nested in type.NestedTypes)
             {
-                types.Add(nested.FullName);
+                types.Add(nested.FullName, nested.IsPublic);
                 AddNestedTypes(nested, types);
             }
         }
