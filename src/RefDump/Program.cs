@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Windows.Forms;
 using System.Xml.Linq;
 using Mono.Cecil;
 
@@ -15,7 +17,9 @@ namespace RefDump
         public bool OutputTypes { get; set; } = false;
         public bool OutputMembers { get; set; } = false;
         public bool Recursive { get; set; } = false;
+        public bool GenerateGraph { get; set; } = false;
 
+        [STAThread ]
         static void Main(string[] args)
         {
             var dumper = new Dumper();
@@ -78,10 +82,42 @@ namespace RefDump
                 Console.Error.WriteLine("File(s) not found: " + FileSpec);
             }
 
+            if (GenerateGraph)
+            {
+                GenerateGraphFile();
+            }
+
             if (OutputXml != null)
             {
                 document.Save(OutputXml);
             }
+        }
+
+        private void GenerateGraphFile()
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("digraph G {");
+
+            var assembliesWeCareAbout = new HashSet<string>(referenceGraph.Keys.Select(k => k.Name.Name), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kvp in referenceGraph)
+            {
+                foreach (var reference in kvp.Value)
+                {
+                    if (!assembliesWeCareAbout.Contains(reference.Name))
+                    {
+                        continue;
+                    }
+
+                    var line = $"  \"{kvp.Key.Name.Name}\" -> \"{reference.Name}\"";
+                    sb.AppendLine(line);
+                }
+            }
+
+            sb.AppendLine("}");
+
+            Clipboard.SetText(sb.ToString());
         }
 
         private void DumpAssembly(string filePath, XElement rootXml = null)
@@ -125,6 +161,8 @@ namespace RefDump
                         return;
                     }
 
+                    ReportReferences(assemblyDefinition, references);
+
                     Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
 
                     foreach (var reference in references)
@@ -150,6 +188,13 @@ namespace RefDump
             catch
             {
             }
+        }
+
+        private Dictionary<AssemblyDefinition, AssemblyNameReference[]> referenceGraph = new Dictionary<AssemblyDefinition, AssemblyNameReference[]>();
+
+        private void ReportReferences(AssemblyDefinition assemblyDefinition, AssemblyNameReference[] references)
+        {
+            referenceGraph[assemblyDefinition] = references;
         }
 
         private void DumpToConsole(RefTree refTree)
@@ -430,6 +475,12 @@ namespace RefDump
                 if (arg == "-m" || arg == "/m")
                 {
                     OutputMembers = true;
+                    continue;
+                }
+
+                if (arg == "-g" || arg == "/g")
+                {
+                    GenerateGraph = true;
                     continue;
                 }
 
