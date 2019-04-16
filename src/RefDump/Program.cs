@@ -525,6 +525,9 @@ namespace RefDump
     -s    If the file pattern is specified, such as *.dll, 
           -s or /s indicates that the pattern should recurse
           into all subdirectories to find *.dll files.
+    -g    Copy the reference graph to Clipboard in GraphViz
+          format. Paste into http://www.webgraphviz.com/
+          to generate an image.
 
     If an output.xml file name is specified, dump detailed 
     report into that xml.", ConsoleColor.Gray);
