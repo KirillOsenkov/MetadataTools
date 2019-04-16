@@ -451,6 +451,11 @@ namespace RefDump
 
             foreach (var arg in args)
             {
+                if (arg == "/?" || arg == "-h" || arg == "--help" || arg == "help")
+                {
+                    return false;
+                }
+
                 if (arg.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                     arg.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
                     arg.Contains("*") ||
