@@ -18,6 +18,7 @@ namespace BinaryCompatChecker
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, AssemblyDefinition> resolveCache = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
+        private string rootDirectory;
         HashSet<string> unresolvedAssemblies = new HashSet<string>();
         HashSet<string> diagnostics = new HashSet<string>();
 
@@ -31,7 +32,7 @@ namespace BinaryCompatChecker
         [STAThread]
         static int Main(string[] args)
         {
-            bool ignoreNetFrameworkAssemblies = false;
+            bool ignoreNetFrameworkAssemblies = true;
 
             // Parse parameterized args
             List<string> arguments = new List<string>(args);
@@ -184,7 +185,10 @@ namespace BinaryCompatChecker
             string reportFile, 
             bool ignoreFrameworkAssemblies = false)
         {
+            bool success = true;
+
             this.files = files;
+            this.rootDirectory = rootDirectory;
             var appConfigFiles = new List<string>();
 
             Queue<string> fileQueue = new Queue<string>(startFiles);
@@ -268,7 +272,7 @@ namespace BinaryCompatChecker
                         {
                         }
 
-                        return false;
+                        success = false;
                     }
                 }
 
@@ -277,16 +281,28 @@ namespace BinaryCompatChecker
 
             WriteIVTReport(reportFile);
 
-            return true;
+            //WriteIVTReport(
+            //    reportFile,
+            //    ".ivt.roslyn.txt",
+            //    u => u.ExposingAssembly.Contains("Microsoft.CodeAnalysis") && !u.ConsumingAssembly.Contains("Microsoft.CodeAnalysis"));
+
+            return success;
         }
 
-        private void WriteIVTReport(string reportFile)
+        private void WriteIVTReport(string primaryReportFile, string fileName = ".ivt.txt", Func<IVTUsage, bool> usageFilter = null)
         {
-            string filePath = Path.ChangeExtension(reportFile, ".ivt.txt");
+            string filePath = Path.ChangeExtension(primaryReportFile, fileName);
             var sb = new StringBuilder();
 
-            foreach (var exposingAssembly in ivtUsages
-                // .Where(u => u.ConsumingAssembly.Contains(""))
+            var usages = ivtUsages
+                .Where(u => !IsNetFrameworkAssembly(u.ConsumingAssembly) && !IsNetFrameworkAssembly(u.ExposingAssembly));
+
+            if (usageFilter != null)
+            {
+                usages = usages.Where(u => usageFilter(u));
+            }
+
+            foreach (var exposingAssembly in usages
                 .GroupBy(u => u.ExposingAssembly)
                 .OrderBy(g => g.Key))
             {
@@ -311,7 +327,7 @@ namespace BinaryCompatChecker
 
         private void ListExaminedAssemblies(string reportFile)
         {
-            string filePath = Path.ChangeExtension(reportFile, ".report.txt");
+            string filePath = Path.ChangeExtension(reportFile, ".assemblylist.txt");
             assembliesExamined.Sort();
             File.WriteAllLines(filePath, assembliesExamined);
         }
@@ -351,7 +367,28 @@ namespace BinaryCompatChecker
 
             foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
             {
-                diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {versionMismatch.ExpectedReference.FullName} but found {versionMismatch.ActualAssembly.FullName} at {versionMismatch.ActualAssembly.MainModule.FileName}");
+                string referencedFullName = versionMismatch.ExpectedReference.FullName;
+                if (referencedFullName.StartsWith("netstandard,"))
+                {
+                    continue;
+                }
+
+                string actualFilePath = versionMismatch.ActualAssembly.MainModule.FileName;
+                if (actualFilePath.Contains("Mono.framework"))
+                {
+                    continue;
+                }
+
+                if (actualFilePath.StartsWith(rootDirectory))
+                {
+                    actualFilePath = actualFilePath.Substring(rootDirectory.Length);
+                    if (actualFilePath.StartsWith("\\") || actualFilePath.StartsWith("/"))
+                    {
+                        actualFilePath = actualFilePath.Substring(1);
+                    }
+                }
+
+                diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {referencedFullName} but found {versionMismatch.ActualAssembly.FullName} at {actualFilePath}");
             }
         }
 
@@ -472,18 +509,34 @@ namespace BinaryCompatChecker
             Console.Error.WriteLine(text);
         }
 
+        private static Dictionary<string, bool> frameworkAssemblyNames = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        private static bool IsNetFrameworkAssembly(string assemblyName)
+        {
+            frameworkAssemblyNames.TryGetValue(assemblyName, out bool result);
+            return result;
+        }
+
         /// <summary>
         /// Returns true if the <paramref name="assembly"/> is .NET Framework assembly.
         /// </summary>
         private static bool IsNetFrameworkAssembly(AssemblyDefinition assembly)
         {
+            string key = assembly.MainModule.FileName;
+            if (frameworkAssemblyNames.TryGetValue(key, out bool result))
+            {
+                return result;  
+            }
+
             // Hacky way of detecting it.
-            return assembly
+            result = assembly
                 .CustomAttributes
                 .FirstOrDefault(a => 
                     a.AttributeType.Name == "AssemblyProductAttribute" && 
                     a.ConstructorArguments != null && 
                     a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null) != null;
+            frameworkAssemblyNames[key] = result;
+            return result;
         }
 
         /// <summary>
@@ -500,7 +553,6 @@ namespace BinaryCompatChecker
             {
                 if (reference.Version != referenced.Name.Version)
                 {
-                    //diagnostics.Add($"Assembly {referencing.Name.FullName} is referencing {reference.FullName} but found {referenced.FullName}");
                     versionMismatches.Add(new VersionMismatch()
                     {
                         Referencer = referencing,
