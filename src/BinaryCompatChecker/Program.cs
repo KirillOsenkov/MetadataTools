@@ -284,9 +284,19 @@ namespace BinaryCompatChecker
             //WriteIVTReport(
             //    reportFile,
             //    ".ivt.roslyn.txt",
-            //    u => u.ExposingAssembly.Contains("Microsoft.CodeAnalysis") && !u.ConsumingAssembly.Contains("Microsoft.CodeAnalysis"));
+            //    u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
 
             return success;
+        }
+
+        private static bool IsRoslynAssembly(string assemblyName)
+        {
+            if (assemblyName.Contains("Microsoft.CodeAnalysis") || assemblyName.Contains("VisualStudio.LanguageServices"))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private void WriteIVTReport(string primaryReportFile, string fileName = ".ivt.txt", Func<IVTUsage, bool> usageFilter = null)
