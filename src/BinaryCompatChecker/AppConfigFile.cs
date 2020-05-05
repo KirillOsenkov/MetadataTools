@@ -164,7 +164,7 @@ namespace BinaryCompatChecker
                 if (publicKeyToken == null)
                 {
                     Error($"assemblyIdentity {name} is missing the 'publicKeyToken' attribute");
-                    continue;
+                    publicKeyToken = "<missing>";
                 }
 
                 var bindingRedirect = dependentAssembly.Element(Xmlns("bindingRedirect"));

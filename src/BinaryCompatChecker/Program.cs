@@ -358,8 +358,6 @@ namespace BinaryCompatChecker
                     {
                         diagnostics.Add($"In app.config file {appConfigFileName}: {error}");
                     }
-
-                    continue;
                 }
 
                 foreach (var bindingRedirect in appConfigFile.BindingRedirects)
@@ -428,9 +426,14 @@ namespace BinaryCompatChecker
                 {
                     foundNewVersion = true;
                     var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
+                    if (string.IsNullOrEmpty(actualToken))
+                    {
+                        actualToken = "null";
+                    }
+
                     if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
                     {
-                        diagnostics.Add($"In {appConfigFileName}: publicKeyToken {publicKeyToken} from bindingRedirect for {name} doesn't match actual assembly {actualToken}");
+                        diagnostics.Add($"In {appConfigFileName}: publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualToken}'");
                     }
 
                     continue;
