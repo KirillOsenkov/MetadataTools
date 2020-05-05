@@ -312,6 +312,11 @@ namespace BinaryCompatChecker
                 usages = usages.Where(u => usageFilter(u));
             }
 
+            if (!usages.Any())
+            {
+                return;
+            }
+
             foreach (var exposingAssembly in usages
                 .GroupBy(u => u.ExposingAssembly)
                 .OrderBy(g => g.Key))
@@ -332,7 +337,10 @@ namespace BinaryCompatChecker
                 sb.AppendLine();
             }
 
-            File.WriteAllText(filePath, sb.ToString());
+            if (sb.Length > 0)
+            {
+                File.WriteAllText(filePath, sb.ToString());
+            }
         }
 
         private void ListExaminedAssemblies(string reportFile)
