@@ -6,7 +6,7 @@
     <authors>Kirill Osenkov, Microsoft</authors>
     <owners>Kirill Osenkov, Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
+    <license type="expression">MIT</license>
     <projectUrl>https://github.com/KirillOsenkov/MetadataTools</projectUrl>
     <description>A tool to verify binary compatibility of a set of .dll files.</description>
     <tags>Binary Compat Compatibility Check Checker Validation Metadata Assembly</tags>
