@@ -19,8 +19,8 @@ namespace BinaryCompatChecker
         Dictionary<string, AssemblyDefinition> resolveCache = new Dictionary<string, AssemblyDefinition>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> files;
         private string rootDirectory;
-        HashSet<string> unresolvedAssemblies = new HashSet<string>();
-        HashSet<string> diagnostics = new HashSet<string>();
+        HashSet<string> unresolvedAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> diagnostics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public class IVTUsage
         {
@@ -179,10 +179,10 @@ namespace BinaryCompatChecker
 
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
         public bool Check(
-            string rootDirectory, 
-            IEnumerable<string> files, 
-            IEnumerable<string> startFiles, 
-            string reportFile, 
+            string rootDirectory,
+            IEnumerable<string> files,
+            IEnumerable<string> startFiles,
+            string reportFile,
             bool ignoreFrameworkAssemblies = false)
         {
             bool success = true;
@@ -222,8 +222,11 @@ namespace BinaryCompatChecker
                     var resolved = Resolve(reference);
                     if (resolved == null)
                     {
-                        unresolvedAssemblies.Add(reference.Name);
-                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': unable to resolve reference to '{reference.FullName}'");
+                        if (unresolvedAssemblies.Add(reference.Name))
+                        {
+                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
+                        }
+
                         continue;
                     }
                     else
@@ -546,15 +549,15 @@ namespace BinaryCompatChecker
             string key = assembly.MainModule.FileName;
             if (frameworkAssemblyNames.TryGetValue(key, out bool result))
             {
-                return result;  
+                return result;
             }
 
             // Hacky way of detecting it.
             result = assembly
                 .CustomAttributes
-                .FirstOrDefault(a => 
-                    a.AttributeType.Name == "AssemblyProductAttribute" && 
-                    a.ConstructorArguments != null && 
+                .FirstOrDefault(a =>
+                    a.AttributeType.Name == "AssemblyProductAttribute" &&
+                    a.ConstructorArguments != null &&
                     a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null) != null;
             frameworkAssemblyNames[key] = result;
             return result;
@@ -588,16 +591,21 @@ namespace BinaryCompatChecker
 
         private void CheckMembers(AssemblyDefinition assembly)
         {
-            foreach (var memberReference in assembly.MainModule.GetMemberReferences())
+            string assemblyFullName = assembly.Name.FullName;
+            var module = assembly.MainModule;
+            var references = module.GetTypeReferences().Concat(module.GetMemberReferences());
+
+            foreach (var memberReference in references)
             {
                 try
                 {
-                    if (memberReference.DeclaringType.IsArray)
+                    var declaringType = memberReference.DeclaringType ?? (memberReference as TypeReference);
+                    if (declaringType != null && declaringType.IsArray)
                     {
                         continue;
                     }
 
-                    var scope = memberReference.DeclaringType.Scope;
+                    IMetadataScope scope = declaringType?.Scope;
                     string referenceToAssembly = scope?.Name;
 
                     if (referenceToAssembly != null && unresolvedAssemblies.Contains(referenceToAssembly))
@@ -614,7 +622,8 @@ namespace BinaryCompatChecker
                     var resolved = memberReference.Resolve();
                     if (resolved == null)
                     {
-                        diagnostics.Add($"In assembly '{assembly.Name.FullName}': Unable to resolve member reference '{memberReference.FullName}' from assembly '{referenceToAssembly}'");
+                        string typeOrMember = memberReference is TypeReference ? "type" : "member";
+                        diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
                     }
                     else
                     {
@@ -625,60 +634,62 @@ namespace BinaryCompatChecker
                         }
                     }
                 }
+                catch (AssemblyResolutionException resolutionException)
+                {
+                    string unresolvedAssemblyName = resolutionException.AssemblyReference?.Name;
+                    if (unresolvedAssemblyName == null || unresolvedAssemblies.Add(unresolvedAssemblyName))
+                    {
+                        diagnostics.Add($"In assembly '{assemblyFullName}': {resolutionException.Message}");
+                    }
+                }
                 catch (Exception ex)
                 {
-                    diagnostics.Add($"In assembly '{assembly.Name.FullName}': {ex.Message}");
+                    diagnostics.Add($"In assembly '{assemblyFullName}': {ex.Message}");
                 }
             }
         }
 
         private IVTUsage TryGetIVTUsage(MemberReference memberReference, IMemberDefinition definition)
         {
-            string consumingAssembly = memberReference.Module.FileName;
+            string consumingModule = memberReference.Module.FileName;
 
-            if (definition is MethodDefinition methodDefinition)
+            if (definition is MemberReference memberDefinition)
             {
-                if (consumingAssembly == methodDefinition.Module.FileName)
+                string definitionModule = memberDefinition.Module.FileName;
+
+                if (consumingModule == definitionModule)
                 {
                     return null;
                 }
 
-                if (AllPublic(methodDefinition))
+                if (AllPublic(memberDefinition))
                 {
                     return null;
                 }
 
                 return new IVTUsage
                 {
-                    ExposingAssembly = methodDefinition.Module.FileName,
-                    ConsumingAssembly = consumingAssembly,
-                    Member = methodDefinition.ToString()
-                };
-            }
-            else if (definition is FieldDefinition fieldDefinition)
-            {
-                if (consumingAssembly == fieldDefinition.Module.FileName)
-                {
-                    return null;
-                }
-
-                if (AllPublic(fieldDefinition))
-                {
-                    return null;
-                }
-
-                return new IVTUsage
-                {
-                    ExposingAssembly = fieldDefinition.Module.FileName,
-                    ConsumingAssembly = consumingAssembly,
-                    Member = fieldDefinition.ToString()
+                    ExposingAssembly = definitionModule,
+                    ConsumingAssembly = consumingModule,
+                    Member = definition.ToString()
                 };
             }
 
             return null;
         }
 
-        private bool AllPublic(FieldDefinition field)
+        private bool AllPublic(MemberReference memberReference)
+        {
+            return memberReference switch
+            {
+                TypeDefinition typeDefinition => AllPublic(typeDefinition),
+                MethodDefinition methodDefinition => AllPublic(methodDefinition),
+                FieldDefinition fieldDefinition => AllPublic(fieldDefinition),
+                _ => true
+            };
+        }
+
+        private static bool AllPublic(FieldDefinition field)
         {
             if (!field.IsPublic)
             {
@@ -689,7 +700,7 @@ namespace BinaryCompatChecker
             return AllPublic(type);
         }
 
-        private bool AllPublic(MethodDefinition method)
+        private static bool AllPublic(MethodDefinition method)
         {
             if (!method.IsPublic)
             {
@@ -717,16 +728,18 @@ namespace BinaryCompatChecker
 
         private void CheckTypes(AssemblyDefinition referencing, AssemblyDefinition reference)
         {
-            foreach (var referencedType in referencing.MainModule.GetTypeReferences())
+            var typeReferences = referencing.MainModule.GetTypeReferences();
+            var types = GetTypes(reference);
+
+            foreach (var referencedType in typeReferences)
             {
                 if (referencedType.Scope == null ||
                     referencedType.Scope.MetadataScopeType != MetadataScopeType.AssemblyNameReference ||
-                    referencedType.Scope.Name != reference.Name.Name)
+                    !string.Equals(referencedType.Scope.Name, reference.Name.Name, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                var types = GetTypes(reference);
                 if (types.TryGetValue(referencedType.FullName, out bool isPublic))
                 {
                     if (!isPublic)
@@ -742,7 +755,7 @@ namespace BinaryCompatChecker
                 }
                 else
                 {
-                    diagnostics.Add($"In assembly '{referencing.Name.FullName}': Unable to resolve type reference '{referencedType.FullName}' in '{reference.Name}'");
+                    diagnostics.Add($"In assembly '{referencing.Name.FullName}': Failed to resolve type reference '{referencedType.FullName}' in assembly '{reference.Name}'");
                 }
             }
         }
