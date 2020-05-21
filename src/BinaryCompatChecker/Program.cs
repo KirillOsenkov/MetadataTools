@@ -285,10 +285,10 @@ namespace BinaryCompatChecker
 
             WriteIVTReport(reportFile);
 
-            //WriteIVTReport(
-            //    reportFile,
-            //    ".ivt.roslyn.txt",
-            //    u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
+            WriteIVTReport(
+                reportFile,
+                ".ivt.roslyn.txt",
+                u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
 
             return success;
         }
