@@ -596,6 +596,17 @@ namespace BinaryCompatChecker
             {
                 var method = methods[i];
 
+                if (method.HasOverrides)
+                {
+                    foreach (var overrideMethod in method.Overrides)
+                    {
+                        if (AreSame(overrideMethod, reference))
+                        {
+                            return method;
+                        }
+                    }
+                }
+
                 string methodName = method.Name;
                 int dot = methodName.LastIndexOf('.');
                 if (dot > 0)
@@ -636,6 +647,38 @@ namespace BinaryCompatChecker
             return null;
         }
 
+        public static bool AreSame(MethodReference method, MethodReference reference)
+        {
+            if (method.Name != reference.Name)
+                return false;
+
+            if (method.HasGenericParameters != reference.HasGenericParameters)
+                return false;
+
+            if (method.HasGenericParameters && method.GenericParameters.Count != reference.GenericParameters.Count)
+                return false;
+
+            if (!AreSame(method.ReturnType, reference.ReturnType))
+                return false;
+
+            if (IsVarArg(method) != IsVarArg(reference))
+                return false;
+
+            if (IsVarArg(method) && IsVarArgCallTo(method, reference))
+                return true;
+
+            if (method.HasParameters != reference.HasParameters)
+                return false;
+
+            if (!method.HasParameters && !reference.HasParameters)
+                return true;
+
+            if (!AreSame(method.Parameters, reference.Parameters))
+                return false;
+
+            return true;
+        }
+
         public static bool IsVarArg(IMethodSignature self)
         {
             return self.CallingConvention == MethodCallingConvention.VarArg;
@@ -646,29 +689,48 @@ namespace BinaryCompatChecker
             var count = a.Count;
 
             if (count != b.Count)
+            {
                 return false;
+            }
 
             if (count == 0)
+            {
                 return true;
+            }
 
             for (int i = 0; i < count; i++)
+            {
                 if (!AreSame(a[i].ParameterType, b[i].ParameterType))
+                {
                     return false;
+                }
+            }
 
             return true;
         }
 
-        static bool IsVarArgCallTo(MethodDefinition method, MethodReference reference)
+        static bool IsVarArgCallTo(MethodReference method, MethodReference reference)
         {
-            if (method.Parameters.Count >= reference.Parameters.Count)
-                return false;
+            var methodParameters = method.Parameters;
+            var referenceParameters = reference.Parameters;
 
-            if (GetSentinelPosition(reference) != method.Parameters.Count)
+            if (methodParameters.Count >= referenceParameters.Count)
+            {
                 return false;
+            }
 
-            for (int i = 0; i < method.Parameters.Count; i++)
-                if (!AreSame(method.Parameters[i].ParameterType, reference.Parameters[i].ParameterType))
+            if (GetSentinelPosition(reference) != methodParameters.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < methodParameters.Count; i++)
+            {
+                if (!AreSame(methodParameters[i].ParameterType, referenceParameters[i].ParameterType))
+                {
                     return false;
+                }
+            }
 
             return true;
         }
@@ -676,12 +738,18 @@ namespace BinaryCompatChecker
         public static int GetSentinelPosition(IMethodSignature self)
         {
             if (!self.HasParameters)
+            {
                 return -1;
+            }
 
             var parameters = self.Parameters;
             for (int i = 0; i < parameters.Count; i++)
+            {
                 if (parameters[i].ParameterType.IsSentinel)
+                {
                     return i;
+                }
+            }
 
             return -1;
         }
@@ -689,16 +757,24 @@ namespace BinaryCompatChecker
         static bool AreSame(TypeSpecification a, TypeSpecification b)
         {
             if (!AreSame(a.ElementType, b.ElementType))
+            {
                 return false;
+            }
 
             if (a.IsGenericInstance)
+            {
                 return AreSame((GenericInstanceType)a, (GenericInstanceType)b);
+            }
 
             if (a.IsRequiredModifier || a.IsOptionalModifier)
+            {
                 return AreSame((IModifierType)a, (IModifierType)b);
+            }
 
             if (a.IsArray)
+            {
                 return AreSame((ArrayType)a, (ArrayType)b);
+            }
 
             return true;
         }
@@ -706,7 +782,9 @@ namespace BinaryCompatChecker
         static bool AreSame(ArrayType a, ArrayType b)
         {
             if (a.Rank != b.Rank)
+            {
                 return false;
+            }
 
             // TODO: dimensions
 
@@ -721,11 +799,17 @@ namespace BinaryCompatChecker
         static bool AreSame(GenericInstanceType a, GenericInstanceType b)
         {
             if (a.GenericArguments.Count != b.GenericArguments.Count)
+            {
                 return false;
+            }
 
             for (int i = 0; i < a.GenericArguments.Count; i++)
+            {
                 if (!AreSame(a.GenericArguments[i], b.GenericArguments[i]))
+                {
                     return false;
+                }
+            }
 
             return true;
         }
@@ -738,22 +822,34 @@ namespace BinaryCompatChecker
         static bool AreSame(TypeReference a, TypeReference b)
         {
             if (ReferenceEquals(a, b))
+            {
                 return true;
+            }
 
             if (a == null || b == null)
+            {
                 return false;
+            }
 
             if (a.MetadataType != b.MetadataType)
+            {
                 return false;
+            }
 
             if (a.IsGenericParameter)
+            {
                 return AreSame((GenericParameter)a, (GenericParameter)b);
+            }
 
             if (IsTypeSpecification(a))
+            {
                 return AreSame((TypeSpecification)a, (TypeSpecification)b);
+            }
 
             if (a.Name != b.Name || a.Namespace != b.Namespace)
+            {
                 return false;
+            }
 
             //TODO: check scope
 
@@ -929,21 +1025,18 @@ namespace BinaryCompatChecker
                                 {
                                     foreach (var interfaceMethod in interfaceTypeDef.Methods)
                                     {
-                                        if (interfaceMethod.ContainsGenericParameter)
+                                        if (interfaceMethod.HasGenericParameters || interfaceMethod.ContainsGenericParameter)
                                         {
                                             // it's non-trivial to match when generics are involved
                                             continue;
-                                        }
-
-                                        if (interfaceMethod.Name.Contains("GetConflictEditSpan"))
-                                        {
                                         }
 
                                         bool sawGenerics = false;
                                         var matching = FindInterfaceMethodImplementation(typeDef, interfaceMethod, ref sawGenerics);
                                         if (matching == null && !sawGenerics)
                                         {
-                                            diagnostics.Add($"In assembly '{assemblyFullName}': Type {typeDef.FullName} does not implement interface method {interfaceMethod.FullName}");
+                                            var interfaceAssembly = GetAssemblyName(interfaceMethod);
+                                            diagnostics.Add($"In assembly '{assemblyFullName}': Type {typeDef.FullName} does not implement interface method {interfaceMethod.FullName} from assembly {interfaceAssembly}");
                                         }
                                     }
                                 }
@@ -1053,6 +1146,25 @@ namespace BinaryCompatChecker
                     diagnostics.Add($"In assembly '{assemblyFullName}': {ex.Message}");
                 }
             }
+        }
+
+        public static string GetAssemblyName(MemberReference memberReference)
+        {
+            var declaringType = memberReference.DeclaringType ?? (memberReference as TypeReference);
+            if (declaringType == null)
+            {
+                return null;
+            }
+
+            IMetadataScope scope = declaringType.Scope;
+            string referenceToAssembly = scope?.Name;
+
+            if (scope is AssemblyNameReference assemblyNameReference)
+            {
+                referenceToAssembly = assemblyNameReference.FullName;
+            }
+
+            return referenceToAssembly;
         }
 
         private IVTUsage TryGetIVTUsage(MemberReference memberReference, IMemberDefinition definition)
