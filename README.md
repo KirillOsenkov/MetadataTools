@@ -26,6 +26,9 @@ var mvid = ImageReader.ReadAssemblyMvid(filePath);
 ```
 Cold run on a warm file: 7ms
 
+Or see this sample from Roslyn:
+https://github.com/dotnet/roslyn/blob/1c98fe1fc6ef122cb3bb436aa90a0ea729fdcf37/src/Compilers/Core/MSBuildTask/MvidReader.cs#L13
+
 ## Mono.Cecil
 https://www.nuget.org/packages/Mono.Cecil
 ```
@@ -45,6 +48,10 @@ Cold run on a warm file: 33ms
 
 ## System.Reflection.Metadata
 https://www.nuget.org/packages/System.Reflection.Metadata
+
+Sample in Roslyn:
+https://github.com/dotnet/roslyn/blob/1c98fe1fc6ef122cb3bb436aa90a0ea729fdcf37/src/Compilers/Core/Portable/AssemblyUtilities.cs#L84
+
 ```
 using (var stream = File.OpenRead(filePath))
 {
