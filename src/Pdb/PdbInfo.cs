@@ -191,6 +191,7 @@ namespace MetadataTools
             string text = null;
             try
             {
+                Console.WriteLine($"Downloading {url}");
                 text = client.GetStringAsync(url).GetAwaiter().GetResult();
             }
             catch (Exception ex)
@@ -204,6 +205,8 @@ namespace MetadataTools
                 text = text.Substring(5);
                 if (File.Exists(text))
                 {
+                    Console.WriteLine(text);
+
                     var destinationPdb = System.IO.Path.ChangeExtension(AssemblyFilePath, ".pdb");
                     if (!File.Exists(destinationPdb))
                     {
@@ -236,6 +239,14 @@ namespace MetadataTools
                         return true;
                     }
                 }
+                else
+                {
+                    Console.Error.WriteLine($"File doesn't exist: {text}");
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine(text);
             }
 
             return false;
