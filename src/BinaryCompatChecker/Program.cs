@@ -1004,6 +1004,8 @@ namespace BinaryCompatChecker
             var types = module.GetTypes();
             foreach (var typeDef in types)
             {
+                CheckTypeAttributes(assemblyFullName, typeDef);
+
                 if (!typeDef.IsClass)
                 {
                     continue;
@@ -1077,6 +1079,35 @@ namespace BinaryCompatChecker
                         }
                     }
                 }
+            }
+        }
+
+        private void CheckTypeAttributes(string assemblyFullName, TypeDefinition typeDef)
+        {
+            if (!typeDef.HasCustomAttributes)
+            {
+                return;
+            }
+
+            var attributes = typeDef.CustomAttributes;
+            bool hasCompilerGeneratedAttribute = false;
+            bool hasTypeIdentifierAttribute = false;
+            foreach (var attribute in attributes)
+            {
+                string fullName = attribute.AttributeType.FullName;
+                if (fullName == "System.Runtime.CompilerServices.CompilerGeneratedAttribute")
+                {
+                    hasCompilerGeneratedAttribute = true;
+                }
+                else if (fullName == "System.Runtime.InteropServices.TypeIdentifierAttribute")
+                {
+                    hasTypeIdentifierAttribute = true;
+                }
+            }
+
+            if (hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
+            {
+                diagnostics.Add($"In assembly '{assemblyFullName}': Embedded interop type {typeDef.FullName}");
             }
         }
 
