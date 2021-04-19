@@ -34,6 +34,7 @@ namespace BinaryCompatChecker
         static int Main(string[] args)
         {
             bool ignoreNetFrameworkAssemblies = true;
+            bool reportEmbeddedInteropTypes = true;
 
             // Parse parameterized args
             List<string> arguments = new List<string>(args);
@@ -42,6 +43,12 @@ namespace BinaryCompatChecker
                 if (arg.Equals("/ignoreNetFx", StringComparison.OrdinalIgnoreCase))
                 {
                     ignoreNetFrameworkAssemblies = true;
+                    arguments.Remove(arg);
+                }
+
+                if (arg.Equals("/ignoreEmbeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
+                {
+                    reportEmbeddedInteropTypes = false;
                     arguments.Remove(arg);
                 }
             }
@@ -72,7 +79,7 @@ namespace BinaryCompatChecker
 
             var files = GetFiles(root, configFile, out var startFiles);
 
-            bool success = new Checker().Check(root, files, startFiles, reportFile, ignoreNetFrameworkAssemblies);
+            bool success = new Checker().Check(root, files, startFiles, reportFile, ignoreNetFrameworkAssemblies, reportEmbeddedInteropTypes);
             return success ? 0 : 1;
         }
 
@@ -178,15 +185,20 @@ namespace BinaryCompatChecker
         private readonly List<VersionMismatch> versionMismatches
             = new List<VersionMismatch>();
 
+        private bool reportEmbeddedInteropTypes = true;
+
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
         public bool Check(
             string rootDirectory,
             IEnumerable<string> files,
             IEnumerable<string> startFiles,
             string reportFile,
-            bool ignoreFrameworkAssemblies = false)
+            bool ignoreFrameworkAssemblies = false,
+            bool reportEmbeddedInteropTypes = false)
         {
             bool success = true;
+
+            this.reportEmbeddedInteropTypes = reportEmbeddedInteropTypes;
 
             this.files = files;
             this.rootDirectory = rootDirectory;
@@ -572,7 +584,11 @@ namespace BinaryCompatChecker
             return false;
         }
 
-        public void Check(AssemblyDefinition referencing, AssemblyDefinition referenced, AssemblyNameReference reference, bool ignoreFrameworkAssemblies)
+        public void Check(
+            AssemblyDefinition referencing,
+            AssemblyDefinition referenced,
+            AssemblyNameReference reference,
+            bool ignoreFrameworkAssemblies)
         {
             if (!ignoreFrameworkAssemblies || !IsNetFrameworkAssembly(referenced))
             {
@@ -1105,7 +1121,7 @@ namespace BinaryCompatChecker
                 }
             }
 
-            if (hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
+            if (reportEmbeddedInteropTypes && hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
             {
                 diagnostics.Add($"In assembly '{assemblyFullName}': Embedded interop type {typeDef.FullName}");
             }
