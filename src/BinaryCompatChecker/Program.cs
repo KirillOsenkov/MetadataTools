@@ -1176,7 +1176,7 @@ namespace BinaryCompatChecker
                         var ivtUsage = TryGetIVTUsage(memberReference, resolved);
                         if (ivtUsage != null)
                         {
-                            ivtUsages.Add(ivtUsage);
+                            AddIVTUsage(ivtUsage);
                         }
                     }
                 }
@@ -1256,7 +1256,7 @@ namespace BinaryCompatChecker
 
         private static bool AllPublic(FieldDefinition field)
         {
-            if (!field.IsPublic)
+            if (field.IsAssembly || field.IsFamilyAndAssembly)
             {
                 return false;
             }
@@ -1267,7 +1267,7 @@ namespace BinaryCompatChecker
 
         private static bool AllPublic(MethodDefinition method)
         {
-            if (!method.IsPublic)
+            if (method.IsAssembly || method.IsFamilyAndAssembly)
             {
                 return false;
             }
@@ -1315,7 +1315,7 @@ namespace BinaryCompatChecker
                             ExposingAssembly = reference.MainModule.FileName,
                             Member = referencedType.FullName
                         };
-                        ivtUsages.Add(ivtUsage);
+                        AddIVTUsage(ivtUsage);
                     }
                 }
                 else
@@ -1323,6 +1323,11 @@ namespace BinaryCompatChecker
                     diagnostics.Add($"In assembly '{referencing.Name.FullName}': Failed to resolve type reference '{referencedType.FullName}' in assembly '{reference.Name}'");
                 }
             }
+        }
+
+        private void AddIVTUsage(IVTUsage ivtUsage)
+        {
+            ivtUsages.Add(ivtUsage);
         }
 
         private Dictionary<string, bool> GetTypes(AssemblyDefinition assembly)
@@ -1353,7 +1358,7 @@ namespace BinaryCompatChecker
         {
             foreach (var nested in type.NestedTypes)
             {
-                types.Add(nested.FullName, nested.IsPublic);
+                types.Add(nested.FullName, nested.IsNestedPublic);
                 AddNestedTypes(nested, types);
             }
         }
