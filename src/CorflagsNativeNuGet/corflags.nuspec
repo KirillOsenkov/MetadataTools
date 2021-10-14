@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>corflags</id>
+    <version>1.0.0</version>
+    <authors>Kirill Osenkov</authors>
+    <owners>Kirill Osenkov</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/KirillOsenkov/MetadataTools</projectUrl>
+    <description>corflags.exe packaged as a tool</description>
+    <tags>corflags</tags>
+    <repository url="https://github.com/KirillOsenkov/MetadataTools" />
+  </metadata>
+  <files>
+    <file src="C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\CorFlags.exe" target="tools\CorFlags.exe" />
+  </files>
+</package>
