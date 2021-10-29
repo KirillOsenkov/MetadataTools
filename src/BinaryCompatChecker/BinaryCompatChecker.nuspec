@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>BinaryCompatChecker</id>
-    <version>1.0.21</version>
+    <version>1.0.23</version>
     <authors>Kirill Osenkov, Microsoft</authors>
     <owners>Kirill Osenkov, Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -13,8 +13,10 @@
     <repository url="https://github.com/KirillOsenkov/MetadataTools" />
   </metadata>
   <files>
-    <file src="bin\Debug\net472\BinaryCompatChecker.exe" target="tools\BinaryCompatChecker.exe" />
-    <file src="bin\Debug\net472\Mono.Cecil.dll" target="tools\Mono.Cecil.dll" />
+    <file src="bin\Debug\net5.0\BinaryCompatChecker.dll" target="tools\BinaryCompatChecker.dll" />
+    <file src="bin\Debug\net5.0\BinaryCompatChecker.exe" target="tools\BinaryCompatChecker.exe" />
+    <file src="bin\Debug\net5.0\BinaryCompatChecker.runtimeconfig.json" target="tools\BinaryCompatChecker.runtimeconfig.json" />
+    <file src="bin\Debug\net5.0\Mono.Cecil.dll" target="tools\Mono.Cecil.dll" />
     <file src="BinaryCompatChecker.props" target="build\BinaryCompatChecker.props" />
   </files>
 </package>
