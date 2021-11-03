@@ -28,6 +28,7 @@ namespace BinaryCompatChecker
         public static bool CallAssemblyLoadToResolveAssemblies { get; set; }
         public static bool ReportEmbeddedInteropTypes { get; set; } = true;
         public static bool IgnoreNetFrameworkAssemblies { get; set; }
+        public static bool ReportVersionMismatch { get; set; } = true;
 
         public class IVTUsage
         {
@@ -46,6 +47,12 @@ namespace BinaryCompatChecker
                 if (arg.Equals("/ignoreNetFx", StringComparison.OrdinalIgnoreCase))
                 {
                     IgnoreNetFrameworkAssemblies = true;
+                    arguments.Remove(arg);
+                }
+
+                if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportVersionMismatch = false;
                     arguments.Remove(arg);
                 }
 
@@ -404,6 +411,14 @@ namespace BinaryCompatChecker
                 }
             }
 
+            if (ReportVersionMismatch)
+            {
+                ReportVersionMismatches(versionMismatchesByName);
+            }
+        }
+
+        private void ReportVersionMismatches(Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
+        {
             foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
             {
                 string referencedFullName = versionMismatch.ExpectedReference.FullName;
@@ -573,12 +588,26 @@ namespace BinaryCompatChecker
             // Hacky way of detecting it.
             result = assembly
                 .CustomAttributes
-                .FirstOrDefault(a =>
-                    a.AttributeType.Name == "AssemblyProductAttribute" &&
-                    a.ConstructorArguments != null &&
-                    a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null) != null;
+                .FirstOrDefault(a => IsAssemblyProductFramework(a) || IsAssemblyMetadataFramework(a)) != null;
             frameworkAssemblyNames[key] = result;
             return result;
+        }
+
+        private static bool IsAssemblyMetadataFramework(CustomAttribute a)
+        {
+            return
+                a.AttributeType.Name == "AssemblyMetadataAttribute" &&
+                a.ConstructorArguments != null &&
+                a.ConstructorArguments.Count > 0 &&
+                a.ConstructorArguments[0].Value.ToString() == ".NETFrameworkAssembly";
+        }
+
+        private static bool IsAssemblyProductFramework(CustomAttribute a)
+        {
+            return
+                a.AttributeType.Name == "AssemblyProductAttribute" &&
+                a.ConstructorArguments != null &&
+                a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null;
         }
 
         /// <summary>
