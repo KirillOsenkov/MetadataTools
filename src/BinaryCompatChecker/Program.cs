@@ -23,6 +23,12 @@ namespace BinaryCompatChecker
         HashSet<string> unresolvedAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         HashSet<string> diagnostics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        private static Dictionary<string, bool> frameworkAssemblyNames = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        public static bool CallAssemblyLoadToResolveAssemblies { get; set; }
+        public static bool ReportEmbeddedInteropTypes { get; set; } = true;
+        public static bool IgnoreNetFrameworkAssemblies { get; set; }
+
         public class IVTUsage
         {
             public string ExposingAssembly { get; set; }
@@ -33,22 +39,25 @@ namespace BinaryCompatChecker
         [STAThread]
         static int Main(string[] args)
         {
-            bool ignoreNetFrameworkAssemblies = true;
-            bool reportEmbeddedInteropTypes = true;
-
             // Parse parameterized args
-            List<string> arguments = new List<string>(args);
+            var arguments = new List<string>(args);
             foreach (var arg in arguments.ToArray())
             {
                 if (arg.Equals("/ignoreNetFx", StringComparison.OrdinalIgnoreCase))
                 {
-                    ignoreNetFrameworkAssemblies = true;
+                    IgnoreNetFrameworkAssemblies = true;
                     arguments.Remove(arg);
                 }
 
                 if (arg.Equals("/ignoreEmbeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
                 {
-                    reportEmbeddedInteropTypes = false;
+                    ReportEmbeddedInteropTypes = false;
+                    arguments.Remove(arg);
+                }
+
+                if (arg.Equals("/assemblyLoad", StringComparison.OrdinalIgnoreCase))
+                {
+                    CallAssemblyLoadToResolveAssemblies = true;
                     arguments.Remove(arg);
                 }
             }
@@ -79,7 +88,11 @@ namespace BinaryCompatChecker
 
             var files = GetFiles(root, configFile, out var startFiles);
 
-            bool success = new Checker().Check(root, files, startFiles, reportFile, ignoreNetFrameworkAssemblies, reportEmbeddedInteropTypes);
+            bool success = new Checker().Check(
+                root,
+                files,
+                startFiles,
+                reportFile);
             return success ? 0 : 1;
         }
 
@@ -185,20 +198,14 @@ namespace BinaryCompatChecker
         private readonly List<VersionMismatch> versionMismatches
             = new List<VersionMismatch>();
 
-        private bool reportEmbeddedInteropTypes = true;
-
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
         public bool Check(
             string rootDirectory,
             IEnumerable<string> files,
             IEnumerable<string> startFiles,
-            string reportFile,
-            bool ignoreFrameworkAssemblies = false,
-            bool reportEmbeddedInteropTypes = false)
+            string reportFile)
         {
             bool success = true;
-
-            this.reportEmbeddedInteropTypes = reportEmbeddedInteropTypes;
 
             this.files = files;
             this.rootDirectory = rootDirectory;
@@ -251,7 +258,7 @@ namespace BinaryCompatChecker
                         }
                     }
 
-                    Check(assemblyDefinition, resolved, reference, ignoreFrameworkAssemblies);
+                    Check(assemblyDefinition, resolved, reference);
                 }
 
                 CheckMembers(assemblyDefinition);
@@ -546,8 +553,6 @@ namespace BinaryCompatChecker
             Console.Error.WriteLine(text);
         }
 
-        private static Dictionary<string, bool> frameworkAssemblyNames = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
         private static bool IsNetFrameworkAssembly(string assemblyName)
         {
             frameworkAssemblyNames.TryGetValue(assemblyName, out bool result);
@@ -587,10 +592,9 @@ namespace BinaryCompatChecker
         public void Check(
             AssemblyDefinition referencing,
             AssemblyDefinition referenced,
-            AssemblyNameReference reference,
-            bool ignoreFrameworkAssemblies)
+            AssemblyNameReference reference)
         {
-            if (!ignoreFrameworkAssemblies || !IsNetFrameworkAssembly(referenced))
+            if (!IgnoreNetFrameworkAssemblies || !IsNetFrameworkAssembly(referenced))
             {
                 if (reference.Version != referenced.Name.Version)
                 {
@@ -1121,7 +1125,7 @@ namespace BinaryCompatChecker
                 }
             }
 
-            if (reportEmbeddedInteropTypes && hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
+            if (ReportEmbeddedInteropTypes && hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
             {
                 diagnostics.Add($"In assembly '{assemblyFullName}': Embedded interop type {typeDef.FullName}");
             }
@@ -1396,6 +1400,11 @@ namespace BinaryCompatChecker
                     resolveCache[reference.FullName] = result;
                     return result;
                 }
+            }
+
+            if (!CallAssemblyLoadToResolveAssemblies)
+            {
+                return null;
             }
 
             try
