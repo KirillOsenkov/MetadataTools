@@ -125,8 +125,9 @@ namespace MetadataTools
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.Error.WriteLine($"Error reading file: {ex.Message}");
             }
 
             return list;
