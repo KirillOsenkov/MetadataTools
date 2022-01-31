@@ -37,6 +37,16 @@ namespace MetadataTools
                     DownloadSymbolsForAllFiles(Environment.CurrentDirectory, args[0]);
                     return 0;
                 }
+                else if (args[0].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+                {
+                    var files = GetFiles(args[0]);
+                    foreach (var file in files)
+                    {
+                        PrintPdbInfo(file);
+                    }
+
+                    return 0;
+                }
                 else
                 {
                     Error("Expected a .dll or .exe file as first argument");
@@ -92,6 +102,41 @@ namespace MetadataTools
             }
 
             return 0;
+        }
+
+        private static char[] pathSeparators = new [] { '\\', '/' };
+
+        public static IEnumerable<string> GetFiles(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            int lastSeparator = input.LastIndexOfAny(pathSeparators);
+            if (lastSeparator == -1)
+            {
+                var files = Directory.GetFiles(Environment.CurrentDirectory, input, SearchOption.AllDirectories);
+                return files;
+            }
+            else
+            {
+                if (lastSeparator > 0 && lastSeparator < input.Length - 1)
+                {
+                    var directory = input.Substring(0, lastSeparator);
+                    directory = Path.GetFullPath(directory);
+                    if (!Directory.Exists(directory))
+                    {
+                        return Enumerable.Empty<string>();
+                    }
+
+                    var pattern = input.Substring(lastSeparator + 1, input.Length - lastSeparator - 1);
+                    var files = Directory.GetFiles(directory, pattern, SearchOption.AllDirectories);
+                    return files;
+                }
+            }
+
+            return Enumerable.Empty<string>();
         }
 
         private static void DownloadSymbolsForAllFiles(string currentDirectory, string symbolPath)
@@ -157,6 +202,32 @@ namespace MetadataTools
                 Console.WriteLine("Found " + Path.GetFileName(pdb) + ":");
                 CheckMatch(dll, pdb);
             }
+        }
+
+        private static void PrintPdbInfo(string pdb)
+        {
+            Console.Write(pdb + ": ");
+
+            using var streamReader = new StreamReader(pdb);
+
+            char[] chars = new char[24];
+            var count = streamReader.Read(chars, 0, chars.Length);
+            if (count > 4 && new string(chars, 0, 4) == "BSJB")
+            {
+                Log("Portable pdb", ConsoleColor.Green);
+                return;
+            }
+
+            if (count == 24)
+            {
+                if (new string(chars) == "Microsoft C/C++ MSF 7.00")
+                {
+                    Log("Native pdb: Microsoft C/C++ MSF 7.00", ConsoleColor.Blue);
+                    return;
+                }
+            }
+
+            Log("Not a portable pdb", ConsoleColor.Yellow);
         }
 
         private static void PrintNameValue(string name, string value)
