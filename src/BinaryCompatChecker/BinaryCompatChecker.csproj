@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFrameworks>net472;net5.0</TargetFrameworks>
+    <TargetFrameworks>net472;net6.0</TargetFrameworks>
     <DebugType>embedded</DebugType>
     <LangVersion>preview</LangVersion>
     <RollForward>major</RollForward>
