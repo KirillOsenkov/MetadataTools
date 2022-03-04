@@ -29,6 +29,7 @@ namespace BinaryCompatChecker
         public static bool ReportEmbeddedInteropTypes { get; set; } = true;
         public static bool IgnoreNetFrameworkAssemblies { get; set; }
         public static bool ReportVersionMismatch { get; set; } = true;
+        public static bool ReportIntPtrConstructors { get; set; }
 
         public class IVTUsage
         {
@@ -65,6 +66,12 @@ namespace BinaryCompatChecker
                 if (arg.Equals("/assemblyLoad", StringComparison.OrdinalIgnoreCase))
                 {
                     CallAssemblyLoadToResolveAssemblies = true;
+                    arguments.Remove(arg);
+                }
+
+                if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportIntPtrConstructors = true;
                     arguments.Remove(arg);
                 }
             }
@@ -1060,6 +1067,21 @@ namespace BinaryCompatChecker
                     continue;
                 }
 
+                var foundINativeObjectImplementation = false;
+                const string iNativeObjectInterfaceFullName = "ObjCRuntime.INativeObject";
+                // Do not search the Xamarin.Mac assembly for NSObject/etc subclasses
+                const string xamarinMacDllName = "Xamarin.Mac.dll";
+                void CheckNativeObjectConstructors()
+                {
+                    // Looks for constructors that use IntPtr instead of NativeHandle. This will crash at runtime.
+                    // See https://github.com/xamarin/xamarin-macios/blob/14d5620f5f8b6e5b7541695a22ef7376807c400e/dotnet/BreakingChanges.md#nsobjecthandle-and-inativeobjecthandle-changed-type-from-systemintptr-to-objcruntimenativehandle
+                    if (typeDef.Methods.Any(m => m.IsConstructor && m.Parameters.Any(p => p.ParameterType.Name == "IntPtr")))
+                    {
+                        // TODO: Check that the ctor calls base? Is this possible?
+                        diagnostics.Add($"In assembly '{assemblyFullName}': Type {typeDef.FullName} has a potentially dangerous IntPtr constructor");
+                    }
+                }
+
                 if (typeDef.HasInterfaces)
                 {
                     foreach (var interfaceImplementation in typeDef.Interfaces)
@@ -1069,6 +1091,15 @@ namespace BinaryCompatChecker
 
                         try
                         {
+                            if (ReportIntPtrConstructors
+                                && !foundINativeObjectImplementation
+                                && module.Name != xamarinMacDllName
+                                && interfaceTypeRef.FullName == iNativeObjectInterfaceFullName)
+                            {
+                                foundINativeObjectImplementation = true;
+                                CheckNativeObjectConstructors();
+                            }
+
                             var interfaceTypeDef = interfaceTypeRef.Resolve();
                             if (interfaceTypeDef != null)
                             {
@@ -1096,6 +1127,27 @@ namespace BinaryCompatChecker
                         catch
                         {
                         }
+                    }
+                }
+
+                // For some reason, typeDef.Interfaces does not always show an INativeObject implementation even
+                // when it is there (via NSObject, typically). Resolve all base types to see if any of them
+                // implement INativeObject.
+                if (ReportIntPtrConstructors && !foundINativeObjectImplementation && module.Name != xamarinMacDllName)
+                {
+                    var candidateNativeTypeDef = typeDef;
+                    while (candidateNativeTypeDef != null)
+                    {
+                        if (candidateNativeTypeDef.HasInterfaces && candidateNativeTypeDef.Interfaces.Any(i => i.InterfaceType.FullName == "ObjCRuntime.INativeObject"))
+                        {
+                            break;
+                        }
+                        candidateNativeTypeDef = ResolveBaseType(candidateNativeTypeDef);
+                    }
+
+                    if (candidateNativeTypeDef != null)
+                    {
+                        CheckNativeObjectConstructors();
                     }
                 }
 
