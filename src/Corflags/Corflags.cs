@@ -44,10 +44,11 @@ namespace PEFile
                     offset += 0x10; // flags offset
                     stream.Position = offset;
                     int value = (int)attributes;
-                    stream.WriteByte((byte)(value & 0xFF));
-                    stream.WriteByte((byte)(value & 0xFF00));
-                    stream.WriteByte((byte)(value & 0xFF0000));
-                    stream.WriteByte((byte)(value & 0xFF000000));
+                    
+                    stream.WriteByte((byte)value);
+                    stream.WriteByte((byte)(value >> 8));
+                    stream.WriteByte((byte)(value >> 16));
+                    stream.WriteByte((byte)(value >> 24));
                 }
             }
         }
