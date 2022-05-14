@@ -1057,6 +1057,9 @@ namespace BinaryCompatChecker
 
         private void CheckTypeDefinitions(string assemblyFullName, ModuleDefinition module, List<MemberReference> references)
         {
+            // Do not search the Xamarin.Mac assembly for NSObject/etc subclasses
+            var moduleIsXamarinMac = module.Name == "Xamarin.Mac.dll" || module.Name == "Microsoft.macOS.dll";
+
             var types = module.GetTypes();
             foreach (var typeDef in types)
             {
@@ -1069,8 +1072,6 @@ namespace BinaryCompatChecker
 
                 var foundINativeObjectImplementation = false;
                 const string iNativeObjectInterfaceFullName = "ObjCRuntime.INativeObject";
-                // Do not search the Xamarin.Mac assembly for NSObject/etc subclasses
-                const string xamarinMacDllName = "Xamarin.Mac.dll";
                 void CheckNativeObjectConstructors()
                 {
                     // Looks for constructors that use IntPtr instead of NativeHandle. This will crash at runtime.
@@ -1093,7 +1094,7 @@ namespace BinaryCompatChecker
                         {
                             if (ReportIntPtrConstructors
                                 && !foundINativeObjectImplementation
-                                && module.Name != xamarinMacDllName
+                                && !moduleIsXamarinMac
                                 && interfaceTypeRef.FullName == iNativeObjectInterfaceFullName)
                             {
                                 foundINativeObjectImplementation = true;
@@ -1133,7 +1134,7 @@ namespace BinaryCompatChecker
                 // For some reason, typeDef.Interfaces does not always show an INativeObject implementation even
                 // when it is there (via NSObject, typically). Resolve all base types to see if any of them
                 // implement INativeObject.
-                if (ReportIntPtrConstructors && !foundINativeObjectImplementation && module.Name != xamarinMacDllName)
+                if (ReportIntPtrConstructors && !foundINativeObjectImplementation && !moduleIsXamarinMac)
                 {
                     var candidateNativeTypeDef = typeDef;
                     while (candidateNativeTypeDef != null)
