@@ -256,10 +256,8 @@ namespace BinaryCompatChecker
                     var resolved = Resolve(reference);
                     if (resolved == null)
                     {
-                        if (unresolvedAssemblies.Add(reference.Name))
-                        {
-                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
-                        }
+                        unresolvedAssemblies.Add(reference.Name);
+                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
 
                         continue;
                     }
