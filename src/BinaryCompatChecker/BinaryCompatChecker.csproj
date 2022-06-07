@@ -12,4 +12,27 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.2" />
   </ItemGroup>
 
+  <Target Name="PrepareNupkgInfo" AfterTargets="CoreBuild">
+    <PropertyGroup>
+      <NuspecPath>$(MSBuildProjectDirectory)\BinaryCompatChecker.nuspec</NuspecPath>
+      <NupkgPath>$(OutDir)BinaryCompatChecker.nupkg</NupkgPath>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="CreateNupkg"
+          AfterTargets="Build"
+          Inputs="$(TargetPath);$(NuspecPath);$(MSBuildThisFileFullPath)"
+          Outputs="$(NupkgPath)"
+          Condition="$(TargetFramework) == 'net6.0'">
+    <PackTask
+        PackItem="$(NuspecPath)"
+        NuspecFile="$(NuspecPath)"
+        NuspecBasePath="$(MSBuildProjectDirectory)"
+        NuspecOutputPath="$(NuspecOutputPath)"
+        PackageOutputPath="$(OutDir)"
+        RestoreOutputPath="$(RestoreOutputPath)"
+        SymbolPackageFormat="snupkg"
+        />
+  </Target>
+
 </Project>
