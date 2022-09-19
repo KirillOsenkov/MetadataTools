@@ -1112,6 +1112,12 @@ namespace BinaryCompatChecker
                                             continue;
                                         }
 
+                                        if (interfaceMethod.HasBody)
+                                        {
+                                            // Default method implementation provided by the interface itself
+                                            continue;
+                                        }
+
                                         bool sawGenerics = false;
                                         var matching = FindInterfaceMethodImplementation(typeDef, interfaceMethod, ref sawGenerics);
                                         if (matching == null && !sawGenerics)
