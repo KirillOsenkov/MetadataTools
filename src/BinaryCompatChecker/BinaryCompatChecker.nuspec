@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>BinaryCompatChecker</id>
-    <version>1.0.27</version>
+    <version>1.0.28</version>
     <authors>Kirill Osenkov, Microsoft</authors>
     <owners>Kirill Osenkov, Microsoft</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
