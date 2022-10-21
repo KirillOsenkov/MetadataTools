@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Mono.Cecil" Version="0.11.2" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.4" />
   </ItemGroup>
 
   <Target Name="PrepareNupkgInfo" AfterTargets="CoreBuild">
@@ -19,20 +19,8 @@
     </PropertyGroup>
   </Target>
 
-  <Target Name="CreateNupkg"
-          AfterTargets="Build"
-          Inputs="$(TargetPath);$(NuspecPath);$(MSBuildThisFileFullPath)"
-          Outputs="$(NupkgPath)"
-          Condition="$(TargetFramework) == 'net6.0'">
-    <PackTask
-        PackItem="$(NuspecPath)"
-        NuspecFile="$(NuspecPath)"
-        NuspecBasePath="$(MSBuildProjectDirectory)"
-        NuspecOutputPath="$(NuspecOutputPath)"
-        PackageOutputPath="$(OutDir)"
-        RestoreOutputPath="$(RestoreOutputPath)"
-        SymbolPackageFormat="snupkg"
-        />
+  <Target Name="CreateNupkg" AfterTargets="Build" Inputs="$(TargetPath);$(NuspecPath);$(MSBuildThisFileFullPath)" Outputs="$(NupkgPath)" Condition="$(TargetFramework) == 'net6.0'">
+    <PackTask PackItem="$(NuspecPath)" NuspecFile="$(NuspecPath)" NuspecBasePath="$(MSBuildProjectDirectory)" NuspecOutputPath="$(NuspecOutputPath)" PackageOutputPath="$(OutDir)" RestoreOutputPath="$(RestoreOutputPath)" SymbolPackageFormat="snupkg"></PackTask>
   </Target>
 
 </Project>
