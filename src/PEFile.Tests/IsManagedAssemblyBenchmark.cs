@@ -23,9 +23,9 @@ namespace PEFile.Tests
         }
 
         [Benchmark]
-        public void PEFileReader()
+        public void PEFileReaderTest()
         {
-            PEFile.PEFileReader.IsManagedAssembly(filePath);
+            PEFileReader.IsManagedAssembly(filePath);
         }
 
         private void ReadAssemblyName(string filePath)

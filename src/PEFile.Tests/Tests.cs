@@ -24,7 +24,7 @@ namespace PEFile.Tests
                     {
                         try
                         {
-                            var isManaged = PEFile.PEFileReader.IsManagedAssembly(file);
+                            var isManaged = PEFileReader.IsManagedAssembly(file);
                             var expected = TryGetAssemblyName(file) != null;
                             if (expected != isManaged)
                             {
