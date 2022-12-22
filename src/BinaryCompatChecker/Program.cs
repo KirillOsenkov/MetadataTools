@@ -67,6 +67,11 @@ namespace BinaryCompatChecker
                 {
                     CallAssemblyLoadToResolveAssemblies = true;
                     arguments.Remove(arg);
+
+                    if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                    {
+                        AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
+                    }
                 }
 
                 if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
@@ -108,6 +113,21 @@ namespace BinaryCompatChecker
                 startFiles,
                 reportFile);
             return success ? 0 : 1;
+        }
+
+        private static Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+        {
+            if (args.Name.StartsWith("Microsoft.Build", StringComparison.OrdinalIgnoreCase))
+            {
+                var candidate = @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin";
+                candidate = Path.Combine(candidate, args.Name.Substring(0, args.Name.IndexOf(',')) + ".dll");
+                if (File.Exists(candidate))
+                {
+                    return Assembly.Load(AssemblyName.GetAssemblyName(candidate));
+                }
+            }
+
+            return null;
         }
 
         private static void PrintUsage()
