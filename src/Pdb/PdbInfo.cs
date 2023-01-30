@@ -171,11 +171,6 @@ namespace MetadataTools
             }
         }
 
-        private static Guid TryReadWindowsPdbGuid(string pdbFilePath)
-        {
-            throw new NotImplementedException();
-        }
-
         //public static void DownloadPdb(string assemblyFilePath)
         //{
         //    var pdbInfo = Read(assemblyFilePath);
