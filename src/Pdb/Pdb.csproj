@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -11,11 +11,11 @@
     <Compile Include="..\PEFile\IsManagedAssembly.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Net.Http"></Reference>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.DiaSymReader" Version="1.4.0" />
+    <PackageReference Include="Microsoft.DiaSymReader" Version="2.0.0" />
     <PackageReference Include="Microsoft.DiaSymReader.Native" Version="1.7.0" />
-    <PackageReference Include="System.Reflection.Metadata" Version="6.0.1" />
+    <PackageReference Include="System.Reflection.Metadata" Version="7.0.1" />
   </ItemGroup>
 </Project>
