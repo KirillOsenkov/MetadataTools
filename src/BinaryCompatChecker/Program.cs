@@ -126,6 +126,15 @@ namespace BinaryCompatChecker
                     return Assembly.Load(AssemblyName.GetAssemblyName(candidate));
                 }
             }
+            else if (args.Name.StartsWith("NuGet.", StringComparison.OrdinalIgnoreCase))
+            {
+                var candidate = @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\NuGet";
+                candidate = Path.Combine(candidate, args.Name.Substring(0, args.Name.IndexOf(',')) + ".dll");
+                if (File.Exists(candidate))
+                {
+                    return Assembly.Load(AssemblyName.GetAssemblyName(candidate));
+                }
+            }
 
             return null;
         }
