@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using Mono.Cecil;
@@ -14,6 +15,7 @@ namespace RefDump
         public string FileSpec { get; private set; }
         public string OutputXml { get; set; }
         public string FilterToAssembly { get; set; }
+        public bool UseRegexFilter { get; set; }
         public bool OutputTypes { get; set; } = false;
         public bool OutputMembers { get; set; } = false;
         public bool Recursive { get; set; } = false;
@@ -41,6 +43,7 @@ namespace RefDump
             {
                 document = new XDocument();
                 rootXml = new XElement("Assemblies");
+                document.Add(rootXml);
             }
 
             if (FilterToAssembly != null)
@@ -48,9 +51,18 @@ namespace RefDump
                 Log($"References containing \"{FilterToAssembly}\":", ConsoleColor.Green);
             }
 
-            if (FileSpec.Contains("*") || FileSpec.Contains("?"))
+            var root = Environment.CurrentDirectory;
+            IEnumerable<string> files;
+
+            if (UseRegexFilter)
             {
-                var root = Environment.CurrentDirectory;
+                Regex regex = new Regex(FileSpec, RegexOptions.Compiled);
+
+                files = Directory.GetFiles(root, "*", Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
+                files = files.Where(f => regex.IsMatch(f));
+            }
+            else if (FileSpec.Contains("*") || FileSpec.Contains("?"))
+            {
                 var separator = FileSpec.LastIndexOf('\\');
                 if (separator > -1)
                 {
@@ -67,19 +79,21 @@ namespace RefDump
                     }
                 }
 
-                var files = Directory.GetFiles(root, FileSpec, Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-                foreach (var file in files)
-                {
-                    DumpAssembly(file, rootXml);
-                }
+                files = Directory.GetFiles(root, FileSpec, Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
             }
             else if (File.Exists(FileSpec))
             {
-                DumpAssembly(FileSpec, rootXml);
+                files = new[] { FileSpec };
             }
             else
             {
+                files = Array.Empty<string>();
                 Console.Error.WriteLine("File(s) not found: " + FileSpec);
+            }
+
+            foreach (var file in files)
+            {
+                DumpAssembly(file, rootXml);
             }
 
             if (GenerateGraph)
@@ -503,6 +517,12 @@ namespace RefDump
                     continue;
                 }
 
+                if (arg == "-r" || arg == "/r")
+                {
+                    UseRegexFilter = true;
+                    continue;
+                }
+
                 Log("Unknown argument: " + arg, ConsoleColor.Red);
                 return false;
             }
@@ -513,7 +533,7 @@ namespace RefDump
         private static void PrintUsage()
         {
             Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
-            Log(@"refdump file.dll [-a:<refname>] [-t] [-m] [-s] [output.xml]", ConsoleColor.White);
+            Log(@"refdump file.dll [-r] [-a:<refname>] [-t] [-m] [-s] [output.xml]", ConsoleColor.White);
 
             Log(@"    Lists all references of the input assembly(ies).
     (could be a file mask such as *.dll)
@@ -522,9 +542,10 @@ namespace RefDump
     -a:   Narrow results to a particular reference assembly,
           <refname> is a substring of the reference assembly
           name.
-    -s    If the file pattern is specified, such as *.dll, 
+    -s    If the file pattern or regex is specified, 
           -s or /s indicates that the pattern should recurse
-          into all subdirectories to find *.dll files.
+          into all subdirectories to find matching files.
+    -r:   Treat file pattern as a regular expression.
     -g    Copy the reference graph to Clipboard in GraphViz
           format. Paste into http://www.webgraphviz.com/
           to generate an image.
