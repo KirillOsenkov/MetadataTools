@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Windows.Forms;
 using System.Xml.Linq;
 using Mono.Cecil;
 
@@ -117,7 +116,7 @@ namespace RefDump
 
             sb.AppendLine("}");
 
-            Clipboard.SetText(sb.ToString());
+            File.WriteAllText("AssemblyGraph.txt", sb.ToString());
         }
 
         private void DumpAssembly(string filePath, XElement rootXml = null)
