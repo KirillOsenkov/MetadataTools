@@ -269,6 +269,7 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
+                Console.WriteLine(file);
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
