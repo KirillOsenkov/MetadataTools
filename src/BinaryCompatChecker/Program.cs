@@ -27,7 +27,6 @@ namespace BinaryCompatChecker
 
         public static bool CallAssemblyLoadToResolveAssemblies { get; set; }
         public static bool ReportEmbeddedInteropTypes { get; set; } = true;
-        public static bool IgnoreNetFrameworkAssemblies { get; set; }
         public static bool ReportVersionMismatch { get; set; } = true;
         public static bool ReportIntPtrConstructors { get; set; }
 
@@ -45,12 +44,6 @@ namespace BinaryCompatChecker
             var arguments = new List<string>(args);
             foreach (var arg in arguments.ToArray())
             {
-                if (arg.Equals("/ignoreNetFx", StringComparison.OrdinalIgnoreCase))
-                {
-                    IgnoreNetFrameworkAssemblies = true;
-                    arguments.Remove(arg);
-                }
-
                 if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
                 {
                     ReportVersionMismatch = false;
@@ -99,6 +92,7 @@ namespace BinaryCompatChecker
                 configFile = args[2];
             }
 
+            root = Path.GetFullPath(root);
             if (!Directory.Exists(root) && !File.Exists(root))
             {
                 Console.Error.WriteLine("Specified root directory or file doesn't exist: " + root);
@@ -266,6 +260,10 @@ namespace BinaryCompatChecker
                 }
             }
 
+            HashSet<string> frameworkAssemblyNames = GetFrameworkAssemblyNames();
+            HashSet<string> assemblyNamesToIgnore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            assemblyNamesToIgnore.UnionWith(frameworkAssemblyNames);
+
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
@@ -283,24 +281,32 @@ namespace BinaryCompatChecker
                 var references = assemblyDefinition.MainModule.AssemblyReferences;
                 foreach (var reference in references)
                 {
-                    var resolved = Resolve(reference);
-                    if (resolved == null)
+                    if (assemblyNamesToIgnore.Contains(reference.Name))
+                    {
+                        continue;
+                    }
+
+                    var resolvedAssemblyDefinition = Resolve(reference);
+                    if (resolvedAssemblyDefinition == null)
                     {
                         unresolvedAssemblies.Add(reference.Name);
                         diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
 
                         continue;
                     }
-                    else
+
+                    if (IsNetFrameworkAssembly(resolvedAssemblyDefinition))
                     {
-                        var resolvedPath = resolved.MainModule.FileName;
-                        if (resolvedPath != null && visitedFiles.Add(resolvedPath))
-                        {
-                            fileQueue.Enqueue(resolvedPath);
-                        }
+                        continue;
                     }
 
-                    Check(assemblyDefinition, resolved, reference);
+                    var resolvedPath = resolvedAssemblyDefinition.MainModule.FileName;
+                    if (resolvedPath != null && visitedFiles.Add(resolvedPath))
+                    {
+                        fileQueue.Enqueue(resolvedPath);
+                    }
+
+                    Check(assemblyDefinition, resolvedAssemblyDefinition, reference);
                 }
 
                 CheckMembers(assemblyDefinition);
@@ -352,6 +358,16 @@ namespace BinaryCompatChecker
                 u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
 
             return success;
+        }
+
+        private HashSet<string> GetFrameworkAssemblyNames()
+        {
+            var corlibPath = typeof(object).Assembly.Location;
+            var frameworkDirectory = Path.GetDirectoryName(corlibPath);
+            var files = Directory.GetFiles(frameworkDirectory, "System*.dll").Select(Path.GetFileNameWithoutExtension);
+            var result = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+            result.Add("mscorlib");
+            return result;
         }
 
         private static bool IsRoslynAssembly(string assemblyName)
@@ -642,7 +658,9 @@ namespace BinaryCompatChecker
             return
                 a.AttributeType.Name == "AssemblyProductAttribute" &&
                 a.ConstructorArguments != null &&
-                a.ConstructorArguments.FirstOrDefault(c => c.Value.ToString() == "Microsoft® .NET Framework").Value != null;
+                a.ConstructorArguments.FirstOrDefault(c =>
+                    c.Value.ToString() == "Microsoft® .NET Framework" ||
+                    c.Value.ToString() == "Microsoft® .NET").Value != null;
         }
 
         /// <summary>
@@ -658,17 +676,14 @@ namespace BinaryCompatChecker
             AssemblyDefinition referenced,
             AssemblyNameReference reference)
         {
-            if (!IgnoreNetFrameworkAssemblies || !IsNetFrameworkAssembly(referenced))
+            if (reference.Version != referenced.Name.Version)
             {
-                if (reference.Version != referenced.Name.Version)
+                versionMismatches.Add(new VersionMismatch()
                 {
-                    versionMismatches.Add(new VersionMismatch()
-                    {
-                        Referencer = referencing,
-                        ExpectedReference = reference,
-                        ActualAssembly = referenced
-                    });
-                }
+                    Referencer = referencing,
+                    ExpectedReference = reference,
+                    ActualAssembly = referenced
+                });
             }
 
             CheckTypes(referencing, referenced);
@@ -1486,13 +1501,15 @@ namespace BinaryCompatChecker
         private void Log(string text)
         {
             text = text.Replace('\r', ' ').Replace('\n', ' ');
+            text = text.Replace(", Culture=neutral", "");
             reportLines.Add(text);
         }
 
+        private string frameworkDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+
         private AssemblyDefinition Resolve(AssemblyNameReference reference)
         {
-            AssemblyDefinition result = null;
-            if (resolveCache.TryGetValue(reference.FullName, out result))
+            if (resolveCache.TryGetValue(reference.FullName, out AssemblyDefinition result))
             {
                 return result;
             }
@@ -1516,6 +1533,16 @@ namespace BinaryCompatChecker
                     resolveCache[reference.FullName] = result;
                     return result;
                 }
+            }
+
+            string shortName = reference.Name;
+            string frameworkCandidate = Path.Combine(frameworkDirectory, shortName + ".dll");
+            if ((string.Equals(shortName, "mscorlib", StringComparison.OrdinalIgnoreCase) ||
+                shortName.StartsWith("System", StringComparison.OrdinalIgnoreCase)) && File.Exists(frameworkCandidate))
+            {
+                result = Load(frameworkCandidate);
+                resolveCache[reference.FullName] = result;
+                return result;
             }
 
             if (!CallAssemblyLoadToResolveAssemblies)
@@ -1556,7 +1583,17 @@ namespace BinaryCompatChecker
                     };
                     assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                     filePathToModuleDefinition[filePath] = assemblyDefinition;
-                    assembliesExamined.Add($"{filePath}; {assemblyDefinition.FullName}");
+
+                    if (!IsNetFrameworkAssembly(assemblyDefinition))
+                    {
+                        string relativePath = filePath;
+                        if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
+                        {
+                            relativePath = relativePath.Substring(rootDirectory.Length + 1);
+                        }
+
+                        assembliesExamined.Add($"{relativePath}; {assemblyDefinition.FullName}");
+                    }
                 }
                 catch (Exception ex)
                 {
