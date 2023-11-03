@@ -27,6 +27,7 @@ namespace BinaryCompatChecker
 
         public static bool CallAssemblyLoadToResolveAssemblies { get; set; }
         public static bool ReportEmbeddedInteropTypes { get; set; }
+        public static bool ReportIVT { get; set; }
         public static bool ReportVersionMismatch { get; set; } = true;
         public static bool ReportIntPtrConstructors { get; set; }
 
@@ -65,6 +66,12 @@ namespace BinaryCompatChecker
                     {
                         AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
                     }
+                }
+
+                if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportIVT = true;
+                    arguments.Remove(arg);
                 }
 
                 if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
@@ -371,12 +378,15 @@ namespace BinaryCompatChecker
                 ListExaminedAssemblies(reportFile);
             }
 
-            WriteIVTReport(reportFile);
+            if (ReportIVT)
+            {
+                WriteIVTReport(reportFile);
 
-            WriteIVTReport(
-                reportFile,
-                ".ivt.roslyn.txt",
-                u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
+                WriteIVTReport(
+                    reportFile,
+                    ".ivt.roslyn.txt",
+                    u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
+            }
 
             return success;
         }
