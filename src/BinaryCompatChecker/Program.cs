@@ -178,7 +178,8 @@ namespace BinaryCompatChecker
             {
                 if (!file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
                     !file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                    !file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
+                    !file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase) &&
+                    !file.EndsWith(".dll.config", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
