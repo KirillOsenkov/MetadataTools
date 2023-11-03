@@ -107,7 +107,7 @@ namespace BinaryCompatChecker
                 startFiles,
                 reportFile);
             return success ? 0 : 1;
-        }
+       }
 
         private static Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
@@ -167,6 +167,11 @@ namespace BinaryCompatChecker
                 if (!file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
                     !file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
                     !file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (file.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -272,6 +277,17 @@ namespace BinaryCompatChecker
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
                 {
+                    continue;
+                }
+
+                if (IsNetFrameworkAssembly(assemblyDefinition))
+                {
+                    if (IsFacadeAssembly(assemblyDefinition))
+                    {
+                        var relativePath = GetRelativePath(file);
+                        Log($"Facade assembly: {relativePath}");
+                    }
+
                     continue;
                 }
 
@@ -668,6 +684,12 @@ namespace BinaryCompatChecker
         /// </summary>
         private static bool IsFacadeAssembly(AssemblyDefinition assembly)
         {
+            var types = assembly.MainModule.Types;
+            if (types.Count == 1 && types[0].FullName == "<Module>" && assembly.MainModule.HasExportedTypes)
+            {
+                return true;
+            }
+
             return false;
         }
 
@@ -1325,7 +1347,26 @@ namespace BinaryCompatChecker
                 }
                 catch (Exception ex)
                 {
-                    diagnostics.Add($"In assembly '{assemblyFullName}': {ex.Message}");
+                    bool report = true;
+
+                    TypeReference typeReference = memberReference as TypeReference ??
+                        memberReference.DeclaringType;
+
+                    if (typeReference != null && typeReference.Scope.Name is string scope)
+                    {
+                        if (scope.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
+                            scope.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+                            scope.Equals("netstandard", StringComparison.OrdinalIgnoreCase) ||
+                            scope.Equals("mscorlib", StringComparison.OrdinalIgnoreCase))
+                        {
+                            report = false;
+                        }
+                    }
+
+                    if (report)
+                    {
+                        diagnostics.Add($"In assembly '{assemblyFullName}': {ex.Message}");
+                    }
                 }
             }
         }
@@ -1530,7 +1571,11 @@ namespace BinaryCompatChecker
                 if (string.Equals(Path.GetFileNameWithoutExtension(file), reference.Name, StringComparison.OrdinalIgnoreCase))
                 {
                     result = Load(file);
-                    resolveCache[reference.FullName] = result;
+                    if (result != null && !IsFacadeAssembly(result))
+                    {
+                        resolveCache[reference.FullName] = result;
+                    }
+
                     return result;
                 }
             }
@@ -1586,12 +1631,7 @@ namespace BinaryCompatChecker
 
                     if (!IsNetFrameworkAssembly(assemblyDefinition))
                     {
-                        string relativePath = filePath;
-                        if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
-                        {
-                            relativePath = relativePath.Substring(rootDirectory.Length + 1);
-                        }
-
+                        string relativePath = GetRelativePath(filePath);
                         assembliesExamined.Add($"{relativePath}; {assemblyDefinition.FullName}");
                     }
                 }
@@ -1603,6 +1643,17 @@ namespace BinaryCompatChecker
             }
 
             return assemblyDefinition;
+        }
+
+        private string GetRelativePath(string filePath)
+        {
+            string relativePath = filePath;
+            if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                relativePath = relativePath.Substring(rootDirectory.Length + 1);
+            }
+
+            return relativePath;
         }
     }
 }
