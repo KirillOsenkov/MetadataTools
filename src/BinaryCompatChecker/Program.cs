@@ -26,7 +26,7 @@ namespace BinaryCompatChecker
         private static Dictionary<string, bool> frameworkAssemblyNames = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
         public static bool CallAssemblyLoadToResolveAssemblies { get; set; }
-        public static bool ReportEmbeddedInteropTypes { get; set; } = true;
+        public static bool ReportEmbeddedInteropTypes { get; set; }
         public static bool ReportVersionMismatch { get; set; } = true;
         public static bool ReportIntPtrConstructors { get; set; }
 
@@ -50,9 +50,9 @@ namespace BinaryCompatChecker
                     arguments.Remove(arg);
                 }
 
-                if (arg.Equals("/ignoreEmbeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
+                if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
                 {
-                    ReportEmbeddedInteropTypes = false;
+                    ReportEmbeddedInteropTypes = true;
                     arguments.Remove(arg);
                 }
 
@@ -61,7 +61,7 @@ namespace BinaryCompatChecker
                     CallAssemblyLoadToResolveAssemblies = true;
                     arguments.Remove(arg);
 
-                    if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                    if (IsWindows())
                     {
                         AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
                     }
@@ -108,6 +108,11 @@ namespace BinaryCompatChecker
                 reportFile);
             return success ? 0 : 1;
        }
+
+        private static bool IsWindows()
+        {
+            return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        }
 
         private static Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
@@ -382,7 +387,7 @@ namespace BinaryCompatChecker
             var frameworkDirectory = Path.GetDirectoryName(corlibPath);
             var files = Directory.GetFiles(frameworkDirectory, "System*.dll").Select(Path.GetFileNameWithoutExtension);
             var result = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
-            result.Add("mscorlib");
+            result.UnionWith(frameworkNames);
             return result;
         }
 
@@ -1352,15 +1357,9 @@ namespace BinaryCompatChecker
                     TypeReference typeReference = memberReference as TypeReference ??
                         memberReference.DeclaringType;
 
-                    if (typeReference != null && typeReference.Scope.Name is string scope)
+                    if (typeReference != null && typeReference.Scope.Name is string scope && IsFrameworkName(scope))
                     {
-                        if (scope.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
-                            scope.Equals("System", StringComparison.OrdinalIgnoreCase) ||
-                            scope.Equals("netstandard", StringComparison.OrdinalIgnoreCase) ||
-                            scope.Equals("mscorlib", StringComparison.OrdinalIgnoreCase))
-                        {
-                            report = false;
-                        }
+                        report = false;
                     }
 
                     if (report)
@@ -1546,7 +1545,12 @@ namespace BinaryCompatChecker
             reportLines.Add(text);
         }
 
-        private string frameworkDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        private string dotnetRuntimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        private string desktopNetFrameworkDirectory =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "Microsoft.NET",
+                "Framework",
+                "v4.0.30319");
 
         private AssemblyDefinition Resolve(AssemblyNameReference reference)
         {
@@ -1581,13 +1585,23 @@ namespace BinaryCompatChecker
             }
 
             string shortName = reference.Name;
-            string frameworkCandidate = Path.Combine(frameworkDirectory, shortName + ".dll");
-            if ((string.Equals(shortName, "mscorlib", StringComparison.OrdinalIgnoreCase) ||
-                shortName.StartsWith("System", StringComparison.OrdinalIgnoreCase)) && File.Exists(frameworkCandidate))
+
+            string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
+            if (IsWindows())
+            {
+                frameworkCandidate = Path.Combine(desktopNetFrameworkDirectory, shortName + ".dll");
+            }
+
+            bool isFrameworkName = IsFrameworkName(shortName);
+
+            if (isFrameworkName && File.Exists(frameworkCandidate))
             {
                 result = Load(frameworkCandidate);
-                resolveCache[reference.FullName] = result;
-                return result;
+                if (result != null)
+                {
+                    resolveCache[reference.FullName] = result;
+                    return result;
+                }
             }
 
             if (!CallAssemblyLoadToResolveAssemblies)
@@ -1608,6 +1622,25 @@ namespace BinaryCompatChecker
                 diagnostics.Add(ex.Message);
                 return null;
             }
+        }
+
+        private static HashSet<string> frameworkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "mscorlib",
+            "Microsoft.CSharp",
+            "Microsoft.VisualC",
+            "netstandard",
+            "PresentationCore",
+            "PresentationFramework",
+            "System",
+            "WindowsBase"
+        };
+
+        private static bool IsFrameworkName(string shortName)
+        {
+            return
+                shortName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
+                frameworkNames.Contains(shortName);
         }
 
         private AssemblyDefinition Load(string filePath)
