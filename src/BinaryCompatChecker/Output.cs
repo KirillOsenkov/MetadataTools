@@ -8,6 +8,33 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
+    public static void WriteError(string text)
+    {
+        WriteLine(text, ConsoleColor.Red, Console.Error);
+    }
+
+    public static void WriteLine(string text, ConsoleColor? color = null, TextWriter writer = null)
+    {
+        writer ??= Console.Out;
+
+        lock (Console.Error)
+        {
+            ConsoleColor originalColor = ConsoleColor.Gray;
+            if (color != null)
+            {
+                originalColor = Console.ForegroundColor;
+                Console.ForegroundColor = color.Value;
+            }
+
+            writer.WriteLine(text);
+
+            if (color != null)
+            {
+                Console.ForegroundColor = originalColor;
+            }
+        }
+    }
+
     private void OutputDiff(IEnumerable<string> baseline, IEnumerable<string> reportLines)
     {
         var removed = baseline.Except(reportLines);
@@ -15,32 +42,27 @@ public partial class Checker
 
         if (removed.Any())
         {
-            OutputError("=================================");
-            OutputError("These expected lines are missing:");
+            WriteError("=================================");
+            WriteError("These expected lines are missing:");
             foreach (var removedLine in removed)
             {
-                OutputError(removedLine);
+                WriteError(removedLine);
             }
 
-            OutputError("=================================");
+            WriteError("=================================");
         }
 
         if (added.Any())
         {
-            OutputError("=================================");
-            OutputError("These actual lines are new:");
+            WriteError("=================================");
+            WriteError("These actual lines are new:");
             foreach (var addedLine in added)
             {
-                OutputError(addedLine);
+                WriteError(addedLine);
             }
 
-            OutputError("=================================");
+            WriteError("=================================");
         }
-    }
-
-    private void OutputError(string text)
-    {
-        Console.Error.WriteLine(text);
     }
 
     private void Log(string text)

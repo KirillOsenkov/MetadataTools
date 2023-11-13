@@ -194,7 +194,7 @@ public partial class Checker
         string shortName = reference.Name;
 
         string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
-        if (IsWindows())
+        if (IsWindows)
         {
             frameworkCandidate = Path.Combine(desktopNetFrameworkDirectory, shortName + ".dll");
         }

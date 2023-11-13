@@ -13,8 +13,8 @@ namespace BinaryCompatChecker
         private Regex m_inclusionRegex;
         private Regex m_exclusionRegex;
 
-        public Regex InclusionRegex => m_inclusionRegex ?? (m_inclusionRegex = new Regex(InclusionPattern));
-        public Regex ExclusionRegex => m_exclusionRegex ?? (m_exclusionRegex = new Regex(ExclusionPattern));
+        public Regex InclusionRegex => m_inclusionRegex ??= new Regex(InclusionPattern);
+        public Regex ExclusionRegex => m_exclusionRegex ??= new Regex(ExclusionPattern);
 
         public IncludeExcludePattern(string inclusionPattern, string exclusionPattern)
         {
@@ -75,8 +75,7 @@ namespace BinaryCompatChecker
 
             foreach (var line in lines)
             {
-                bool isNegative = false;
-                var parsed = Parse(line, out isNegative);
+                var parsed = Parse(line, out bool isNegative);
                 if (parsed != null)
                 {
                     if (isNegative)
@@ -124,7 +123,7 @@ namespace BinaryCompatChecker
             return PrepareRegexPattern(line);
         }
 
-        private static string Combine(IEnumerable<string> expressions)
+        public static string Combine(IEnumerable<string> expressions)
         {
             if (expressions == null || !expressions.Any())
             {

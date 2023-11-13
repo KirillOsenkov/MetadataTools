@@ -40,7 +40,7 @@ public partial class Checker
             }
         }
 
-        if (ReportVersionMismatch)
+        if (commandLine.ReportVersionMismatch)
         {
             ReportVersionMismatches(versionMismatchesByName);
         }

@@ -450,7 +450,7 @@ namespace RefDump
 
             foreach (var arg in args)
             {
-                if (arg == "/?" || arg == "-h" || arg == "--help" || arg == "help")
+                if (arg == "/?" || arg == "-?" || arg == "-h" || arg == "/h" || arg == "-help" || arg == "/help")
                 {
                     return false;
                 }

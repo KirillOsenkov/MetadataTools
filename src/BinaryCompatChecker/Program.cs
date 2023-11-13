@@ -22,49 +22,15 @@ namespace BinaryCompatChecker
         HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
 
-        public static bool ReportEmbeddedInteropTypes { get; set; }
-        public static bool ReportIVT { get; set; }
-        public static bool ReportVersionMismatch { get; set; } = true;
-        public static bool ReportIntPtrConstructors { get; set; }
+        static CommandLine commandLine;
 
         [STAThread]
         static int Main(string[] args)
         {
-            // Parse parameterized args
-            var arguments = new List<string>(args);
-            foreach (var arg in arguments.ToArray())
+            commandLine = CommandLine.Parse(args);
+            if (commandLine == null)
             {
-                if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
-                {
-                    ReportVersionMismatch = false;
-                    arguments.Remove(arg);
-                }
-
-                if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
-                {
-                    ReportEmbeddedInteropTypes = true;
-                    arguments.Remove(arg);
-                }
-
-                if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase))
-                {
-                    ReportIVT = true;
-                    arguments.Remove(arg);
-                }
-
-                if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
-                {
-                    ReportIntPtrConstructors = true;
-                    arguments.Remove(arg);
-                }
-            }
-
-            args = arguments.ToArray();
-
-            if (args.Length != 2 && args.Length != 3)
-            {
-                PrintUsage();
-                return 0;
+                return -1;
             }
 
             // Parse positional args
@@ -80,7 +46,7 @@ namespace BinaryCompatChecker
             root = Path.GetFullPath(root);
             if (!Directory.Exists(root) && !File.Exists(root))
             {
-                Console.Error.WriteLine("Specified root directory or file doesn't exist: " + root);
+                WriteError("Specified root directory or file doesn't exist: " + root);
                 return 1;
             }
 
@@ -94,20 +60,7 @@ namespace BinaryCompatChecker
             return success ? 0 : 1;
        }
 
-        private static void PrintUsage()
-        {
-            Console.WriteLine(@"Usage: BinaryCompatChecker [options] <root-folder> <output-report-file> [<config-file>]
-    <root-folder|root-file>: root directory or root file where to start searching for files
-    <output-report-file>: where to write the output report
-    <config-file>: (optional) a file with include/exclude patterns
-    Options:
-        /ignoreNetFx: Ignores mismatches from framework assemblies");
-        }
-
-        private static bool IsWindows()
-        {
-            return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
-        }
+        public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
 
         public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, out List<string> startFiles)
         {
@@ -209,13 +162,15 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
-                Console.WriteLine(file);
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
                 {
                     continue;
                 }
+
+                WriteLine(file, color: ConsoleColor.DarkGray);
+                WriteLine(assemblyDefinition.FullName, color: ConsoleColor.DarkCyan);
 
                 if (IsNetFrameworkAssembly(assemblyDefinition))
                 {
@@ -284,7 +239,7 @@ namespace BinaryCompatChecker
                     var baseline = File.ReadAllLines(reportFile);
                     if (!Enumerable.SequenceEqual(baseline, reportLines))
                     {
-                        OutputError(@"BinaryCompatChecker failed.
+                        WriteError(@"BinaryCompatChecker failed.
  The current assembly binary compatibility report is different from the checked-in baseline.
  Baseline file: " + reportFile);
                         OutputDiff(baseline, reportLines);
@@ -303,7 +258,7 @@ namespace BinaryCompatChecker
                 ListExaminedAssemblies(reportFile);
             }
 
-            if (ReportIVT)
+            if (commandLine.ReportIVT)
             {
                 WriteIVTReport(reportFile);
 

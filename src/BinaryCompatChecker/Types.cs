@@ -45,7 +45,7 @@ public partial class Checker
 
                     try
                     {
-                        if (ReportIntPtrConstructors
+                        if (commandLine.ReportIntPtrConstructors
                             && !foundINativeObjectImplementation
                             && !moduleIsXamarinMac
                             && interfaceTypeRef.FullName == iNativeObjectInterfaceFullName)
@@ -93,7 +93,7 @@ public partial class Checker
             // For some reason, typeDef.Interfaces does not always show an INativeObject implementation even
             // when it is there (via NSObject, typically). Resolve all base types to see if any of them
             // implement INativeObject.
-            if (ReportIntPtrConstructors && !foundINativeObjectImplementation && !moduleIsXamarinMac)
+            if (commandLine.ReportIntPtrConstructors && !foundINativeObjectImplementation && !moduleIsXamarinMac)
             {
                 var candidateNativeTypeDef = typeDef;
                 while (candidateNativeTypeDef != null)
@@ -166,7 +166,7 @@ public partial class Checker
             }
         }
 
-        if (ReportEmbeddedInteropTypes && hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
+        if (commandLine.ReportEmbeddedInteropTypes && hasCompilerGeneratedAttribute && hasTypeIdentifierAttribute)
         {
             diagnostics.Add($"In assembly '{assemblyFullName}': Embedded interop type {typeDef.FullName}");
         }
