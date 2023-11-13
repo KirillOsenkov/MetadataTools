@@ -23,6 +23,7 @@ public partial class Checker
         "PresentationFramework",
         "System",
         "WindowsBase",
+        "UIAutomationClient",
         "UIAutomationProvider",
         "UIAutomationTypes",
         "WindowsFormsIntegration"
@@ -184,6 +185,11 @@ public partial class Checker
 
         foreach (var assemblyDefinition in filePathToModuleDefinition)
         {
+            if (assemblyDefinition.Value == null)
+            {
+                continue;
+            }
+
             if (assemblyDefinition.Value.Name.FullName == reference.FullName ||
                 string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase))
             {

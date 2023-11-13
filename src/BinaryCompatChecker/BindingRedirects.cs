@@ -61,6 +61,11 @@ public partial class Checker
         foreach (var kvp in this.filePathToModuleDefinition)
         {
             var assembly = kvp.Value;
+            if (assembly == null)
+            {
+                continue;
+            }
+
             if (!string.Equals(assembly.Name?.Name, name))
             {
                 continue;
