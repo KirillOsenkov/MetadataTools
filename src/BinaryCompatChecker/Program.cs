@@ -92,7 +92,7 @@ namespace BinaryCompatChecker
                     if (IsFacadeAssembly(assemblyDefinition))
                     {
                         var relativePath = GetRelativePath(file);
-                        Log($"Facade assembly: {relativePath}");
+                        diagnostics.Add($"Facade assembly: {relativePath}");
                     }
 
                     continue;
@@ -137,11 +137,6 @@ namespace BinaryCompatChecker
 
             CheckAppConfigFiles(appConfigFiles);
 
-            foreach (var ex in diagnostics.OrderBy(s => s))
-            {
-                Log(ex);
-            }
-
             string reportFile = commandLine.ReportFile;
 
             if (commandLine.ReportUnreferencedAssemblies)
@@ -169,9 +164,14 @@ namespace BinaryCompatChecker
 
                     if (!closure.Contains(file))
                     {
-                        Log("Unreferenced assembly: " + GetRelativePath(file));
+                        diagnostics.Add("Unreferenced assembly: " + GetRelativePath(file));
                     }
                 }
+            }
+
+            foreach (var ex in diagnostics.OrderBy(s => s))
+            {
+                Log(ex);
             }
 
             if (reportLines.Count > 0)
@@ -250,6 +250,8 @@ namespace BinaryCompatChecker
             {
             }
 
+            HashSet<(AssemblyDefinition assemblyDefinition, string referenceName)> assembliesWithFailedMemberRefs = new();
+
             foreach (var memberReference in references)
             {
                 try
@@ -279,6 +281,11 @@ namespace BinaryCompatChecker
                     {
                         string typeOrMember = memberReference is TypeReference ? "type" : "member";
                         diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
+
+                        if (resolveCache.TryGetValue(referenceToAssembly, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                        {
+                            assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
+                        }
                     }
                     else
                     {
@@ -314,6 +321,13 @@ namespace BinaryCompatChecker
                         diagnostics.Add($"In assembly '{assemblyFullName}': {ex.Message}");
                     }
                 }
+            }
+
+            foreach (var assemblyWithFailedMemberRefs in assembliesWithFailedMemberRefs)
+            {
+                var assemblyDefinition = assemblyWithFailedMemberRefs.assemblyDefinition;
+                string relativePath = GetRelativePath(assemblyDefinition.MainModule.FileName);
+                diagnostics.Add($"In assembly '{assemblyFullName}': reference '{assemblyWithFailedMemberRefs.referenceName}' resolved from '{relativePath}' as '{assemblyDefinition.FullName}'");
             }
         }
     }

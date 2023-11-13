@@ -32,14 +32,6 @@ public partial class Checker
         "WindowsFormsIntegration"
     };
 
-    private List<string> customResolveDirectories = new List<string>
-    {
-        @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\NuGet",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin",
-        @"C:\Program Files\Microsoft Visual Studio\2022\Preview\Common7\IDE\CommonExtensions\Microsoft\NuGet",
-    };
-
     private string dotnetRuntimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
 
     private static string desktopNetFrameworkDirectory =
@@ -192,6 +184,67 @@ public partial class Checker
             return result;
         }
 
+        string filePath = TryResolve(reference);
+
+        if (File.Exists(filePath))
+        {
+            result = Load(filePath);
+            resolveCache[reference.FullName] = result;
+
+            if (result != null)
+            {
+                OnAssemblyResolved(result);
+            }
+        }
+        else
+        {
+            resolveCache[reference.FullName] = null;
+        }
+
+        return result;
+    }
+
+    private string TryResolve(AssemblyNameReference reference)
+    {
+        string result;
+
+        // first try to see if we already have the exact version loaded
+        result = TryResolveFromLoadedAssemblies(reference, strictVersion: true);
+        if (result != null)
+        {
+            return result;
+        }
+
+        result = TryResolveFromInputFiles(reference);
+        if (result != null)
+        {
+            return result;
+        }
+
+        result = TryResolveFromFramework(reference);
+        if (result != null)
+        {
+            return result;
+        }
+
+        result = TryResolveFromCustomDirectories(reference);
+        if (result != null)
+        {
+            return result;
+        }
+
+        // try any version as the last resort
+        result = TryResolveFromLoadedAssemblies(reference, strictVersion: false);
+        if (result != null)
+        {
+            return result;
+        }
+
+        return null;
+    }
+
+    private string TryResolveFromLoadedAssemblies(AssemblyNameReference reference, bool strictVersion = true)
+    {
         foreach (var assemblyDefinition in filePathToModuleDefinition)
         {
             if (assemblyDefinition.Value == null)
@@ -200,86 +253,130 @@ public partial class Checker
             }
 
             if (assemblyDefinition.Value.Name.FullName == reference.FullName ||
-                string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase))
+                (!strictVersion && string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase)))
             {
-                result = assemblyDefinition.Value;
-                resolveCache[reference.FullName] = result;
-                OnAssemblyResolved(result);
-                return result;
+                string filePath = assemblyDefinition.Value.MainModule.FileName;
+                return filePath;
             }
         }
 
+        return null;
+    }
+
+    private string TryResolveFromInputFiles(AssemblyNameReference reference)
+    {
         foreach (var file in commandLine.Files)
         {
             if (string.Equals(Path.GetFileNameWithoutExtension(file), reference.Name, StringComparison.OrdinalIgnoreCase))
             {
-                result = Load(file);
-                if (result != null && !IsFacadeAssembly(result))
+                var assemblyDefinition = Load(file);
+                if (assemblyDefinition != null && !IsFacadeAssembly(assemblyDefinition))
                 {
-                    resolveCache[reference.FullName] = result;
-                    OnAssemblyResolved(result);
+                    return file;
                 }
-
-                return result;
             }
         }
 
-        string shortName = reference.Name;
+        foreach (var directory in commandLine.AllDirectories)
+        {
+            string candidate = Path.Combine(directory, reference.Name + ".dll");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
 
-        string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
-        if (IsWindows)
+        return null;
+    }
+
+    private string TryResolveFromFramework(AssemblyNameReference reference)
+    {
+        string shortName = reference.Name;
+        Version version = reference.Version;
+
+        bool isFrameworkName = IsFrameworkName(shortName);
+        if (!isFrameworkName)
+        {
+            return null;
+        }
+
+        bool desktop = false;
+
+        // 4.0.1.0 is .NETPortable,Version=v5.0, still resolve from desktop
+        if (IsWindows && version <= new Version(4, 0, 10, 0))
+        {
+            desktop = true;
+        }
+
+        // resolve desktop framework assemblies from the GAC
+        if (desktop)
         {
             if (shortName == "mscorlib" && File.Exists(mscorlibFilePath))
             {
-                frameworkCandidate = mscorlibFilePath;
+                return mscorlibFilePath;
             }
-            else
+
+            foreach (var dir in desktopNetFrameworkDirectories)
             {
-                foreach (var dir in desktopNetFrameworkDirectories)
+                var combined = Path.Combine(dir, shortName);
+                if (Directory.Exists(combined))
                 {
-                    var combined = Path.Combine(dir, shortName);
-                    if (Directory.Exists(combined))
+                    var first = Directory.GetDirectories(combined);
+                    if (first.Length == 1)
                     {
-                        var first = Directory.GetDirectories(combined);
-                        if (first.Length == 1)
+                        var candidate = Path.Combine(first[0], shortName + ".dll");
+                        if (File.Exists(candidate))
                         {
-                            var candidate = Path.Combine(first[0], shortName + ".dll");
-                            if (File.Exists(candidate))
-                            {
-                                frameworkCandidate = candidate;
-                                break;
-                            }
+                            return candidate;
                         }
                     }
                 }
             }
         }
-
-        bool isFrameworkName = IsFrameworkName(shortName);
-
-        if (isFrameworkName && File.Exists(frameworkCandidate))
+        else
         {
-            result = Load(frameworkCandidate);
-            if (result != null)
+            var parent = Path.GetDirectoryName(dotnetRuntimeDirectory);
+
+            string versionPrefix = version.Major.ToString();
+
+            // .NETCore 3 has versions like 4.1.1.0 or 4.2.2.0, not confusingly
+            if (version.Major == 4 &&
+                (version.Minor == 1 || version.Minor == 2))
             {
-                OnAssemblyResolved(result);
-                resolveCache[reference.FullName] = result;
-                return result;
+                versionPrefix = "3";
+            }
+
+            var versionDirectories = Directory.GetDirectories(parent, versionPrefix + "*");
+            if (versionDirectories.Length > 0)
+            {
+                var lastVersion = versionDirectories[versionDirectories.Length - 1];
+                string versionCandidate = Path.Combine(lastVersion, shortName + ".dll");
+                if (File.Exists(versionCandidate))
+                {
+                    return versionCandidate;
+                }
+            }
+
+            string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
+            if (File.Exists(frameworkCandidate))
+            {
+                return frameworkCandidate;
             }
         }
 
-        foreach (var customResolveDirectory in customResolveDirectories)
+        return null;
+    }
+
+    private string TryResolveFromCustomDirectories(AssemblyNameReference reference)
+    {
+        string shortName = reference.Name;
+
+        foreach (var customResolveDirectory in commandLine.CustomResolveDirectories)
         {
             var candidate = Path.Combine(customResolveDirectory, shortName + ".dll");
             if (File.Exists(candidate))
             {
-                result = Load(candidate);
-                if (result != null)
-                {
-                    resolveCache[reference.FullName] = result;
-                    OnAssemblyResolved(result);
-                    return result;
-                }
+                return candidate;
             }
         }
 

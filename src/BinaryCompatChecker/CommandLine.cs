@@ -34,6 +34,7 @@ public class CommandLine
 
     public IEnumerable<string> Files => files;
     public IEnumerable<string> ClosureRootFiles => closureRootFiles;
+    public IEnumerable<string> AllDirectories => allDirectories;
 
     public bool IsClosureRoot(string filePath)
     {
@@ -53,11 +54,17 @@ public class CommandLine
         return false;
     }
 
+    // Commonly used:
+    // @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin",
+    // @"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\NuGet",
+    public IList<string> CustomResolveDirectories { get; } = new List<string>();
+
     HashSet<string> inclusions = new(PathComparer);
     HashSet<string> exclusions = new(PathComparer);
     HashSet<string> files = new(PathComparer);
     HashSet<string> patterns = new();
     HashSet<string> closureRootPatterns = new(PathComparer);
+    HashSet<string> allDirectories = new(PathComparer);
     List<string> closureRootFiles = new();
     IncludeExcludePattern includeExclude;
 
@@ -170,6 +177,23 @@ public class CommandLine
                 closure = closure.Trim('"');
                 closureRootPatterns.Add(closure);
                 ReportUnreferencedAssemblies = true;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.StartsWith("/resolve:") || arg.StartsWith("-resolve:"))
+            {
+                string resolveDir = arg.Substring("/resolve:".Length);
+                resolveDir = resolveDir.Trim('"');
+                resolveDir = Path.GetFullPath(resolveDir);
+                if (!Directory.Exists(resolveDir))
+                {
+                    Checker.WriteError($"Custom resolve directory doesn't exist: {resolveDir}");
+                    return false;
+                }
+
+                CustomResolveDirectories.Add(resolveDir);
+
                 arguments.Remove(arg);
                 continue;
             }
@@ -415,16 +439,19 @@ public class CommandLine
         }
     }
 
-    private void AddFile(string file)
+    private void AddFile(string filePath)
     {
-        if (IsClosureRoot(file))
+        if (IsClosureRoot(filePath))
         {
-            closureRootFiles.Add(file);
+            closureRootFiles.Add(filePath);
         }
         else
         {
-            files.Add(file);
+            files.Add(filePath);
         }
+
+        string directory = Path.GetDirectoryName(filePath);
+        allDirectories.Add(directory);
     }
 
     public static void PrintUsage()
@@ -434,30 +461,35 @@ public class CommandLine
         Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
         Checker.Write(@" <file-spec>* <option>* @<response-file>*
 
-File spec:
+File specs may be specified more than once. Each file spec is one of the following:
+
     * absolute directory path
     * directory relative to current directory
     * may include ** to indicate recursive subtree
     * may optionally end with:
-        - an optional file name (a.dll)
+        - a file name (a.dll)
         - a pattern such as *.dll
         - semicolon-separated patterns such as *.dll;*.exe;*.exe.config
+
     When no file-specs are specified, uses the current directory
     non-recursively. Pass -s for recursion.
     When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.
 
 Options:
-    !<exclude-pattern>      exclude a relative path or file pattern from analysis
-    -l                      output list of visited assemblies to BinaryCompatReport.Assemblies.txt
-    -s                      recursive (when no file specs are specified)
-    -closure:<file.dll>     path to one or more root assemblies of a closure (to report unused references)
-    -p:<pattern>            semicolon-separated file pattern(s) such as *.dll;*.exe
-    -out:<report.txt>       write report to <report.txt> instead of BinaryCompatReport.txt
-    -ignoreVersionMismatch  do not report assembly version mismatches
-    -ivt                    report internal API surface area used via InternalsVisibleTo
-    -embeddedInteropTypes   report embedded interop types
+    All options with parameters (other than -out:) may be specified more than once.
+
+    !<exclude-pattern>      Exclude a relative path or file pattern from analysis.
+    -l                      Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
+    -s                      Recursive (visit specified directories recursively). Default is non-recursive.
+    -closure:<file.dll>     Path to a root assembly of a closure (to report unused references).
+    -resolve:<directory>    Additional directory to resolve reference assemblies from.
+    -p:<pattern>            Semicolon-separated file pattern(s) such as *.dll;*.exe.
+    -out:<report.txt>       Write report to <report.txt> instead of BinaryCompatReport.txt.
+    -ignoreVersionMismatch  Do not report assembly version mismatches.
+    -ivt                    Report internal API surface area consumed via InternalsVisibleTo.
+    -embeddedInteropTypes   Report embedded interop types.
     @response.rsp           Response file containing additional command-line arguments, one per line.
-    -?:                     display help
+    -?:                     Display help.
 ");
     }
 }
