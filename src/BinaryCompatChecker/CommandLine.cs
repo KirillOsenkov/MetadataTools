@@ -74,28 +74,32 @@ public class CommandLine
 
         foreach (var arg in arguments.ToArray())
         {
-            if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
             {
                 ReportVersionMismatch = false;
                 arguments.Remove(arg);
                 continue;
             }
 
-            if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
             {
                 ReportEmbeddedInteropTypes = true;
                 arguments.Remove(arg);
                 continue;
             }
 
-            if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ivt", StringComparison.OrdinalIgnoreCase))
             {
                 ReportIVT = true;
                 arguments.Remove(arg);
                 continue;
             }
 
-            if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-intPtrCtors", StringComparison.OrdinalIgnoreCase))
             {
                 ReportIntPtrConstructors = true;
                 arguments.Remove(arg);
@@ -342,12 +346,30 @@ public class CommandLine
 
     public static void PrintUsage()
     {
-        Console.WriteLine(@"Usage: checkbinarycompat [options] <root-folder> <output-report-file> [<config-file>]
-    <root-folder|root-file>: root directory or root file where to start searching for files
-    <output-report-file>: where to write the output report
-    <config-file>: (optional) a file with include/exclude patterns
+        Checker.WriteLine("https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker", ConsoleColor.Blue);
+        Checker.Write(@"Usage: ");
+        Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Checker.Write(@" <file-spec>* <option>* @<response-file>*
 
-    Options:
-        /ignoreNetFx: Ignores mismatches from framework assemblies");
+File spec:
+    * absolute directory path
+    * directory relative to current directory
+    * may include ** to indicate recursive subtree
+    * may optionally end with:
+        - an optional file name (a.dll)
+        - a pattern such as *.dll
+        - semicolon-separated patterns such as *.dll;*.exe;*.exe.config
+
+Options:
+    !<exclude-pattern>      exclude a relative path or file pattern from analysis
+    -l                      output list of visited assemblies to BinaryCompatReport.Assemblies.txt
+    -p:<pattern>            semicolon-separated file pattern(s) such as *.dll;*.exe
+    -out:<report.txt>       write report to <report.txt> instead of BinaryCompatReport.txt
+    -ignoreVersionMismatch  do not report assembly version mismatches
+    -ivt                    report internal API surface area used via InternalsVisibleTo
+    -embeddedInteropTypes   report embedded interop types
+    @response.rsp           Response file containing additional command-line arguments, one per line.
+    -?:                     display help
+");
     }
 }

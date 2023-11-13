@@ -17,7 +17,18 @@ public partial class Checker
     {
         writer ??= Console.Out;
 
-        lock (Console.Error)
+        lock (writer)
+        {
+            Write(text, color, writer);
+            writer.WriteLine();
+        }
+    }
+
+    public static void Write(string text, ConsoleColor? color = null, TextWriter writer = null)
+    {
+        writer ??= Console.Out;
+
+        lock (writer)
         {
             ConsoleColor originalColor = ConsoleColor.Gray;
             if (color != null)
@@ -26,7 +37,7 @@ public partial class Checker
                 Console.ForegroundColor = color.Value;
             }
 
-            writer.WriteLine(text);
+            writer.Write(text);
 
             if (color != null)
             {
