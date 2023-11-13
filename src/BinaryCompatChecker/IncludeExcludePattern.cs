@@ -129,13 +129,17 @@ namespace BinaryCompatChecker
             {
                 return "$^";
             }
+            else if (expressions.Count() == 1)
+            {
+                return expressions.First();
+            }
             else
             {
                 return "^((" + string.Join(")|(", expressions) + "))";
             }
         }
 
-        private static string PrepareRegexPattern(string line)
+        public static string PrepareRegexPattern(string line)
         {
             line = line.Replace("\\", "/");
 

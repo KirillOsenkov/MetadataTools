@@ -22,7 +22,10 @@ public partial class Checker
         "PresentationCore",
         "PresentationFramework",
         "System",
-        "WindowsBase"
+        "WindowsBase",
+        "UIAutomationProvider",
+        "UIAutomationTypes",
+        "WindowsFormsIntegration"
     };
 
     private List<string> customResolveDirectories = new List<string>
@@ -34,11 +37,18 @@ public partial class Checker
     };
 
     private string dotnetRuntimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
-    private string desktopNetFrameworkDirectory =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-            "Microsoft.NET",
-            "Framework",
-            "v4.0.30319");
+
+    private static string desktopNetFrameworkDirectory =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET");
+
+    private List<string> desktopNetFrameworkDirectories = new List<string>
+    {
+        Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_MSIL"),
+        Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_32"),
+        Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_64"),
+    };
+
+    private static string mscorlibFilePath = Path.Combine(desktopNetFrameworkDirectory, "Framework", "v4.0.30319", "mscorlib.dll");
 
     private class VersionMismatch
     {
@@ -196,7 +206,30 @@ public partial class Checker
         string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
         if (IsWindows)
         {
-            frameworkCandidate = Path.Combine(desktopNetFrameworkDirectory, shortName + ".dll");
+            if (shortName == "mscorlib" && File.Exists(mscorlibFilePath))
+            {
+                frameworkCandidate = mscorlibFilePath;
+            }
+            else
+            {
+                foreach (var dir in desktopNetFrameworkDirectories)
+                {
+                    var combined = Path.Combine(dir, shortName);
+                    if (Directory.Exists(combined))
+                    {
+                        var first = Directory.GetDirectories(combined);
+                        if (first.Length == 1)
+                        {
+                            var candidate = Path.Combine(first[0], shortName + ".dll");
+                            if (File.Exists(candidate))
+                            {
+                                frameworkCandidate = candidate;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         bool isFrameworkName = IsFrameworkName(shortName);
@@ -268,7 +301,7 @@ public partial class Checker
     {
         if (filePath.StartsWith(Environment.CurrentDirectory, StringComparison.OrdinalIgnoreCase))
         {
-            filePath = filePath.Substring(filePath.Length + 1);
+            filePath = filePath.Substring(Environment.CurrentDirectory.Length + 1);
         }
 
         return filePath;

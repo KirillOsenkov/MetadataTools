@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,7 +15,7 @@ public class CommandLine
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
     public bool ListAssemblies { get; set; }
 
-    public bool Recursive { get; set; } = true;
+    public bool Recursive { get; set; }
 
     public static readonly StringComparison PathComparison = Checker.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     public static readonly StringComparer PathComparer = Checker.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -161,7 +161,7 @@ public class CommandLine
             exclusions.Add("*.resources.dll");
         }
 
-        includeExclude = new IncludeExcludePattern("", IncludeExcludePattern.Combine(exclusions));
+        includeExclude = new IncludeExcludePattern("", IncludeExcludePattern.Combine(exclusions.Select(e => IncludeExcludePattern.PrepareRegexPattern(e))));
 
         foreach (var arg in arguments.ToArray())
         {
