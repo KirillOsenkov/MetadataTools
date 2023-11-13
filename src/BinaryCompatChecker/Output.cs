@@ -147,7 +147,12 @@ public partial class Checker
 
     private void ListExaminedAssemblies(string reportFile)
     {
-        string filePath = Path.ChangeExtension(reportFile, ".assemblylist.txt");
+        if (!commandLine.ListAssemblies)
+        {
+            return;
+        }
+
+        string filePath = Path.ChangeExtension(reportFile, ".Assemblies.txt");
         assembliesExamined.Sort();
         File.WriteAllLines(filePath, assembliesExamined);
     }

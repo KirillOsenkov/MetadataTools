@@ -12,6 +12,9 @@ public class CommandLine
     public bool ReportVersionMismatch { get; set; } = true;
     public bool ReportIntPtrConstructors { get; set; }
 
+    public string ReportFile { get; set; } = "BinaryCompatReport.txt";
+    public bool ListAssemblies { get; set; }
+
     public bool Recursive { get; set; } = true;
 
     public static readonly StringComparison PathComparison = Checker.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -27,6 +30,8 @@ public class CommandLine
 
         return result;
     }
+
+    public IEnumerable<string> Files => files;
 
     HashSet<string> inclusions = new(PathComparer);
     HashSet<string> exclusions = new(PathComparer);
@@ -73,30 +78,54 @@ public class CommandLine
             {
                 ReportVersionMismatch = false;
                 arguments.Remove(arg);
+                continue;
             }
 
             if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
             {
                 ReportEmbeddedInteropTypes = true;
                 arguments.Remove(arg);
+                continue;
             }
 
             if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase))
             {
                 ReportIVT = true;
                 arguments.Remove(arg);
+                continue;
             }
 
             if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase))
             {
                 ReportIntPtrConstructors = true;
                 arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.StartsWith("/out:") || arg.StartsWith("-out:"))
+            {
+                var report = arg.Substring(5);
+                arguments.Remove(arg);
+                ReportFile = report;
+                continue;
+            }
+
+            if (arg.StartsWith("/l") || arg.StartsWith("-l"))
+            {
+                if (arg.Length == 2)
+                {
+                    ListAssemblies = true;
+                }
+
+                arguments.Remove(arg);
+                continue;
             }
 
             if (arg.StartsWith("!") && arg.Length > 1)
             {
                 exclusions.Add(arg.Substring(1));
                 arguments.Remove(arg);
+                continue;
             }
 
             if ((arg.StartsWith("/p:") || arg.StartsWith("-p:")) && arg.Length > 3)
@@ -115,6 +144,7 @@ public class CommandLine
                 }
 
                 arguments.Remove(arg);
+                continue;
             }
         }
 
@@ -126,10 +156,12 @@ public class CommandLine
             patterns.Add("*.exe.config");
         }
 
-        if (exclusions.Any())
+        if (exclusions.Count == 0)
         {
-            includeExclude = new IncludeExcludePattern("", IncludeExcludePattern.Combine(exclusions));
+            exclusions.Add("*.resources.dll");
         }
+
+        includeExclude = new IncludeExcludePattern("", IncludeExcludePattern.Combine(exclusions));
 
         foreach (var arg in arguments.ToArray())
         {

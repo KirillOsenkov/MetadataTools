@@ -230,15 +230,16 @@ public partial class Checker
 
     private AssemblyDefinition Load(string filePath)
     {
-        if (!PEFile.IsManagedAssembly(filePath))
-        {
-            return null;
-        }
-
         if (!filePathToModuleDefinition.TryGetValue(filePath, out var assemblyDefinition))
         {
             try
             {
+                if (!PEFile.IsManagedAssembly(filePath))
+                {
+                    filePathToModuleDefinition[filePath] = null;
+                    return null;
+                }
+
                 var readerParameters = new ReaderParameters
                 {
                     AssemblyResolver = this.resolver,
@@ -265,12 +266,11 @@ public partial class Checker
 
     private string GetRelativePath(string filePath)
     {
-        string relativePath = filePath;
-        if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
+        if (filePath.StartsWith(Environment.CurrentDirectory, StringComparison.OrdinalIgnoreCase))
         {
-            relativePath = relativePath.Substring(rootDirectory.Length + 1);
+            filePath = filePath.Substring(filePath.Length + 1);
         }
 
-        return relativePath;
+        return filePath;
     }
 }

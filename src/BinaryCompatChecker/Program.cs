@@ -9,9 +9,6 @@ namespace BinaryCompatChecker
 {
     public partial class Checker
     {
-        private string rootDirectory;
-        IEnumerable<string> files;
-
         Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
@@ -33,97 +30,11 @@ namespace BinaryCompatChecker
                 return -1;
             }
 
-            // Parse positional args
-            string root = args[0];
-            string reportFile = args[1];
-            string configFile = null;
-
-            if (args.Length == 3)
-            {
-                configFile = args[2];
-            }
-
-            root = Path.GetFullPath(root);
-            if (!Directory.Exists(root) && !File.Exists(root))
-            {
-                WriteError("Specified root directory or file doesn't exist: " + root);
-                return 1;
-            }
-
-            var files = GetFiles(root, configFile, out var startFiles);
-
-            bool success = new Checker().Check(
-                root,
-                files,
-                startFiles,
-                reportFile);
+            bool success = new Checker().Check();
             return success ? 0 : 1;
        }
 
         public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
-
-        public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, out List<string> startFiles)
-        {
-            var list = new List<string>();
-            startFiles = new List<string>();
-            IncludeExcludePattern includeExclude = null;
-            bool isRootFile = false;
-
-            if (File.Exists(configFilePath))
-            {
-                includeExclude = IncludeExcludePattern.ParseFromFile(configFilePath);
-            }
-
-            if (File.Exists(rootDirectory))
-            {
-                isRootFile = true;
-                startFiles.Add(Path.GetFullPath(rootDirectory));
-                rootDirectory = Path.GetDirectoryName(rootDirectory);
-            }
-
-            foreach (var file in Directory.GetFiles(rootDirectory, "*", SearchOption.AllDirectories))
-            {
-                if (!file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-                    !file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                    !file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase) &&
-                    !file.EndsWith(".dll.config", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (file.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var relativeFilePath = file.Substring(rootDirectory.Length);
-
-                if (file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (includeExclude != null && includeExclude.Includes(relativeFilePath))
-                    {
-                        list.Add(Path.GetFullPath(file));
-                    }
-
-                    continue;
-                }
-
-                if (includeExclude == null || !includeExclude.Excludes(relativeFilePath))
-                {
-                    if (PEFile.IsManagedAssembly(file))
-                    {
-                        var filePath = Path.GetFullPath(file);
-                        list.Add(filePath);
-                        if (!isRootFile)
-                        {
-                            startFiles.Add(filePath);
-                        }
-                    }
-                }
-            }
-
-            return list;
-        }
 
         public Checker()
         {
@@ -131,29 +42,13 @@ namespace BinaryCompatChecker
         }
 
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
-        public bool Check(
-            string rootDirectory,
-            IEnumerable<string> files,
-            IEnumerable<string> startFiles,
-            string reportFile)
+        public bool Check()
         {
             bool success = true;
 
-            this.files = files;
-            this.rootDirectory = rootDirectory;
             var appConfigFiles = new List<string>();
 
-            Queue<string> fileQueue = new Queue<string>(startFiles);
-            HashSet<string> visitedFiles = new HashSet<string>(startFiles, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var file in files)
-            {
-                if (file.EndsWith(".exe.config", StringComparison.OrdinalIgnoreCase))
-                {
-                    appConfigFiles.Add(file);
-                    continue;
-                }
-            }
+            Queue<string> fileQueue = new(commandLine.Files);
 
             HashSet<string> frameworkAssemblyNames = GetFrameworkAssemblyNames();
             HashSet<string> assemblyNamesToIgnore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -162,6 +57,12 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
+                if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
+                    file.EndsWith(".dll.config", CommandLine.PathComparison))
+                {
+                    appConfigFiles.Add(file);
+                    continue;
+                }
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
@@ -208,12 +109,6 @@ namespace BinaryCompatChecker
                         continue;
                     }
 
-                    var resolvedPath = resolvedAssemblyDefinition.MainModule.FileName;
-                    if (resolvedPath != null && visitedFiles.Add(resolvedPath))
-                    {
-                        fileQueue.Enqueue(resolvedPath);
-                    }
-
                     CheckAssemblyReference(assemblyDefinition, resolvedAssemblyDefinition, reference);
                 }
 
@@ -226,6 +121,8 @@ namespace BinaryCompatChecker
             {
                 Log(ex);
             }
+
+            string reportFile = commandLine.ReportFile;
 
             if (reportLines.Count > 0)
             {
