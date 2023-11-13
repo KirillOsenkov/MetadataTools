@@ -101,7 +101,7 @@ public partial class Checker
 
             actualFilePath = GetRelativePath(actualFilePath);
 
-            diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {referencedFullName} but found {versionMismatch.ActualAssembly.FullName} at {actualFilePath}");
+            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`");
         }
     }
 
