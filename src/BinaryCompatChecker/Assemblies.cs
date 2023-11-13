@@ -16,16 +16,19 @@ public partial class Checker
     private static HashSet<string> frameworkNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "mscorlib",
+        "Accessibility",
         "Microsoft.CSharp",
+        "Microsoft.VisualBasic",
         "Microsoft.VisualC",
         "netstandard",
         "PresentationCore",
         "PresentationFramework",
+        "ReachFramework",
         "System",
-        "WindowsBase",
         "UIAutomationClient",
         "UIAutomationProvider",
         "UIAutomationTypes",
+        "WindowsBase",
         "WindowsFormsIntegration"
     };
 
@@ -261,7 +264,7 @@ public partial class Checker
 
         foreach (var customResolveDirectory in customResolveDirectories)
         {
-            var candidate = Path.Combine(customResolveDirectory, shortName);
+            var candidate = Path.Combine(customResolveDirectory, shortName + ".dll");
             if (File.Exists(candidate))
             {
                 result = Load(candidate);

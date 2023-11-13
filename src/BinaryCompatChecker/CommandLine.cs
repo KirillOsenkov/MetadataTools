@@ -247,6 +247,7 @@ public class CommandLine
         text = text.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
         inclusions.Add(text);
+        Checker.WriteLine(text);
 
         bool windowsNetworkShare = false;
         bool startsWithDirectorySeparator = false;
@@ -325,6 +326,15 @@ public class CommandLine
     {
         if (parts.Length == 0)
         {
+            if (Recursive)
+            {
+                var dirs = Directory.GetDirectories(root);
+                foreach (var dir in dirs)
+                {
+                    AddFiles(dir, parts);
+                }
+            }
+
             AddFilesInDirectory(root, patterns);
             return true;
         }

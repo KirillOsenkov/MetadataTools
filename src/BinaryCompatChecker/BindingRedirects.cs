@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Mono.Cecil;
-using Mono.Collections.Generic;
 
 namespace BinaryCompatChecker;
 
@@ -58,9 +56,14 @@ public partial class Checker
         bool foundNewVersion = false;
         var foundVersions = new List<Version>();
 
-        foreach (var kvp in this.filePathToModuleDefinition)
+        var assemblies = this.resolveCache.Values
+            .Concat(
+                this.filePathToModuleDefinition.Values.Where(v => v != null))
+            .Distinct()
+            .ToArray();
+
+        foreach (var assembly in assemblies)
         {
-            var assembly = kvp.Value;
             if (assembly == null)
             {
                 continue;
