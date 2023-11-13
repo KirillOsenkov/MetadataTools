@@ -88,14 +88,7 @@ public partial class Checker
                 continue;
             }
 
-            if (actualFilePath.StartsWith(rootDirectory))
-            {
-                actualFilePath = actualFilePath.Substring(rootDirectory.Length);
-                if (actualFilePath.StartsWith("\\") || actualFilePath.StartsWith("/"))
-                {
-                    actualFilePath = actualFilePath.Substring(1);
-                }
-            }
+            actualFilePath = GetRelativePath(actualFilePath);
 
             diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {referencedFullName} but found {versionMismatch.ActualAssembly.FullName} at {actualFilePath}");
         }

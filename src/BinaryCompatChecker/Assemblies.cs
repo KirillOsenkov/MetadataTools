@@ -177,7 +177,7 @@ public partial class Checker
             }
         }
 
-        foreach (var file in files)
+        foreach (var file in commandLine.Files)
         {
             if (string.Equals(Path.GetFileNameWithoutExtension(file), reference.Name, StringComparison.OrdinalIgnoreCase))
             {
