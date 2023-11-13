@@ -27,13 +27,6 @@ namespace BinaryCompatChecker
         public static bool ReportVersionMismatch { get; set; } = true;
         public static bool ReportIntPtrConstructors { get; set; }
 
-        public class IVTUsage
-        {
-            public string ExposingAssembly { get; set; }
-            public string ConsumingAssembly { get; set; }
-            public string Member { get; set; }
-        }
-
         [STAThread]
         static int Main(string[] args)
         {
@@ -101,11 +94,6 @@ namespace BinaryCompatChecker
             return success ? 0 : 1;
        }
 
-        private static bool IsWindows()
-        {
-            return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
-        }
-
         private static void PrintUsage()
         {
             Console.WriteLine(@"Usage: BinaryCompatChecker [options] <root-folder> <output-report-file> [<config-file>]
@@ -114,6 +102,11 @@ namespace BinaryCompatChecker
     <config-file>: (optional) a file with include/exclude patterns
     Options:
         /ignoreNetFx: Ignores mismatches from framework assemblies");
+        }
+
+        private static bool IsWindows()
+        {
+            return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
         }
 
         public static IEnumerable<string> GetFiles(string rootDirectory, string configFilePath, out List<string> startFiles)
@@ -183,16 +176,6 @@ namespace BinaryCompatChecker
         {
             resolver = new CustomAssemblyResolver(this);
         }
-
-        private class VersionMismatch
-        {
-            public AssemblyDefinition Referencer;
-            public AssemblyNameReference ExpectedReference;
-            public AssemblyDefinition ActualAssembly;
-        }
-
-        private readonly List<VersionMismatch> versionMismatches
-            = new List<VersionMismatch>();
 
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
         public bool Check(
@@ -333,57 +316,6 @@ namespace BinaryCompatChecker
             return success;
         }
 
-        private void WriteIVTReport(string primaryReportFile, string fileName = ".ivt.txt", Func<IVTUsage, bool> usageFilter = null)
-        {
-            string filePath = Path.ChangeExtension(primaryReportFile, fileName);
-            var sb = new StringBuilder();
-
-            var usages = ivtUsages
-                .Where(u => !IsNetFrameworkAssembly(u.ConsumingAssembly) && !IsNetFrameworkAssembly(u.ExposingAssembly));
-
-            if (usageFilter != null)
-            {
-                usages = usages.Where(u => usageFilter(u));
-            }
-
-            if (!usages.Any())
-            {
-                return;
-            }
-
-            foreach (var exposingAssembly in usages
-                .GroupBy(u => u.ExposingAssembly)
-                .OrderBy(g => g.Key))
-            {
-                sb.AppendLine($"{exposingAssembly.Key}");
-                sb.AppendLine($"{new string('=', exposingAssembly.Key.Length)}");
-                foreach (var consumingAssembly in exposingAssembly.GroupBy(u => u.ConsumingAssembly).OrderBy(g => g.Key))
-                {
-                    sb.AppendLine($"  Consumed in: {consumingAssembly.Key}");
-                    foreach (var ivt in consumingAssembly.Select(s => s.Member).Distinct().OrderBy(s => s))
-                    {
-                        sb.AppendLine("    " + ivt);
-                    }
-
-                    sb.AppendLine();
-                }
-
-                sb.AppendLine();
-            }
-
-            if (sb.Length > 0)
-            {
-                File.WriteAllText(filePath, sb.ToString());
-            }
-        }
-
-        private void ListExaminedAssemblies(string reportFile)
-        {
-            string filePath = Path.ChangeExtension(reportFile, ".assemblylist.txt");
-            assembliesExamined.Sort();
-            File.WriteAllLines(filePath, assembliesExamined);
-        }
-
         private void CheckAppConfigFiles(IEnumerable<string> appConfigFiles)
         {
             var versionMismatchesByName = versionMismatches
@@ -418,35 +350,6 @@ namespace BinaryCompatChecker
             if (ReportVersionMismatch)
             {
                 ReportVersionMismatches(versionMismatchesByName);
-            }
-        }
-
-        private void ReportVersionMismatches(Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
-        {
-            foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
-            {
-                string referencedFullName = versionMismatch.ExpectedReference.FullName;
-                if (referencedFullName.StartsWith("netstandard,"))
-                {
-                    continue;
-                }
-
-                string actualFilePath = versionMismatch.ActualAssembly.MainModule.FileName;
-                if (actualFilePath.Contains("Mono.framework"))
-                {
-                    continue;
-                }
-
-                if (actualFilePath.StartsWith(rootDirectory))
-                {
-                    actualFilePath = actualFilePath.Substring(rootDirectory.Length);
-                    if (actualFilePath.StartsWith("\\") || actualFilePath.StartsWith("/"))
-                    {
-                        actualFilePath = actualFilePath.Substring(1);
-                    }
-                }
-
-                diagnostics.Add($"Assembly {versionMismatch.Referencer.Name.Name} is referencing {referencedFullName} but found {versionMismatch.ActualAssembly.FullName} at {actualFilePath}");
             }
         }
 
@@ -535,41 +438,6 @@ namespace BinaryCompatChecker
 
                 diagnostics.Add(message);
             }
-        }
-
-        private void OutputDiff(IEnumerable<string> baseline, IEnumerable<string> reportLines)
-        {
-            var removed = baseline.Except(reportLines);
-            var added = reportLines.Except(baseline);
-
-            if (removed.Any())
-            {
-                OutputError("=================================");
-                OutputError("These expected lines are missing:");
-                foreach (var removedLine in removed)
-                {
-                    OutputError(removedLine);
-                }
-
-                OutputError("=================================");
-            }
-
-            if (added.Any())
-            {
-                OutputError("=================================");
-                OutputError("These actual lines are new:");
-                foreach (var addedLine in added)
-                {
-                    OutputError(addedLine);
-                }
-
-                OutputError("=================================");
-            }
-        }
-
-        private void OutputError(string text)
-        {
-            Console.Error.WriteLine(text);
         }
 
         public void Check(
@@ -835,35 +703,6 @@ namespace BinaryCompatChecker
             }
         }
 
-        private IVTUsage TryGetIVTUsage(MemberReference memberReference, IMemberDefinition definition)
-        {
-            string consumingModule = memberReference.Module.FileName;
-
-            if (definition is MemberReference memberDefinition)
-            {
-                string definitionModule = memberDefinition.Module.FileName;
-
-                if (consumingModule == definitionModule)
-                {
-                    return null;
-                }
-
-                if (AllPublic(memberDefinition))
-                {
-                    return null;
-                }
-
-                return new IVTUsage
-                {
-                    ExposingAssembly = definitionModule,
-                    ConsumingAssembly = consumingModule,
-                    Member = definition.ToString()
-                };
-            }
-
-            return null;
-        }
-
         private void CheckTypes(AssemblyDefinition referencing, AssemblyDefinition reference)
         {
             var typeReferences = referencing.MainModule.GetTypeReferences();
@@ -934,13 +773,6 @@ namespace BinaryCompatChecker
                 types.Add(nested.FullName, nested.IsNestedPublic);
                 AddNestedTypes(nested, types);
             }
-        }
-
-        private void Log(string text)
-        {
-            text = text.Replace('\r', ' ').Replace('\n', ' ');
-            text = text.Replace(", Culture=neutral", "");
-            reportLines.Add(text);
         }
     }
 }

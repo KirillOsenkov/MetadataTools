@@ -38,6 +38,22 @@ public partial class Checker
             "Framework",
             "v4.0.30319");
 
+    private class VersionMismatch
+    {
+        public AssemblyDefinition Referencer;
+        public AssemblyNameReference ExpectedReference;
+        public AssemblyDefinition ActualAssembly;
+    }
+
+    public class IVTUsage
+    {
+        public string ExposingAssembly { get; set; }
+        public string ConsumingAssembly { get; set; }
+        public string Member { get; set; }
+    }
+
+    private readonly List<VersionMismatch> versionMismatches = new List<VersionMismatch>();
+
     public class CustomAssemblyResolver : BaseAssemblyResolver
     {
         private readonly Checker checker;

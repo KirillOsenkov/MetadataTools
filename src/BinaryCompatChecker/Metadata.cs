@@ -438,6 +438,35 @@ public partial class Checker
         return false;
     }
 
+    private IVTUsage TryGetIVTUsage(MemberReference memberReference, IMemberDefinition definition)
+    {
+        string consumingModule = memberReference.Module.FileName;
+
+        if (definition is MemberReference memberDefinition)
+        {
+            string definitionModule = memberDefinition.Module.FileName;
+
+            if (consumingModule == definitionModule)
+            {
+                return null;
+            }
+
+            if (AllPublic(memberDefinition))
+            {
+                return null;
+            }
+
+            return new IVTUsage
+            {
+                ExposingAssembly = definitionModule,
+                ConsumingAssembly = consumingModule,
+                Member = definition.ToString()
+            };
+        }
+
+        return null;
+    }
+
     enum ElementType : byte
     {
         None = 0x00,
