@@ -457,11 +457,15 @@ public class CommandLine
     public static void PrintUsage()
     {
         Checker.WriteLine("https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker", ConsoleColor.Blue);
-        Checker.Write(@"Usage: ");
+        Checker.WriteLine();
+        Checker.Write(@"Usage: ", ConsoleColor.White);
         Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
-        Checker.Write(@" <file-spec>* <option>* @<response-file>*
+        Checker.Write(@" <file-spec>* <option>* @<response-file>*", ConsoleColor.White);
+        Checker.WriteLine();
+        Checker.Write(@"
+File specs may be specified more than once. Each file spec is one of the following:");
 
-File specs may be specified more than once. Each file spec is one of the following:
+        Checker.Write(@"
 
     * absolute directory path
     * directory relative to current directory
@@ -473,10 +477,13 @@ File specs may be specified more than once. Each file spec is one of the followi
 
     When no file-specs are specified, uses the current directory
     non-recursively. Pass -s for recursion.
-    When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.
+    When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.");
+        Checker.Write(@"
 
-Options:
-    All options with parameters (other than -out:) may be specified more than once.
+Options:", ConsoleColor.White);
+        Checker.Write(@"
+    All options with parameters (other than -out:) may be specified more than once.");
+        Checker.Write(@"
 
     !<exclude-pattern>      Exclude a relative path or file pattern from analysis.
     -l                      Output list of visited assemblies to BinaryCompatReport.Assemblies.txt

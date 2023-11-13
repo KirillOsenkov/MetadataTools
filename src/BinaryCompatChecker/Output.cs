@@ -13,7 +13,7 @@ public partial class Checker
         WriteLine(text, ConsoleColor.Red, Console.Error);
     }
 
-    public static void WriteLine(string text, ConsoleColor? color = null, TextWriter writer = null)
+    public static void WriteLine(string text = "", ConsoleColor? color = null, TextWriter writer = null)
     {
         writer ??= Console.Out;
 
