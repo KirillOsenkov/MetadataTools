@@ -21,7 +21,7 @@ public partial class Checker
             {
                 foreach (var error in appConfigFile.Errors)
                 {
-                    diagnostics.Add($"In app.config file {appConfigFileName}: {error}");
+                    diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
                 }
             }
 
@@ -57,8 +57,8 @@ public partial class Checker
         var foundVersions = new List<Version>();
 
         var assemblies = this.resolveCache.Values
-            .Concat(
-                this.filePathToModuleDefinition.Values.Where(v => v != null))
+            .Concat(this.filePathToModuleDefinition.Values)
+            .Where(v => v != null)
             .Distinct()
             .ToArray();
 
@@ -87,7 +87,7 @@ public partial class Checker
 
                 if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
                 {
-                    diagnostics.Add($"In {appConfigFileName}: publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualToken}'");
+                    diagnostics.Add($"App.config: '{appConfigFileName}': publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualToken}'");
                 }
 
                 continue;
@@ -95,13 +95,13 @@ public partial class Checker
 
             if (assembly.Name.Version < oldVersionStart)
             {
-                diagnostics.Add($"In {appConfigFileName}: {assembly.FullName} version is less than bindingRedirect range start {oldVersionStart}");
+                diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}'");
                 continue;
             }
 
             if (assembly.Name.Version > oldVersionEnd)
             {
-                diagnostics.Add($"In {appConfigFileName}: {assembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd}");
+                diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}'");
                 continue;
             }
         }
@@ -116,13 +116,13 @@ public partial class Checker
                 {
                     if (actualVersion < oldVersionStart)
                     {
-                        diagnostics.Add($"In {appConfigFileName}: {versionMismatch.ActualAssembly.FullName} version is less than bindingRedirect range start {oldVersionStart} (Expected by {versionMismatch.Referencer.Name})");
+                        diagnostics.Add($"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}' (Expected by '{versionMismatch.Referencer.Name}')");
                         continue;
                     }
 
                     if (actualVersion > oldVersionEnd)
                     {
-                        diagnostics.Add($"In {appConfigFileName}: {versionMismatch.ActualAssembly.FullName} version is higher than bindingRedirect range end {oldVersionEnd} (Expected by {versionMismatch.Referencer.Name})");
+                        diagnostics.Add($"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}' (Expected by '{versionMismatch.Referencer.Name}')");
                         continue;
                     }
                 }
@@ -131,7 +131,7 @@ public partial class Checker
 
         if (!foundNewVersion)
         {
-            var message = $"In {appConfigFileName}: couldn't find assembly '{name}' with version {newVersion}.";
+            var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}' with version {newVersion}.";
             if (foundVersions.Count > 0)
             {
                 message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct())}";
