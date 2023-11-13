@@ -138,6 +138,7 @@ namespace BinaryCompatChecker
             CheckAppConfigFiles(appConfigFiles);
 
             string reportFile = commandLine.ReportFile;
+            reportFile = Path.GetFullPath(reportFile);
 
             if (commandLine.ReportUnreferencedAssemblies)
             {
@@ -178,6 +179,8 @@ namespace BinaryCompatChecker
             {
                 if (!File.Exists(reportFile))
                 {
+                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+
                     // initial baseline creation mode
                     File.WriteAllLines(reportFile, reportLines);
                 }
