@@ -175,6 +175,12 @@ public partial class Checker
 
     private void OnAssemblyResolved(AssemblyDefinition assemblyDefinition)
     {
+        //string filePath = assemblyDefinition.MainModule.FileName;
+        //WriteLine(filePath, ConsoleColor.DarkGray);
+    }
+
+    private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
+    {
         string filePath = assemblyDefinition.MainModule.FileName;
         WriteLine(filePath, ConsoleColor.DarkGray);
     }
@@ -299,6 +305,8 @@ public partial class Checker
                 };
                 assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                 filePathToModuleDefinition[filePath] = assemblyDefinition;
+
+                OnAssemblyLoaded(assemblyDefinition);
 
                 if (!IsNetFrameworkAssembly(assemblyDefinition))
                 {
