@@ -11,6 +11,7 @@ public class CommandLine
     public bool ReportIVT { get; set; }
     public bool ReportVersionMismatch { get; set; } = true;
     public bool ReportIntPtrConstructors { get; set; }
+    public bool ReportUnreferencedAssemblies { get; set; } = false;
 
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
     public bool ListAssemblies { get; set; }
@@ -32,11 +33,32 @@ public class CommandLine
     }
 
     public IEnumerable<string> Files => files;
+    public IEnumerable<string> ClosureRootFiles => closureRootFiles;
+
+    public bool IsClosureRoot(string filePath)
+    {
+        if (filePath.EndsWith(".config", PathComparison))
+        {
+            return false;
+        }
+
+        foreach (var root in closureRootPatterns)
+        {
+            if (filePath.Contains(root, PathComparison))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     HashSet<string> inclusions = new(PathComparer);
     HashSet<string> exclusions = new(PathComparer);
     HashSet<string> files = new(PathComparer);
     HashSet<string> patterns = new();
+    HashSet<string> closureRootPatterns = new(PathComparer);
+    List<string> closureRootFiles = new();
     IncludeExcludePattern includeExclude;
 
     public bool Process(string[] args)
@@ -98,6 +120,14 @@ public class CommandLine
                 continue;
             }
 
+            if (arg.Equals("/s", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-s", StringComparison.OrdinalIgnoreCase))
+            {
+                Recursive = true;
+                arguments.Remove(arg);
+                continue;
+            }
+
             if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase) ||
                 arg.Equals("-intPtrCtors", StringComparison.OrdinalIgnoreCase))
             {
@@ -109,6 +139,7 @@ public class CommandLine
             if (arg.StartsWith("/out:") || arg.StartsWith("-out:"))
             {
                 var report = arg.Substring(5);
+                report = report.Trim('"');
                 arguments.Remove(arg);
                 ReportFile = report;
                 continue;
@@ -127,7 +158,18 @@ public class CommandLine
 
             if (arg.StartsWith("!") && arg.Length > 1)
             {
-                exclusions.Add(arg.Substring(1));
+                string pattern = arg.Substring(1).Trim('"');
+                exclusions.Add(pattern);
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.StartsWith("/closure:") || arg.StartsWith("-closure:"))
+            {
+                string closure = arg.Substring("/closure:".Length);
+                closure = closure.Trim('"');
+                closureRootPatterns.Add(closure);
+                ReportUnreferencedAssemblies = true;
                 arguments.Remove(arg);
                 continue;
             }
@@ -135,6 +177,8 @@ public class CommandLine
             if ((arg.StartsWith("/p:") || arg.StartsWith("-p:")) && arg.Length > 3)
             {
                 string pattern = arg.Substring(3);
+                pattern = pattern.Trim('"');
+
                 if (pattern.Contains(';'))
                 {
                     foreach (var sub in pattern.Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -363,7 +407,14 @@ public class CommandLine
 
     private void AddFile(string file)
     {
-        files.Add(file);
+        if (IsClosureRoot(file))
+        {
+            closureRootFiles.Add(file);
+        }
+        else
+        {
+            files.Add(file);
+        }
     }
 
     public static void PrintUsage()
@@ -381,10 +432,15 @@ File spec:
         - an optional file name (a.dll)
         - a pattern such as *.dll
         - semicolon-separated patterns such as *.dll;*.exe;*.exe.config
+    When no file-specs are specified, uses the current directory
+    non-recursively. Pass -s for recursion.
+    When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.
 
 Options:
     !<exclude-pattern>      exclude a relative path or file pattern from analysis
     -l                      output list of visited assemblies to BinaryCompatReport.Assemblies.txt
+    -s                      recursive (when no file specs are specified)
+    -closure:<file.dll>     path to one or more root assemblies of a closure (to report unused references)
     -p:<pattern>            semicolon-separated file pattern(s) such as *.dll;*.exe
     -out:<report.txt>       write report to <report.txt> instead of BinaryCompatReport.txt
     -ignoreVersionMismatch  do not report assembly version mismatches

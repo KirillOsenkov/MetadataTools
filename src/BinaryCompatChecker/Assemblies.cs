@@ -169,6 +169,12 @@ public partial class Checker
         return false;
     }
 
+    private void OnAssemblyResolved(AssemblyDefinition assemblyDefinition)
+    {
+        string filePath = assemblyDefinition.MainModule.FileName;
+        WriteLine(filePath, ConsoleColor.DarkGray);
+    }
+
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
     {
         if (resolveCache.TryGetValue(reference.FullName, out AssemblyDefinition result))
@@ -183,6 +189,7 @@ public partial class Checker
             {
                 result = assemblyDefinition.Value;
                 resolveCache[reference.FullName] = result;
+                OnAssemblyResolved(result);
                 return result;
             }
         }
@@ -195,6 +202,7 @@ public partial class Checker
                 if (result != null && !IsFacadeAssembly(result))
                 {
                     resolveCache[reference.FullName] = result;
+                    OnAssemblyResolved(result);
                 }
 
                 return result;
@@ -239,6 +247,7 @@ public partial class Checker
             result = Load(frameworkCandidate);
             if (result != null)
             {
+                OnAssemblyResolved(result);
                 resolveCache[reference.FullName] = result;
                 return result;
             }
@@ -253,6 +262,7 @@ public partial class Checker
                 if (result != null)
                 {
                     resolveCache[reference.FullName] = result;
+                    OnAssemblyResolved(result);
                     return result;
                 }
             }
@@ -284,7 +294,13 @@ public partial class Checker
                 if (!IsNetFrameworkAssembly(assemblyDefinition))
                 {
                     string relativePath = GetRelativePath(filePath);
-                    assembliesExamined.Add($"{relativePath}; {assemblyDefinition.FullName}");
+                    string targetFramework = GetTargetFramework(assemblyDefinition);
+                    if (targetFramework != null)
+                    {
+                        targetFramework = " " + targetFramework;
+                    }
+
+                    assembliesExamined.Add($"{relativePath}    {assemblyDefinition.Name.Version}{targetFramework}");
                 }
             }
             catch (Exception ex)

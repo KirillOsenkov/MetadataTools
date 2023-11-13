@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using Mono.Cecil;
 using Mono.Collections.Generic;
 
@@ -509,5 +511,44 @@ public partial class Checker
         Type = 0x50,
         Boxed = 0x51,
         Enum = 0x55
+    }
+
+    public static string GetTargetFramework(AssemblyDefinition assemblyDefinition)
+    {
+        var module = assemblyDefinition.MainModule;
+        var targetFrameworkAttribute = module.GetCustomAttributes().FirstOrDefault(a => a.AttributeType.FullName == "System.Runtime.Versioning.TargetFrameworkAttribute");
+        if (targetFrameworkAttribute != null)
+        {
+            var value = targetFrameworkAttribute.ConstructorArguments[0].Value;
+            return ShortenTargetFramework(value.ToString());
+        }
+
+        return null;
+    }
+
+    private static readonly Dictionary<string, string> targetFrameworkNames = new Dictionary<string, string>()
+    {
+        { ".NETFramework,Version=v", "net" },
+        { ".NETCoreApp,Version=v", "netcoreapp" },
+        { ".NETStandard,Version=v", "netstandard" }
+    };
+
+    private static string ShortenTargetFramework(string name)
+    {
+        foreach (var kvp in targetFrameworkNames)
+        {
+            if (name.StartsWith(kvp.Key))
+            {
+                var shortened = name.Substring(kvp.Key.Length);
+                if (kvp.Value == "net")
+                {
+                    shortened = shortened.Replace(".", "");
+                }
+
+                return kvp.Value + shortened;
+            }
+        }
+
+        return name;
     }
 }

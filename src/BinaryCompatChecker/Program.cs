@@ -48,11 +48,17 @@ namespace BinaryCompatChecker
 
             var appConfigFiles = new List<string>();
 
-            Queue<string> fileQueue = new(commandLine.Files);
+            Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
+            foreach (var file in commandLine.Files)
+            {
+                fileQueue.Enqueue(file);
+            }
 
             HashSet<string> frameworkAssemblyNames = GetFrameworkAssemblyNames();
             HashSet<string> assemblyNamesToIgnore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             assemblyNamesToIgnore.UnionWith(frameworkAssemblyNames);
+
+            Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
 
             while (fileQueue.Count != 0)
             {
@@ -70,8 +76,16 @@ namespace BinaryCompatChecker
                     continue;
                 }
 
-                WriteLine(file, color: ConsoleColor.DarkGray);
-                WriteLine(assemblyDefinition.FullName, color: ConsoleColor.DarkCyan);
+                string targetFramework = GetTargetFramework(assemblyDefinition);
+
+                Write(file);
+                Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
+                if (targetFramework != null)
+                {
+                    Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
+                }
+
+                WriteLine("");
 
                 if (IsNetFrameworkAssembly(assemblyDefinition))
                 {
@@ -88,6 +102,7 @@ namespace BinaryCompatChecker
                 // Log($"Assembly: {relativePath}: {assemblyDefinition.FullName}");
 
                 var references = assemblyDefinition.MainModule.AssemblyReferences;
+                List<string> referencePaths = new();
                 foreach (var reference in references)
                 {
                     if (assemblyNamesToIgnore.Contains(reference.Name))
@@ -104,6 +119,9 @@ namespace BinaryCompatChecker
                         continue;
                     }
 
+                    string referenceFilePath = resolvedAssemblyDefinition.MainModule.FileName;
+                    referencePaths.Add(referenceFilePath);
+
                     if (IsNetFrameworkAssembly(resolvedAssemblyDefinition))
                     {
                         continue;
@@ -111,6 +129,8 @@ namespace BinaryCompatChecker
 
                     CheckAssemblyReference(assemblyDefinition, resolvedAssemblyDefinition, reference);
                 }
+
+                referenceMap[file] = referencePaths;
 
                 CheckMembers(assemblyDefinition);
             }
@@ -123,6 +143,36 @@ namespace BinaryCompatChecker
             }
 
             string reportFile = commandLine.ReportFile;
+
+            if (commandLine.ReportUnreferencedAssemblies)
+            {
+                HashSet<string> closure = new(CommandLine.PathComparer);
+                BuildClosure(commandLine.ClosureRootFiles);
+
+                void BuildClosure(IEnumerable<string> assemblies)
+                {
+                    foreach (var assembly in assemblies)
+                    {
+                        if (closure.Add(assembly) && referenceMap.TryGetValue(assembly, out var references))
+                        {
+                            BuildClosure(references);
+                        }
+                    }
+                }
+
+                foreach (var file in commandLine.Files)
+                {
+                    if (file.EndsWith(".config", CommandLine.PathComparison))
+                    {
+                        continue;
+                    }
+
+                    if (!closure.Contains(file))
+                    {
+                        Log("Unreferenced assembly: " + GetRelativePath(file));
+                    }
+                }
+            }
 
             if (reportLines.Count > 0)
             {
