@@ -11,7 +11,9 @@ public partial class Checker
 {
     IAssemblyResolver resolver;
 
-    private static HashSet<string> frameworkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static Dictionary<string, bool> frameworkAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
+
+    private static HashSet<string> frameworkNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "mscorlib",
         "Microsoft.CSharp",
