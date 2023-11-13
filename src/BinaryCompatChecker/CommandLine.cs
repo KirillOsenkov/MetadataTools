@@ -248,6 +248,16 @@ public class CommandLine
         {
             root = currentDirectory;
         }
+        else if (parts[0] == ".")
+        {
+            root = currentDirectory;
+            parts = parts.Skip(1).ToArray();
+        }
+        else if (parts[0] == "..")
+        {
+            root = Path.GetDirectoryName(currentDirectory);
+            parts = parts.Skip(1).ToArray();
+        }
         else if (Checker.IsWindows && parts[0].Length == 2 && parts[0][1] == ':')
         {
             root = parts[0] + "\\";
@@ -272,6 +282,18 @@ public class CommandLine
         if (parts.Length == 0)
         {
             AddFilesInDirectory(root, patterns);
+            return true;
+        }
+
+        if (parts[0] == "..")
+        {
+            root = Path.GetDirectoryName(root);
+            if (root == null)
+            {
+                return false;
+            }
+
+            AddFilesInDirectory(root, parts.Skip(1).ToArray());
             return true;
         }
 
