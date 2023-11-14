@@ -1,3 +1,5 @@
+# CheckBinaryCompat
+
 `checkbinarycompat` is a dotnet global tool that inspects a set of .NET assemblies and finds potential compatibility issues.
 It can run after a build, inspect the output, and generate a report or validate against a baseline.
 
