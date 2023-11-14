@@ -174,7 +174,10 @@ public partial class Checker
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
     {
         string filePath = assemblyDefinition.MainModule.FileName;
-        WriteLine(filePath, ConsoleColor.DarkGray);
+        if (!files.Contains(filePath))
+        {
+            WriteLine(filePath, ConsoleColor.DarkGray);
+        }
     }
 
     private AssemblyDefinition Resolve(AssemblyNameReference reference)

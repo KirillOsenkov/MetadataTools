@@ -18,6 +18,7 @@ namespace BinaryCompatChecker
         List<IVTUsage> ivtUsages = new();
         HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> files;
 
         static CommandLine commandLine;
 
@@ -39,6 +40,7 @@ namespace BinaryCompatChecker
         public Checker()
         {
             resolver = new CustomAssemblyResolver(this);
+            files = new(commandLine.Files, CommandLine.PathComparer);
         }
 
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
