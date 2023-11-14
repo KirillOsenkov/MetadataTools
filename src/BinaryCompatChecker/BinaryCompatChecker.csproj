@@ -29,6 +29,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\PEFile\IsManagedAssembly.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="readme.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 

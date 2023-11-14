@@ -389,7 +389,7 @@ public partial class Checker
         {
             try
             {
-                if (!PEFile.IsManagedAssembly(filePath))
+                if (!PEFile.PEFileReader.IsManagedAssembly(filePath))
                 {
                     filePathToModuleDefinition[filePath] = null;
                     return null;
