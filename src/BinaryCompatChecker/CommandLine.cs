@@ -378,11 +378,24 @@ public class CommandLine
         var subdirectories = Directory.GetDirectories(root);
 
         string first = parts[0];
-        if (first == "**")
+        if (first == "*" || first == "**")
         {
-            if (!AddFiles(root, parts.Skip(1).ToArray()))
+            if (first == "*")
             {
-                return false;
+                parts = parts.Skip(1).ToArray();
+
+                // when * is the last part, don't walk subfolders
+                if (parts.Length == 0)
+                {
+                    return AddFiles(root, parts);
+                }
+            }
+            else
+            {
+                if (!AddFiles(root, parts.Skip(1).ToArray()))
+                {
+                    return false;
+                }
             }
 
             foreach (var subdirectory in subdirectories)
