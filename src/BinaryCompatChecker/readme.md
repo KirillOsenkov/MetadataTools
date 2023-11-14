@@ -28,7 +28,7 @@ Pass `-l` to also output `BinaryCompatReport.Assemblies.txt` with the list of al
 https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker
 
 ## NuGet:
-https://www.nuget.org/packages/BinaryCompatChecker
+https://www.nuget.org/packages/checkbinarycompat
 
 ## Command line arguments
 
