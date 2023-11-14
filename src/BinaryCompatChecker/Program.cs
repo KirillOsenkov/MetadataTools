@@ -214,6 +214,10 @@ namespace BinaryCompatChecker
 
                 ListExaminedAssemblies(reportFile);
             }
+            else
+            {
+                WriteLine("No issues found", ConsoleColor.Green);
+            }
 
             if (commandLine.ReportIVT)
             {
