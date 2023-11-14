@@ -1,4 +1,4 @@
-# CheckBinaryCompat
+﻿# CheckBinaryCompat
 
 `checkbinarycompat` is a dotnet global tool that inspects a set of .NET assemblies and finds potential compatibility issues.
 It can run after a build, inspect the output, and generate a report or validate against a baseline.
@@ -13,6 +13,16 @@ It can also determine a closure of all transitive assembly references from a giv
 ```
 dotnet tool update -g checkbinarycompat
 ```
+
+## Sample use:
+
+Run the tool in your output directory (such as bin\Debug\net472). You can specify `-s` to find all files recursively. Default is current directory only (non-recursive). You can specify one or more directories to look in instead of the current directory.
+```
+checkbinarycompat
+```
+
+It will output a file `BinaryCompatReport.txt` with the diagnostics it found. You can exclude files and directories to tune and trim the report file.
+Pass `-l` to also output `BinaryCompatReport.Assemblies.txt` with the list of all assemblies analyzed, their versions and target frameworks.
 
 ## Source code:
 https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker
@@ -58,18 +68,18 @@ Options:
 
 ## Baseline
 
-All the errors and inconsistencies found are logged into BinaryCompatReport.txt by default. You can choose a different file by passing the `-out:<file.txt>` option.
+All the errors and inconsistencies found are logged into `BinaryCompatReport.txt` by default. You can choose a different file by passing the `-out:<file.txt>` option.
 
-The file is checked in and at runtime the tool checks that the real BinaryCompatReport.txt is identical to the checked in one. If it's not, the tool will fail and overwrite the checked in baseline. If changing the build process or dependencies results in new errors being reported and they are all legitimate, the checked in BinaryCompatReport.txt needs to be updated. The file is sorted to ease diffing.
+The file is checked in and at runtime the tool checks that the real `BinaryCompatReport.txt` is identical to the checked in one. If it's not, the tool will fail and overwrite the checked in baseline. If changing the build process or dependencies results in new errors being reported and they are all legitimate, the checked in `BinaryCompatReport.txt` needs to be updated. The file is sorted to ease diffing.
 
 ## Configuration file
 
-The tool optionally accepts zero or more @response.rsp files with additional arguments. You can list multiple directories, .dll files and patterns that should be included or excluded from analysis. If the tool sees the same assembly in more than one file, it just picks one randomly. This is a source of non-determinism and should be avoided (exclude all but one .dlls for each assembly name). Prepend the directory or file path with a ! to exclude it. Please keep the file sorted for convenience.
+The tool optionally accepts zero or more `@response.rsp` files with additional arguments. They can have any name and extension. You can list multiple directories, .dll files and patterns that should be included or excluded from analysis. If the tool sees the same assembly in more than one file, it just picks one randomly. This is a source of non-determinism and should be avoided (exclude all but one .dlls for each assembly name). Prepend the directory or file path with a ! to exclude it. Please keep the file sorted for convenience.
 
 The config file can also specify one or more `exe.config` or `dll.config` files. They will be inspected for binding redirects and versions.
 
 ## Output build artifacts
-CI build can publish the "real" BinaryCompatReport.txt as a build artifact so you can just download it and replace the checked in copy with the real one. It also can publish a couple other report files that may be helpful:
+CI build can publish the "real" `BinaryCompatReport.txt` as a build artifact so you can just download it and replace the checked in copy with the real one. It also can publish a couple other report files that may be helpful:
 
  * `BinaryCompatReport.Assemblies.txt` - the sorted list of all assembly files and their versions that the tool used as inputs. Specify the `-l` option to generate this file.
  * `BinaryCompatReport.ivt.txt` - list of all internal APIs consumed, grouped by the exposing .dll then by consuming .dll. Specify the `-ivt` option to generate this file.

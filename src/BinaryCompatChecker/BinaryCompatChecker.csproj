@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>1.0.3</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>checkbinarycompat</ToolCommandName>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -17,6 +17,7 @@
     <Authors>Kirill Osenkov</Authors>
     <Company>Microsoft</Company>
     <Description>A tool to check binary compatibility of a set of assemblies and possibly baseline exclusions.</Description>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/KirillOsenkov/MetadataTools</PackageProjectUrl>
 <!--    
@@ -28,7 +29,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
+    <!--<Reference Include="C:\cecil\bin\Release\netstandard2.0\Mono.Cecil.dll" />-->
   </ItemGroup>
 
   <Target Name="PrepareNupkgInfo" AfterTargets="CoreBuild">
