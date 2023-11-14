@@ -271,7 +271,7 @@ public class CommandLine
         text = text.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 
         inclusions.Add(text);
-        Checker.WriteLine(text);
+        Checker.WriteLine($"Looking in: {text}", ConsoleColor.Cyan);
 
         bool windowsNetworkShare = false;
         bool startsWithDirectorySeparator = false;

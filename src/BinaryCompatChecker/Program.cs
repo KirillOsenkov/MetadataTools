@@ -185,6 +185,7 @@ namespace BinaryCompatChecker
 
                     // initial baseline creation mode
                     File.WriteAllLines(reportFile, reportLines);
+                    WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
                 }
                 else
                 {
@@ -204,6 +205,10 @@ namespace BinaryCompatChecker
                         }
 
                         success = false;
+                    }
+                    else
+                    {
+                        WriteLine($"{reportFile} hasn't changed", ConsoleColor.Green);
                     }
                 }
 

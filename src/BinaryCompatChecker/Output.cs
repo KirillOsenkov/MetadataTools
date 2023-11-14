@@ -146,6 +146,7 @@ public partial class Checker
         if (sb.Length > 0)
         {
             File.WriteAllText(filePath, sb.ToString());
+            WriteLine($"Wrote {filePath}", ConsoleColor.Green);
         }
     }
 
@@ -159,5 +160,6 @@ public partial class Checker
         string filePath = Path.ChangeExtension(reportFile, ".Assemblies.txt");
         assembliesExamined.Sort();
         File.WriteAllLines(filePath, assembliesExamined);
+        WriteLine($"Wrote {filePath}", ConsoleColor.Green);
     }
 }
