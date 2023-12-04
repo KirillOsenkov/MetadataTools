@@ -10,8 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\BinaryCompatChecker\AppConfigFile.cs" Link="AppConfigFile.cs" />
-    <Compile Include="..\BinaryCompatChecker\IsManagedAssembly.cs" Link="IsManagedAssembly.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\BinaryCompatChecker\AppConfigFile.cs" Link="AppConfigFile.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\PEFile\IsManagedAssembly.cs" Link="IsManagedAssembly.cs" />
   </ItemGroup>
 
   <ItemGroup>
