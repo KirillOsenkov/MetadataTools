@@ -40,7 +40,7 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
     <!--<Reference Include="C:\cecil\bin\Release\netstandard2.0\Mono.Cecil.dll" />-->
   </ItemGroup>
-
+<!--
   <Target Name="PrepareNupkgInfo" AfterTargets="CoreBuild">
     <PropertyGroup>
       <NuspecPath>$(MSBuildProjectDirectory)\BinaryCompatChecker.nuspec</NuspecPath>
@@ -62,6 +62,6 @@
         RestoreOutputPath="$(RestoreOutputPath)"
         SymbolPackageFormat="snupkg"
         />
-  </Target>
+  </Target>-->
 
 </Project>
