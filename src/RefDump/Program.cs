@@ -10,7 +10,7 @@ namespace RefDump
 {
     class Dumper
     {
-        public string FileSpec { get; private set; }
+        public string FileSpec { get; private set; } = "*";
         public string OutputXml { get; set; }
         public string FilterToAssembly { get; set; }
         public bool OutputTypes { get; set; } = false;
