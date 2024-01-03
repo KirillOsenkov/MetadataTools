@@ -75,16 +75,30 @@ public class CommandLine
 
         var currentDirectory = Environment.CurrentDirectory;
 
+        var responseFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         while (arguments.FirstOrDefault(a => a.StartsWith("@")) is string responseFile)
         {
             arguments.Remove(responseFile);
             responseFile = responseFile.Substring(1);
-            if (File.Exists(responseFile))
+            var filePath = Path.GetFullPath(responseFile);
+            if (File.Exists(filePath))
             {
-                var lines = File.ReadAllLines(responseFile);
+                if (!responseFiles.Add(filePath))
+                {
+                    Checker.WriteError($"Response file can't be included more than once: {responseFile}");
+                    return false;
+                }
+
+                var lines = File.ReadAllLines(filePath);
                 foreach (var line in lines)
                 {
-                    arguments.Add(line);
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    {
+                        continue;
+                    }
+
+                    arguments.Add(line.Trim());
                 }
             }
             else
