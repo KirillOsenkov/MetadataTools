@@ -19,6 +19,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Corflags", "src\Corflags\Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DumpAssembly", "src\DumpAssembly\DumpAssembly.csproj", "{91713E48-FD78-4AD3-A744-EDF66195261F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SRMReader", "src\SRMReader\SRMReader.csproj", "{4A04EC00-575F-546C-065B-CFF870BBE434}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +59,10 @@ Global
 		{91713E48-FD78-4AD3-A744-EDF66195261F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91713E48-FD78-4AD3-A744-EDF66195261F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{91713E48-FD78-4AD3-A744-EDF66195261F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A04EC00-575F-546C-065B-CFF870BBE434}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A04EC00-575F-546C-065B-CFF870BBE434}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A04EC00-575F-546C-065B-CFF870BBE434}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A04EC00-575F-546C-065B-CFF870BBE434}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
