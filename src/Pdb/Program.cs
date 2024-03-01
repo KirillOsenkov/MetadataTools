@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection.PortableExecutable;
 
 namespace MetadataTools
 {
@@ -16,7 +15,7 @@ namespace MetadataTools
                 return 0;
             }
 
-            PdbInfo.LogAction = Log;
+            PdbRecord.LogAction = Log;
 
             if (args.Length == 1)
             {
@@ -172,10 +171,10 @@ namespace MetadataTools
 
         private static bool DownloadSymbols(string dll, string url)
         {
-            var pdbInfo = PdbInfo.Read(dll);
-            foreach (var record in pdbInfo)
+            var moduleInfo = ModuleInfo.Read(dll);
+            foreach (var pdbRecord in moduleInfo.PdbEntries)
             {
-                if (record.DownloadPdb(url) is string pdb)
+                if (pdbRecord.DownloadPdb(url) is string pdb)
                 {
                     if (CheckMatch(dll, pdb))
                     {
@@ -190,19 +189,24 @@ namespace MetadataTools
 
         private static bool PrintAssemblyInfo(string dll)
         {
-            var debugDirectory = PdbInfo.ReadDebugDirectoryEntries(dll);
-            foreach (var debugDirectoryEntry in debugDirectory)
-            {
-                PrintNameValue("Debug directory entry", debugDirectoryEntry.entry.Type.ToString());
-                if (debugDirectoryEntry.entry.Type == DebugDirectoryEntryType.CodeView)
-                {
-                    CodeViewDebugDirectoryData data = (CodeViewDebugDirectoryData)debugDirectoryEntry.data;
-                    PrintNameValue("Guid", data.Guid.ToString());
-                    PrintNameValue("Age", data.Age.ToString());
-                    PrintNameValue("Pdb path", data.Path.ToString());
-                    PrintNameValue("Stamp", debugDirectoryEntry.entry.Stamp.ToString("X8"));
-                }
+            var moduleInfo = ModuleInfo.Read(dll);
+            Console.WriteLine(dll);
+            Console.WriteLine();
 
+            if (moduleInfo.SourceLink != null)
+            {
+                Log("SourceLink:");
+                Log(moduleInfo.SourceLink);
+                Console.WriteLine();
+            }
+
+            foreach (var pdbEntry in moduleInfo.PdbEntries)
+            {
+                var data = pdbEntry;
+                PrintNameValue("Guid", data.Guid.ToString());
+                PrintNameValue("Age", data.Age.ToString());
+                PrintNameValue("Pdb path", data.Path.ToString());
+                PrintNameValue("Stamp", pdbEntry.Stamp.ToString("X8"));
                 Console.WriteLine();
             }
 
@@ -254,10 +258,11 @@ namespace MetadataTools
                 directory,
                 Path.GetFileNameWithoutExtension(dll) + ".pdb",
                 SearchOption.AllDirectories);
-            var debugDirectory = PdbInfo.Read(dll);
+
+            var moduleInfo = ModuleInfo.Read(dll);
             foreach (var pdb in pdbs)
             {
-                if (PdbInfo.IsMatch(debugDirectory, pdb))
+                if (PdbInfo.IsMatch(moduleInfo, pdb))
                 {
                     Log("Match: " + pdb, ConsoleColor.Green);
                 }
