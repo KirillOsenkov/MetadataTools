@@ -1,22 +1,47 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <Prefer32Bit>true</Prefer32Bit>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <RollForward>major</RollForward>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>pdb</ToolCommandName>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>pdb</PackageId>
+    <Authors>Kirill Osenkov</Authors>
+    <Company>Microsoft</Company>
+    <Description>A tool to download .pdb and check whether assembly matches pdb. Shows SourceLink if available.</Description>
+    <!--<PackageReadmeFile>readme.md</PackageReadmeFile>-->
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/KirillOsenkov/MetadataTools</PackageProjectUrl>
+<!--    
+    <IconFilePath>$(MSBuildThisFileDirectory)icon.png</IconFilePath>
+    <PackageIcon>icon.png</PackageIcon>
+-->
+    <RepositoryUrl>https://github.com/KirillOsenkov/MetadataTools</RepositoryUrl>
+    <PackageTags>.NET dotnet assembly pdb symbol symbols</PackageTags>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\PEFile\IsManagedAssembly.cs" />
   </ItemGroup>
+
   <ItemGroup>
     <Reference Include="System.Net.Http" />
   </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.DiaSymReader" Version="1.4.0" />
     <PackageReference Include="Microsoft.DiaSymReader.Native" Version="1.7.0" />
     <PackageReference Include="System.Reflection.Metadata" Version="6.0.1" />
     <PackageReference Include="Mono.Cecil" Version="0.11.5" />
   </ItemGroup>
+
 </Project>
