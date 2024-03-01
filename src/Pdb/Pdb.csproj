@@ -17,5 +17,6 @@
     <PackageReference Include="Microsoft.DiaSymReader" Version="1.4.0" />
     <PackageReference Include="Microsoft.DiaSymReader.Native" Version="1.7.0" />
     <PackageReference Include="System.Reflection.Metadata" Version="6.0.1" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.5" />
   </ItemGroup>
 </Project>

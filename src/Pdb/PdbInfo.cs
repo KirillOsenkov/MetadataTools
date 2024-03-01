@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Microsoft.DiaSymReader;
+using Mono.Cecil.Cil;
 
 namespace MetadataTools
 {
@@ -16,6 +17,8 @@ namespace MetadataTools
         public string FilePath { get; set; }
         public string SourceLink { get; set; }
         public IReadOnlyList<PdbRecord> PdbEntries { get; set; }
+        public bool HasEmbeddedPdb { get; set; }
+        public bool Reproducible { get; set; }
 
         public static ModuleInfo Read(string assemblyFilePath)
         {
@@ -31,18 +34,6 @@ namespace MetadataTools
                 {
                     PEReader reader = new PEReader(stream);
                     var metadataReader = reader.GetMetadataReader();
-
-                    foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
-                    {
-                        var customDebugInformation = metadataReader.GetCustomDebugInformation(customDebugInfoHandle);
-                        var guid = metadataReader.GetGuid(customDebugInformation.Kind);
-                        if (guid == SourceLinkGuid)
-                        {
-                            var bytes = metadataReader.GetBlobBytes(customDebugInformation.Value);
-                            var text = new StreamReader(new MemoryStream(bytes)).ReadToEnd();
-                            moduleInfo.SourceLink = text;
-                        }
-                    }
 
                     var debugDirectory = reader.ReadDebugDirectory();
                     foreach (var entry in debugDirectory)
@@ -60,8 +51,18 @@ namespace MetadataTools
                             };
                             list.Add(pdbEntry);
                         }
+                        else if (entry.Type == DebugDirectoryEntryType.EmbeddedPortablePdb)
+                        {
+                            moduleInfo.HasEmbeddedPdb = true;
+                        }
+                        else if (entry.Type == DebugDirectoryEntryType.Reproducible)
+                        {
+                            moduleInfo.Reproducible = true;
+                        }
                     }
                 }
+
+                ReadSourceLink(assemblyFilePath, moduleInfo);
             }
             catch (Exception ex)
             {
@@ -69,6 +70,51 @@ namespace MetadataTools
             }
 
             return moduleInfo;
+        }
+
+        private static void ReadSourceLink(string assemblyFilePath, ModuleInfo moduleInfo)
+        {
+            if (moduleInfo.HasEmbeddedPdb || File.Exists(Path.ChangeExtension(assemblyFilePath, ".pdb")))
+            {
+                var readerParameters = new Mono.Cecil.ReaderParameters
+                {
+                    ReadSymbols = true,
+                    ThrowIfSymbolsAreNotMatching = false,
+                    ReadingMode = Mono.Cecil.ReadingMode.Deferred
+                };
+                using var module = Mono.Cecil.ModuleDefinition.ReadModule(assemblyFilePath, readerParameters);
+                if (module.HasCustomDebugInformations)
+                {
+                    foreach (var custom in module.CustomDebugInformations)
+                    {
+                        if (custom is not SourceLinkDebugInformation sourceLinkDebugInformation)
+                        {
+                            continue;
+                        }
+
+                        var sourceLink = sourceLinkDebugInformation.Content;
+                        if (!string.IsNullOrWhiteSpace(sourceLink))
+                        {
+                            moduleInfo.SourceLink = sourceLink;
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void GetSourceLink(ModuleInfo moduleInfo, MetadataReader metadataReader)
+        {
+            foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
+            {
+                var customDebugInformation = metadataReader.GetCustomDebugInformation(customDebugInfoHandle);
+                var guid = metadataReader.GetGuid(customDebugInformation.Kind);
+                if (guid == SourceLinkGuid)
+                {
+                    var bytes = metadataReader.GetBlobBytes(customDebugInformation.Value);
+                    var text = new StreamReader(new MemoryStream(bytes)).ReadToEnd();
+                    moduleInfo.SourceLink = text;
+                }
+            }
         }
     }
 

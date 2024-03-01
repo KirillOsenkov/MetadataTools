@@ -193,11 +193,9 @@ namespace MetadataTools
             Console.WriteLine(dll);
             Console.WriteLine();
 
-            if (moduleInfo.SourceLink != null)
+            if (moduleInfo.Reproducible)
             {
-                Log("SourceLink:");
-                Log(moduleInfo.SourceLink);
-                Console.WriteLine();
+                Console.WriteLine("Reproducible");
             }
 
             foreach (var pdbEntry in moduleInfo.PdbEntries)
@@ -210,14 +208,29 @@ namespace MetadataTools
                 Console.WriteLine();
             }
 
-            var pdb = Path.ChangeExtension(dll, ".pdb");
-            if (File.Exists(pdb))
+            bool found = false;
+
+            if (moduleInfo.HasEmbeddedPdb)
             {
-                Console.WriteLine("Found " + Path.GetFileName(pdb) + ":");
-                return CheckMatch(dll, pdb);
+                Log("Contains embedded pdb", ConsoleColor.Green);
+                found = true;
             }
 
-            return false;
+            var pdb = Path.ChangeExtension(dll, ".pdb");
+            if (!found && File.Exists(pdb))
+            {
+                Console.Write("Found " + Path.GetFileName(pdb) + ": ");
+                found = CheckMatch(dll, pdb);
+                Console.WriteLine();
+            }
+
+            if (moduleInfo.SourceLink != null)
+            {
+                Log("SourceLink:", ConsoleColor.Green);
+                Log(moduleInfo.SourceLink, ConsoleColor.Gray);
+            }
+
+            return found;
         }
 
         private static void PrintPdbInfo(string pdb)
