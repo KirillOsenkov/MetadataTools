@@ -65,6 +65,8 @@ namespace MetadataTools
                         return 3;
                     }
 
+                    bool found = PrintAssemblyInfo(dll);
+
                     if (args[1].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
                     {
                         var pdb = Path.GetFullPath(args[1]);
@@ -79,7 +81,11 @@ namespace MetadataTools
                     }
                     else if (args[1].StartsWith("http", StringComparison.OrdinalIgnoreCase))
                     {
-                        DownloadSymbols(dll, args[1]);
+                        if (!found)
+                        {
+                            DownloadSymbols(dll, args[1]);
+                        }
+
                         return 0;
                     }
 
@@ -164,21 +170,25 @@ namespace MetadataTools
             }
         }
 
-        private static void DownloadSymbols(string dll, string url)
+        private static bool DownloadSymbols(string dll, string url)
         {
             var pdbInfo = PdbInfo.Read(dll);
             foreach (var record in pdbInfo)
             {
-                if (record.DownloadPdb(url))
+                if (record.DownloadPdb(url) is string pdb)
                 {
-                    return;
+                    if (CheckMatch(dll, pdb))
+                    {
+                        return true;
+                    }
                 }
             }
 
             Log($"Couldn't find symbols for {dll} at {url}");
+            return false;
         }
 
-        private static void PrintAssemblyInfo(string dll)
+        private static bool PrintAssemblyInfo(string dll)
         {
             var debugDirectory = PdbInfo.ReadDebugDirectoryEntries(dll);
             foreach (var debugDirectoryEntry in debugDirectory)
@@ -200,8 +210,10 @@ namespace MetadataTools
             if (File.Exists(pdb))
             {
                 Console.WriteLine("Found " + Path.GetFileName(pdb) + ":");
-                CheckMatch(dll, pdb);
+                return CheckMatch(dll, pdb);
             }
+
+            return false;
         }
 
         private static void PrintPdbInfo(string pdb)
@@ -252,16 +264,19 @@ namespace MetadataTools
             }
         }
 
-        private static void CheckMatch(string dll, string pdb)
+        private static bool CheckMatch(string dll, string pdb)
         {
             if (PdbInfo.IsMatch(dll, pdb))
             {
                 Log("Match", ConsoleColor.Green);
+                return true;
             }
             else
             {
                 Log("No match", ConsoleColor.Red);
             }
+
+            return false;
         }
 
         private static void Error(string text)

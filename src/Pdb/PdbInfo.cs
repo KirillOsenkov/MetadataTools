@@ -180,7 +180,7 @@ namespace MetadataTools
         //    }
         //}
 
-        public bool DownloadPdb(string serverUrl)
+        public string DownloadPdb(string serverUrl)
         {
             var client = new HttpClient();
             var url = $"{serverUrl}/{AssemblyShortName}.pdb/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
@@ -193,7 +193,7 @@ namespace MetadataTools
             catch (Exception ex)
             {
                 Log("Error: " + ex.Message);
-                return false;
+                return null;
             }
 
             if (text.StartsWith("PATH:"))
@@ -222,17 +222,17 @@ namespace MetadataTools
                             catch (Exception ex)
                             {
                                 Log(ex.ToString());
-                                return false;
+                                return null;
                             }
                         }
 
                         Log($"Downloaded {destinationPdb}");
-                        return true;
+                        return destinationPdb;
                     }
                     else
                     {
                         Log($"{destinationPdb} already exists.");
-                        return true;
+                        return destinationPdb;
                     }
                 }
                 else
@@ -245,7 +245,7 @@ namespace MetadataTools
                 Console.Error.WriteLine(text);
             }
 
-            return false;
+            return null;
 
             //File.Copy(text, @"C:\Temp\1.pdb", overwrite: true);
         }
