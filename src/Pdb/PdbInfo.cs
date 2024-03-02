@@ -62,7 +62,7 @@ namespace MetadataTools
                     }
                 }
 
-                ReadSourceLink(assemblyFilePath, moduleInfo);
+                moduleInfo.SourceLink = ReadSourceLink(assemblyFilePath, moduleInfo.HasEmbeddedPdb);
             }
             catch (Exception ex)
             {
@@ -72,10 +72,10 @@ namespace MetadataTools
             return moduleInfo;
         }
 
-        private static void ReadSourceLink(string assemblyFilePath, ModuleInfo moduleInfo)
+        public static string ReadSourceLink(string assemblyFilePath, bool hasEmbeddedPdb)
         {
             string pdbFilePath = Path.ChangeExtension(assemblyFilePath, ".pdb");
-            if (moduleInfo.HasEmbeddedPdb || File.Exists(pdbFilePath))
+            if (hasEmbeddedPdb || File.Exists(pdbFilePath))
             {
                 var readerParameters = new Mono.Cecil.ReaderParameters
                 {
@@ -96,8 +96,7 @@ namespace MetadataTools
                         var sourceLink = sourceLinkDebugInformation.Content;
                         if (!string.IsNullOrWhiteSpace(sourceLink))
                         {
-                            moduleInfo.SourceLink = sourceLink;
-                            return;
+                            return sourceLink;
                         }
                     }
                 }
@@ -108,12 +107,14 @@ namespace MetadataTools
                     var stream = new MemoryStream(bytes);
                     var reader5 = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(stream, new SymReaderMetadataProvider());
                     var data = PdbSrcSvr.GetSourceServerData(reader5);
-                    moduleInfo.SourceLink = data;
+                    return data;
                 }
             }
+
+            return null;
         }
 
-        private static void GetSourceLink(ModuleInfo moduleInfo, MetadataReader metadataReader)
+        private static void GetSourceLinkFromPortablePdb(ModuleInfo moduleInfo, MetadataReader metadataReader)
         {
             foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
             {
