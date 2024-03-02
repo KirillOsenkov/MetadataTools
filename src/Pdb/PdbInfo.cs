@@ -74,7 +74,8 @@ namespace MetadataTools
 
         private static void ReadSourceLink(string assemblyFilePath, ModuleInfo moduleInfo)
         {
-            if (moduleInfo.HasEmbeddedPdb || File.Exists(Path.ChangeExtension(assemblyFilePath, ".pdb")))
+            string pdbFilePath = Path.ChangeExtension(assemblyFilePath, ".pdb");
+            if (moduleInfo.HasEmbeddedPdb || File.Exists(pdbFilePath))
             {
                 var readerParameters = new Mono.Cecil.ReaderParameters
                 {
@@ -96,8 +97,18 @@ namespace MetadataTools
                         if (!string.IsNullOrWhiteSpace(sourceLink))
                         {
                             moduleInfo.SourceLink = sourceLink;
+                            return;
                         }
                     }
+                }
+
+                if (File.Exists(pdbFilePath))
+                {
+                    var bytes = File.ReadAllBytes(pdbFilePath);
+                    var stream = new MemoryStream(bytes);
+                    var reader5 = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(stream, new SymReaderMetadataProvider());
+                    var data = PdbSrcSvr.GetSourceServerData(reader5);
+                    moduleInfo.SourceLink = data;
                 }
             }
         }

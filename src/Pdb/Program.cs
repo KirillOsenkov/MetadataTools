@@ -178,6 +178,7 @@ namespace MetadataTools
                 {
                     if (CheckMatch(dll, pdb))
                     {
+                        PrintPdbInfo(pdb);
                         return true;
                     }
                 }
@@ -221,6 +222,7 @@ namespace MetadataTools
             {
                 Console.Write("Found " + Path.GetFileName(pdb) + ": ");
                 found = CheckMatch(dll, pdb);
+                PrintPdbInfo(pdb);
                 Console.WriteLine();
             }
 
