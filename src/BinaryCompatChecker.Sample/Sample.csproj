@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <DebugType>embedded</DebugType>
+    <LangVersion>latest</LangVersion>
+    <OutputType>Exe</OutputType>
+    <Prefer32Bit>true</Prefer32Bit>
+    <CheckBinaryCompat>true</CheckBinaryCompat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NetFramework.ReferenceAssemblies" Version="1.0.3" />
+    <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="BinaryCompatReport.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
