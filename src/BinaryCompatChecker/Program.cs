@@ -129,7 +129,9 @@ namespace BinaryCompatChecker
                         continue;
                     }
 
-                    CheckAssemblyReference(assemblyDefinition, resolvedAssemblyDefinition, reference);
+                    CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
+
+                    CheckTypes(assemblyDefinition, resolvedAssemblyDefinition);
                 }
 
                 referenceMap[file] = referencePaths;
@@ -232,7 +234,7 @@ namespace BinaryCompatChecker
             return success;
         }
 
-        public void CheckAssemblyReference(
+        public void CheckAssemblyReferenceVersion(
             AssemblyDefinition referencing,
             AssemblyDefinition referenced,
             AssemblyNameReference reference)
@@ -246,8 +248,6 @@ namespace BinaryCompatChecker
                     ActualAssembly = referenced
                 });
             }
-
-            CheckTypes(referencing, referenced);
         }
 
         private void CheckMembers(AssemblyDefinition assembly)
