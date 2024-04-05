@@ -69,7 +69,7 @@ public partial class Checker
                 continue;
             }
 
-            if (!string.Equals(assembly.Name?.Name, name))
+            if (!string.Equals(assembly.Name?.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
