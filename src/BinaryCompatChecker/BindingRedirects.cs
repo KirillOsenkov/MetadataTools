@@ -106,23 +106,30 @@ public partial class Checker
             }
         }
 
-        if (versionMismatchesByName.TryGetValue(name, out var mismatches))
+        if (versionMismatchesByName.TryGetValue(name, out List<VersionMismatch> mismatches))
         {
             versionMismatchesByName.Remove(name);
-            foreach (var versionMismatch in mismatches.ToArray())
+            for (int i = mismatches.Count - 1; i >= 0; i--)
             {
+                var versionMismatch = mismatches[i];
+
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;
                 if (actualVersion != newVersion)
                 {
+                    string diagnostic = null;
+
                     if (actualVersion < oldVersionStart)
                     {
-                        diagnostics.Add($"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}' (Expected by '{versionMismatch.Referencer.Name}')");
-                        continue;
+                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}' (Expected by '{versionMismatch.Referencer.Name}')";
+                    }
+                    else if (actualVersion > oldVersionEnd)
+                    {
+                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}' (Expected by '{versionMismatch.Referencer.Name}')";
                     }
 
-                    if (actualVersion > oldVersionEnd)
+                    if (diagnostic != null)
                     {
-                        diagnostics.Add($"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}' (Expected by '{versionMismatch.Referencer.Name}')");
+                        diagnostics.Add(diagnostic);
                         continue;
                     }
                 }
