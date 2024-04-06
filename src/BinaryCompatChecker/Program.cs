@@ -56,10 +56,6 @@ namespace BinaryCompatChecker
                 fileQueue.Enqueue(file);
             }
 
-            HashSet<string> frameworkAssemblyNames = GetFrameworkAssemblyNames();
-            HashSet<string> assemblyNamesToIgnore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            assemblyNamesToIgnore.UnionWith(frameworkAssemblyNames);
-
             Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
 
             while (fileQueue.Count != 0)
@@ -107,11 +103,6 @@ namespace BinaryCompatChecker
                 List<string> referencePaths = new();
                 foreach (var reference in references)
                 {
-                    if (assemblyNamesToIgnore.Contains(reference.Name))
-                    {
-                        continue;
-                    }
-
                     var resolvedAssemblyDefinition = Resolve(reference);
                     if (resolvedAssemblyDefinition == null)
                     {
@@ -124,12 +115,12 @@ namespace BinaryCompatChecker
                     string referenceFilePath = resolvedAssemblyDefinition.MainModule.FileName;
                     referencePaths.Add(referenceFilePath);
 
+                    CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
+
                     if (IsNetFrameworkAssembly(resolvedAssemblyDefinition))
                     {
                         continue;
                     }
-
-                    CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
 
                     CheckTypes(assemblyDefinition, resolvedAssemblyDefinition);
                 }

@@ -99,6 +99,11 @@ public partial class Checker
                 continue;
             }
 
+            if (resolvedFromFramework.Contains(actualFilePath))
+            {
+                continue;
+            }
+
             actualFilePath = GetRelativePath(actualFilePath);
 
             diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`");

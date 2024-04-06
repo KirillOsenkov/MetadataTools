@@ -62,6 +62,8 @@ public partial class Checker
 
     private readonly List<VersionMismatch> versionMismatches = new List<VersionMismatch>();
 
+    private readonly HashSet<string> resolvedFromFramework = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public class CustomAssemblyResolver : BaseAssemblyResolver
     {
         private readonly Checker checker;
@@ -85,16 +87,6 @@ public partial class Checker
         return
             shortName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
             frameworkNames.Contains(shortName);
-    }
-
-    private HashSet<string> GetFrameworkAssemblyNames()
-    {
-        var corlibPath = typeof(object).Assembly.Location;
-        var frameworkDirectory = Path.GetDirectoryName(corlibPath);
-        var files = Directory.GetFiles(frameworkDirectory, "System*.dll").Select(Path.GetFileNameWithoutExtension);
-        var result = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
-        result.UnionWith(frameworkNames);
-        return result;
     }
 
     private static bool IsRoslynAssembly(string assemblyName)
@@ -316,6 +308,7 @@ public partial class Checker
         {
             if (shortName == "mscorlib" && File.Exists(mscorlibFilePath))
             {
+                resolvedFromFramework.Add(mscorlibFilePath);
                 return mscorlibFilePath;
             }
 
@@ -330,6 +323,7 @@ public partial class Checker
                         var candidate = Path.Combine(first[0], shortName + ".dll");
                         if (File.Exists(candidate))
                         {
+                            resolvedFromFramework.Add(candidate);
                             return candidate;
                         }
                     }
@@ -356,6 +350,7 @@ public partial class Checker
                 string versionCandidate = Path.Combine(lastVersion, shortName + ".dll");
                 if (File.Exists(versionCandidate))
                 {
+                    resolvedFromFramework.Add(versionCandidate);
                     return versionCandidate;
                 }
             }
@@ -363,6 +358,7 @@ public partial class Checker
             string frameworkCandidate = Path.Combine(dotnetRuntimeDirectory, shortName + ".dll");
             if (File.Exists(frameworkCandidate))
             {
+                resolvedFromFramework.Add(frameworkCandidate);
                 return frameworkCandidate;
             }
         }
