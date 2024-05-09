@@ -316,7 +316,7 @@ namespace BinaryCompatChecker
                     TypeReference typeReference = memberReference as TypeReference ??
                         memberReference.DeclaringType;
 
-                    if (typeReference != null && typeReference.Scope.Name is string scope && IsFrameworkName(scope))
+                    if (typeReference != null && typeReference.Scope?.Name is string scope && IsFrameworkName(scope))
                     {
                         report = false;
                     }
