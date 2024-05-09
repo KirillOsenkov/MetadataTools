@@ -2,25 +2,24 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
 {
     public partial class Checker
     {
-        Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
+        private readonly Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
 
-        List<string> assembliesExamined = new();
-        List<string> reportLines = new();
-        List<IVTUsage> ivtUsages = new();
-        HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> files;
+        private readonly List<string> assembliesExamined = new();
+        private readonly List<string> reportLines = new();
+        private readonly List<IVTUsage> ivtUsages = new();
+        private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> files;
 
-        static CommandLine commandLine;
+        private static CommandLine commandLine;
 
         [STAThread]
         static int Main(string[] args)
