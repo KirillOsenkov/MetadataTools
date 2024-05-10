@@ -286,7 +286,7 @@ namespace BinaryCompatChecker
                         string typeOrMember = memberReference is TypeReference ? "type" : "member";
                         diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
 
-                        if (resolveCache.TryGetValue(referenceToAssembly, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                        if (referenceToAssembly != null && resolveCache.TryGetValue(referenceToAssembly, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
                         {
                             assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
                         }
