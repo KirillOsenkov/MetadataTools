@@ -25,7 +25,7 @@ namespace GuiLabs.Metadata.Tests
         [Benchmark]
         public void PEFileReaderTest()
         {
-            PEFileReader.IsManagedAssembly(filePath);
+            PEFile.IsManagedAssembly(filePath);
         }
 
         private void ReadAssemblyName(string filePath)

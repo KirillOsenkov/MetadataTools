@@ -60,7 +60,7 @@ public class FileInfo
             return false;
         }
 
-        if (!GuiLabs.Metadata.PEFileReader.IsManagedAssembly(filePath))
+        if (!GuiLabs.Metadata.PEFile.IsManagedAssembly(filePath))
         {
             return false;
         }

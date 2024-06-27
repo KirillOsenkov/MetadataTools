@@ -151,7 +151,7 @@ namespace MetadataTools
 
             foreach (var file in dlls)
             {
-                if (!GuiLabs.Metadata.PEFileReader.IsManagedAssembly(file))
+                if (!GuiLabs.Metadata.PEFile.IsManagedAssembly(file))
                 {
                     continue;
                 }

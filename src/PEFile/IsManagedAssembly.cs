@@ -15,7 +15,7 @@ namespace GuiLabs.Metadata
 {
     // Known issues: returns a false positive for System.Private.CoreLib.ni.dll
     // returns a false positive for an incorrect test binary from the Roslyn testbed
-    public class PEFileReader
+    public class PEFile
     {
         public static bool IsManagedAssembly(string filePath)
         {

@@ -24,7 +24,7 @@ namespace GuiLabs.Metadata.Tests
                     {
                         try
                         {
-                            var isManaged = PEFileReader.IsManagedAssembly(file);
+                            var isManaged = PEFile.IsManagedAssembly(file);
                             var expected = TryGetAssemblyName(file) != null;
                             if (expected != isManaged)
                             {
