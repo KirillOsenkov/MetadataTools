@@ -191,6 +191,31 @@ public class FileInfo
         {
             version = module.Assembly.Name.Version.ToString();
 
+            var flags = module.Attributes;
+            if ((flags & ModuleAttributes.Required32Bit) != 0)
+            {
+                Architecture = "x86";
+            }
+            else
+            {
+                Architecture = "Any CPU";
+            }
+
+            if ((flags & ModuleAttributes.Preferred32Bit) != 0)
+            {
+                Platform = "32BITPREF : 1";
+                Architecture = "Any CPU";
+            }
+            else
+            {
+                Platform = "32BITPREF : 0";
+            }
+
+            if ((flags & ModuleAttributes.StrongNameSigned) != 0)
+            {
+                FullSigned = "Full-signed";
+            }
+
             var customAttributes = module.GetCustomAttributes().ToArray();
 
             var targetFrameworkAttribute = customAttributes.FirstOrDefault(a => a.AttributeType.FullName == "System.Runtime.Versioning.TargetFrameworkAttribute");
@@ -295,7 +320,7 @@ public class FileInfo
 
                         if (IsManagedAssembly)
                         {
-                            ListBinaryInfo.CheckPlatform(this);
+                            //ListBinaryInfo.CheckPlatform(this);
 
                             platformText = Architecture;
                             if (Platform != "32BITPREF : 0" && Platform != null)
