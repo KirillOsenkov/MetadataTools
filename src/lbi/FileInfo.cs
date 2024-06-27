@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using GuiLabs.Metadata;
 using Mono.Cecil;
 
@@ -211,7 +213,25 @@ public class FileInfo
                 Platform = "32BITPREF : 0";
             }
 
-            if ((flags & ModuleAttributes.StrongNameSigned) != 0)
+            bool hasStrongNameDataDirectory = HasStrongName(module);
+            bool hasStrongNameFlag = (flags & ModuleAttributes.StrongNameSigned) != 0;
+            if (hasStrongNameDataDirectory)
+            {
+                FullSigned = "Full-signed";
+            }
+            else
+            {
+                if (hasStrongNameFlag)
+                {
+                    FullSigned = "Strong name validation failed";
+                }
+                else
+                {
+                    FullSigned = "Delay-signed or test-signed";
+                }
+            }
+
+            if (hasStrongNameFlag)
             {
                 Signed = "Signed";
             }
@@ -246,6 +266,51 @@ public class FileInfo
                 informationalVersion = value.ToString();
             }
         }
+    }
+
+    private static readonly FieldInfo imageField =
+        typeof(ModuleDefinition).GetField("Image", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly Type imageType =
+        typeof(ModuleDefinition).Assembly.GetType("Mono.Cecil.PE.Image");
+    private static readonly FieldInfo strongNameField = imageType.GetField("StrongName");
+    private static readonly Type dataDirectoryType =
+        typeof(ModuleDefinition).Assembly.GetType("Mono.Cecil.PE.DataDirectory");
+    private static readonly FieldInfo virtualAddressField = dataDirectoryType.GetField("VirtualAddress");
+    private static readonly FieldInfo sizeField = dataDirectoryType.GetField("Size");
+    private static readonly MethodInfo getReaderAt =
+        imageType.GetMethod("GetReaderAt", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private bool HasStrongName(ModuleDefinition module)
+    {
+        object image = imageField.GetValue(module);
+        if (image == null)
+        {
+            return false;
+        }
+
+        object strongName = strongNameField.GetValue(image);
+        if (strongName == null)
+        {
+            return false;
+        }
+
+        uint virtualAddress = (uint)virtualAddressField.GetValue(strongName);
+        uint size = (uint)sizeField.GetValue(strongName);
+        if (virtualAddress == 0 || size == 0)
+        {
+            return false;
+        }
+
+        var binaryReader = (BinaryReader)getReaderAt.Invoke(image, new object[] { virtualAddress });
+        var bytes = binaryReader.ReadBytes((int)size);
+        StrongNameBytes = bytes;
+
+        if (bytes.All(b => b == 0))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static readonly Dictionary<string, string> targetFrameworkNames = new Dictionary<string, string>()
@@ -291,7 +356,14 @@ public class FileInfo
 
                         if (IsManagedAssembly)
                         {
+                            var oldSigned = Signed;
+                            var oldFullSigned = FullSigned;
+
                             ListBinaryInfo.CheckSigned(this);
+
+                            if (oldSigned != Signed || oldFullSigned != FullSigned)
+                            {
+                            }
 
                             signedText = FullSigned ?? "";
                             if (Signed != "Signed" && Signed != null)
@@ -367,4 +439,6 @@ public class FileInfo
             return fileSize;
         }
     }
+
+    public byte[] StrongNameBytes { get; private set; }
 }
