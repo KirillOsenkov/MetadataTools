@@ -1,11 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
     <OutputType>Exe</OutputType>
-    <AssemblyName>lbi</AssemblyName>
-    <LangVersion>latest</LangVersion>
-    <DebugType>embedded</DebugType>
+    <TargetFramework>net6.0</TargetFramework>
     <RollForward>major</RollForward>
   </PropertyGroup>
 
@@ -15,13 +12,17 @@
     <ToolCommandName>lbi</ToolCommandName>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>lbi</PackageId>
+    <Authors>Kirill Osenkov</Authors>
     <Description>List all assembly versions and signed flags for all dlls in current directory and all subdirectories, or print directory contents recursively (to a file).</Description>
 <!--    
     <IconFilePath>$(MSBuildThisFileDirectory)icon.png</IconFilePath>
     <PackageIcon>icon.png</PackageIcon>
 -->
-    <PackageTags>.NET dotnet assembly version signed list tool</PackageTags>
+    <PackageTags>.NET dotnet assembly version signed list listing dir directory tool</PackageTags>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/KirillOsenkov/MetadataTools</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/KirillOsenkov/MetadataTools</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
