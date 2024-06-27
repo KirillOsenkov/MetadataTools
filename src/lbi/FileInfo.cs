@@ -213,7 +213,11 @@ public class FileInfo
 
             if ((flags & ModuleAttributes.StrongNameSigned) != 0)
             {
-                FullSigned = "Full-signed";
+                Signed = "Signed";
+            }
+            else
+            {
+                Signed = "Unsigned";
             }
 
             var customAttributes = module.GetCustomAttributes().ToArray();
