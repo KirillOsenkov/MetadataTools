@@ -29,7 +29,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\PEFile\IsManagedAssembly.cs" />
+    <Compile Include="..\PEFile\PEFile.cs" />
   </ItemGroup>
 
   <ItemGroup>

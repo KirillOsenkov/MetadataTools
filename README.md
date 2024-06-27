@@ -10,7 +10,7 @@ Included features:
    - download the .pdb from symbol server
    - determine if a .dll matches a .pdb
    - find a matching .pdb in a folder for a given .dll
- * **IsManagedAssembly.cs** - a single .cs file to very quickly determine if a .dll or .exe represents a managed assembly.
+ * **PEFile.cs** - a single .cs file to very quickly determine if a .dll or .exe represents a managed assembly.
  * **ReadAssemblyVersion** - quickly read an assembly's version
  * **LargeAddressAware** - sets the LargeAddressAware bit in a 32-bit executable to unlock 4GB memory space
  * **MVID** - Quickly read an assembly's MVID

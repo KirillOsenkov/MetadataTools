@@ -28,7 +28,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\PEFile\IsManagedAssembly.cs" Link="IsManagedAssembly.cs" />
+    <Compile Include="..\PEFile\PEFile.cs" Link="PEFile.cs" />
   </ItemGroup>
 
   <ItemGroup>

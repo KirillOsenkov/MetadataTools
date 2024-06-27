@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)..\BinaryCompatChecker\AppConfigFile.cs" Link="AppConfigFile.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)..\PEFile\IsManagedAssembly.cs" Link="IsManagedAssembly.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\PEFile\PEFile.cs" Link="PEFile.cs" />
   </ItemGroup>
 
   <ItemGroup>
