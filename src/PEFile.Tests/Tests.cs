@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace PEFile.Tests
+namespace GuiLabs.Metadata.Tests
 {
     public class Tests
     {

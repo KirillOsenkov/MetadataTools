@@ -10,7 +10,7 @@
 
 using System.IO;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     class ReadHeaders
     {

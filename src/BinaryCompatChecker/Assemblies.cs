@@ -388,7 +388,7 @@ public partial class Checker
         {
             try
             {
-                if (!PEFile.PEFileReader.IsManagedAssembly(filePath))
+                if (!GuiLabs.Metadata.PEFileReader.IsManagedAssembly(filePath))
                 {
                     filePathToModuleDefinition[filePath] = null;
                     return null;

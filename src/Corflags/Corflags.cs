@@ -2,7 +2,7 @@
 using System.IO;
 using System.Reflection.PortableExecutable;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public class Corflags
     {

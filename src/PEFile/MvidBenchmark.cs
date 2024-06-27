@@ -4,7 +4,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using BenchmarkDotNet.Attributes;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public class MvidBenchmark
     {

@@ -3,7 +3,7 @@ using System.IO;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public static class FileUtilities
     {

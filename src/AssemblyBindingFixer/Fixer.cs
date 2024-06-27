@@ -354,7 +354,7 @@ namespace AssemblyBindingFixer
 
             try
             {
-                if (File.Exists(assemblyPath) && PEFile.PEFileReader.IsManagedAssembly(assemblyPath))
+                if (File.Exists(assemblyPath) && GuiLabs.Metadata.PEFileReader.IsManagedAssembly(assemblyPath))
                 {
                     assembly = AssemblyDefinition.ReadAssembly(assemblyPath);
                     return true;

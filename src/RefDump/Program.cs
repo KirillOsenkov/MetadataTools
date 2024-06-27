@@ -133,7 +133,7 @@ namespace RefDump
                 return;
             }
 
-            if (!PEFile.PEFileReader.IsManagedAssembly(filePath))
+            if (!GuiLabs.Metadata.PEFileReader.IsManagedAssembly(filePath))
             {
                 // Console.WriteLine($"{filePath} is not a managed assembly.");
                 return;

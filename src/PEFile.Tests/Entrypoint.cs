@@ -1,6 +1,6 @@
 ﻿using BenchmarkDotNet.Running;
 
-namespace PEFile.Tests
+namespace GuiLabs.Metadata.Tests
 {
     class Entrypoint
     {

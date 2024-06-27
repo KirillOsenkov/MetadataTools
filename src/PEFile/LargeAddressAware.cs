@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public class LargeAddressAware
     {

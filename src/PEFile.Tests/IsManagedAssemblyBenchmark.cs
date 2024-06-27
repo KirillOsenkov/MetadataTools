@@ -4,7 +4,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using Xunit;
 
-namespace PEFile.Tests
+namespace GuiLabs.Metadata.Tests
 {
     public class IsManagedAssemblyBenchmark
     {

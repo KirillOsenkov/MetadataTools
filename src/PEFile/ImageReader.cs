@@ -14,7 +14,7 @@ using System.Linq;
 using RVA = System.UInt32;
 using TargetArchitecture = System.UInt16;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public sealed class ImageReader : BinaryStreamReader
     {

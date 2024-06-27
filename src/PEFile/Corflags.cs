@@ -2,7 +2,7 @@
 using System.Reflection.PortableExecutable;
 using Mono.Cecil;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     public class Corflags
     {

@@ -4,7 +4,7 @@ using System.IO;
 using System.Net.Http;
 using BenchmarkDotNet.Running;
 
-namespace PEFile
+namespace GuiLabs.Metadata
 {
     class Program
     {
