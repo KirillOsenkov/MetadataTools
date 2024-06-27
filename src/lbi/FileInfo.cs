@@ -344,7 +344,7 @@ public class FileInfo
     private readonly object snLock = new object();
     public string GetSignedText(bool printSn, bool validateSn)
     {
-        if (!printSn)
+        if (!printSn && !validateSn)
         {
             return null;
         }
