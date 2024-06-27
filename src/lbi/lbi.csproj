@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>lbi</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <DebugType>embedded</DebugType>
+    <RollForward>major</RollForward>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>1.0.10</Version>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>lbi</ToolCommandName>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>lbi</PackageId>
+    <Description>List all assembly versions and signed flags for all dlls in current directory and all subdirectories, or print directory contents recursively (to a file).</Description>
+<!--    
+    <IconFilePath>$(MSBuildThisFileDirectory)icon.png</IconFilePath>
+    <PackageIcon>icon.png</PackageIcon>
+-->
+    <PackageTags>.NET dotnet assembly version signed list tool</PackageTags>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.11.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\PEFile\IsManagedAssembly.cs" />
+  </ItemGroup>
+
+</Project>
