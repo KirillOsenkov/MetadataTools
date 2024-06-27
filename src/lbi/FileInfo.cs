@@ -223,7 +223,7 @@ public class FileInfo
             {
                 if (hasStrongNameFlag)
                 {
-                    FullSigned = "Strong name validation failed";
+                    FullSigned = "Public signed";
                 }
                 else
                 {
