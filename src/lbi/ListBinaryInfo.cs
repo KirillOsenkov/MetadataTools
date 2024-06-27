@@ -35,7 +35,8 @@ lbi.exe [<pattern>]
     -nr:    Non-recursive (current directory only). Recursive by default.
     -mo     Managed assemblies only.
 
-    -sn     Print whether the assembly is signed.
+    -sn     Print assembly strong named/delay-signed/public-signed.
+    -snv    Validate assembly strong name using sn.exe -vf (slow).
     -p      Print assembly platform.
     -v      Print assembly version.
     -fv     Print assembly file version.
@@ -66,7 +67,8 @@ Examples:
 
     private static string corflagsExe;
     private static string snExe;
-    private static bool checkSn;
+    private static bool printSn;
+    private static bool validateSn;
     private static bool checkPlatform;
     private static bool printVersion;
     private static bool printFileVersion;
@@ -146,8 +148,15 @@ Examples:
         if (signArgument != null)
         {
             arguments.Remove(signArgument);
+            printSn = true;
+        }
+
+        var snvArgument = arguments.FirstOrDefault(a => a == "-snv");
+        if (snvArgument != null)
+        {
+            arguments.Remove(snvArgument);
             FindCorflagsAndSn();
-            checkSn = snExe != null;
+            validateSn = snExe != null;
         }
 
         var platformArgument = arguments.FirstOrDefault(a => a == "-p");
@@ -394,7 +403,8 @@ Examples:
         bool checkForManagedAssembly =
             printVersion ||
             printTargetFramework ||
-            checkSn ||
+            printSn ||
+            validateSn ||
             checkPlatform ||
             printFileVersion ||
             printInformationalVersion;
@@ -493,14 +503,11 @@ Examples:
                 sb.Append(fileInfo.TargetFramework);
             }
 
-            if (checkSn)
+            string signedText = fileInfo.GetSignedText(printSn, validateSn);
+            if (!string.IsNullOrWhiteSpace(signedText))
             {
-                string signedText = fileInfo.SignedText;
-                if (!string.IsNullOrWhiteSpace(signedText))
-                {
-                    AppendSeparator();
-                    sb.Append(signedText);
-                }
+                AppendSeparator();
+                sb.Append(signedText);
             }
 
             if (checkPlatform)
@@ -584,13 +591,10 @@ Examples:
                         Highlight(" " + fileInfo.TargetFramework, ConsoleColor.Blue, newLineAtEnd: false);
                     }
 
-                    if (checkSn)
+                    var signedText = fileInfo.GetSignedText(printSn, validateSn);
+                    if (!string.IsNullOrEmpty(signedText))
                     {
-                        var signedText = fileInfo.SignedText;
-                        if (!string.IsNullOrEmpty(signedText))
-                        {
-                            Highlight($" {signedText}", ConsoleColor.DarkGray, newLineAtEnd: false);
-                        }
+                        Highlight($" {signedText}", ConsoleColor.DarkGray, newLineAtEnd: false);
                     }
 
                     if (checkPlatform)

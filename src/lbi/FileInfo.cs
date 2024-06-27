@@ -342,41 +342,35 @@ public class FileInfo
     private string signedText = null;
     private bool readSignedText;
     private readonly object snLock = new object();
-    public string SignedText
+    public string GetSignedText(bool printSn, bool validateSn)
     {
-        get
+        if (!printSn)
         {
-            if (!readSignedText)
+            return null;
+        }
+
+        if (!readSignedText)
+        {
+            lock (snLock)
             {
-                lock (snLock)
+                if (!readSignedText)
                 {
-                    if (!readSignedText)
+                    readSignedText = true;
+
+                    if (IsManagedAssembly)
                     {
-                        readSignedText = true;
-
-                        if (IsManagedAssembly)
+                        if (validateSn)
                         {
-                            var oldSigned = Signed;
-                            var oldFullSigned = FullSigned;
-
                             ListBinaryInfo.CheckSigned(this);
-
-                            if (oldSigned != Signed || oldFullSigned != FullSigned)
-                            {
-                            }
-
-                            signedText = FullSigned ?? "";
-                            if (Signed != "Signed" && Signed != null)
-                            {
-                                signedText += "(" + Signed + ")";
-                            }
                         }
+
+                        signedText = FullSigned ?? "";
                     }
                 }
             }
-
-            return signedText;
         }
+
+        return signedText;
     }
 
     private string platformText = null;
