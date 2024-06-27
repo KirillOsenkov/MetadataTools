@@ -594,7 +594,13 @@ Examples:
                     var signedText = fileInfo.GetSignedText(printSn, validateSn);
                     if (!string.IsNullOrEmpty(signedText))
                     {
-                        Highlight($" {signedText}", ConsoleColor.DarkGray, newLineAtEnd: false);
+                        var color = ConsoleColor.DarkGray;
+                        if (signedText == "Strong name validation failed")
+                        {
+                            color = ConsoleColor.Red;
+                        }
+
+                        Highlight($" {signedText}", color, newLineAtEnd: false);
                     }
 
                     if (checkPlatform)
