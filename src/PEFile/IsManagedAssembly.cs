@@ -10,6 +10,7 @@
 
 using System;
 using System.IO;
+using System.Text;
 
 namespace GuiLabs.Metadata
 {
@@ -22,15 +23,56 @@ namespace GuiLabs.Metadata
             try
             {
                 using (Stream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                using (BinaryReader binaryReader = new BinaryReader(fileStream))
                 {
-                    if (fileStream.Length < 64)
+                    return IsManagedAssembly(fileStream);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool ManagedAssembly { get; set; }
+        public bool Platform64Bit { get; set; }
+        public bool IsValidPEFile { get; set; }
+        public uint Timestamp { get; private set; }
+        public uint SizeOfImage { get; private set; }
+
+        private static PEFile NotAPEFile = new PEFile();
+        private static PEFile Native64Bit = new PEFile { IsValidPEFile = true, Platform64Bit = true };
+        private static PEFile Native32Bit = new PEFile { IsValidPEFile = true };
+        private static PEFile Managed = new PEFile { IsValidPEFile = true, ManagedAssembly = true };
+
+        public static bool IsManagedAssembly(Stream stream)
+        {
+            return ReadInfo(stream).ManagedAssembly;
+        }
+
+        public static bool Is64Bit(Stream stream)
+        {
+            return ReadInfo(stream).Platform64Bit;
+        }
+
+        public static PEFile ReadInfo(string filePath)
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            return ReadInfo(stream);
+        }
+
+        public static PEFile ReadInfo(Stream stream)
+        {
+            try
+            {
+                using (var binaryReader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true))
+                {
+                    if (stream.Length < 64)
                     {
-                        return false;
+                        return NotAPEFile;
                     }
 
                     // PE Header starts @ 0x3C (60). Its a 4 byte header.
-                    fileStream.Position = 0x3C;
+                    stream.Position = 0x3C;
                     uint peHeaderPointer = binaryReader.ReadUInt32();
                     if (peHeaderPointer == 0)
                     {
@@ -42,21 +84,40 @@ namespace GuiLabs.Metadata
                     //     28 byte Standard Fields         (24 bytes for PE32+)
                     //     68 byte NT Fields               (88 bytes for PE32+)
                     // >= 128 byte Data Dictionary Table
-                    if (peHeaderPointer > fileStream.Length - 256)
+                    if (peHeaderPointer > stream.Length - 256)
                     {
-                        return false;
+                        return NotAPEFile;
                     }
 
                     // Check the PE signature.  Should equal 'PE\0\0'.
-                    fileStream.Position = peHeaderPointer;
+                    stream.Position = peHeaderPointer;
                     uint peHeaderSignature = binaryReader.ReadUInt32();
                     if (peHeaderSignature != 0x00004550)
                     {
-                        return false;
+                        return NotAPEFile;
                     }
 
+                    PEFile result = NotAPEFile;
+
+                    ushort platform = (ushort)binaryReader.ReadInt16();
+
+                    // 0x8664 for x64
+                    // 0x014C for x86
+                    if (platform == 0x8664)
+                    {
+                        result = Native64Bit;
+                    }
+                    else if (platform == 0x014C)
+                    {
+                        result = Native32Bit;
+                    }
+
+                    stream.Position += 2;
+                    uint timestamp = binaryReader.ReadUInt32();
+                    result.Timestamp = timestamp;
+
                     // skip over the PEHeader fields
-                    fileStream.Position += 20;
+                    stream.Position += 12;
 
                     const ushort PE32 = 0x10b;
                     const ushort PE32Plus = 0x20b;
@@ -65,26 +126,29 @@ namespace GuiLabs.Metadata
                     var peFormat = binaryReader.ReadUInt16();
                     if (peFormat != PE32 && peFormat != PE32Plus)
                     {
-                        return false;
+                        return result;
                     }
+
+                    stream.Position = peHeaderPointer + 80;
+                    result.SizeOfImage = binaryReader.ReadUInt32();
 
                     // Read the 15th Data Dictionary RVA field which contains the CLI header RVA.
                     // When this is non-zero then the file contains CLI data otherwise not.
                     ushort dataDictionaryStart = (ushort)(peHeaderPointer + (peFormat == PE32 ? 232 : 248));
-                    fileStream.Position = dataDictionaryStart;
+                    stream.Position = dataDictionaryStart;
 
                     uint cliHeaderRva = binaryReader.ReadUInt32();
                     if (cliHeaderRva == 0)
                     {
-                        return false;
+                        return result;
                     }
 
-                    return true;
+                    return Managed;
                 }
             }
-            catch (Exception)
+            catch
             {
-                return false;
+                return NotAPEFile;
             }
         }
     }
