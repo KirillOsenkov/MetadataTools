@@ -32,7 +32,8 @@ lbi.exe [<pattern>]
     -ef:    Exclude files with substring. May be specified more than once.
     -nr:    Non-recursive (current directory only). Recursive by default.
 
-    -sn     Print whether the assembly is signed.
+    -sn     Print assembly strong named/delay-signed/public-signed.
+    -snv    Validate assembly strong name using sn.exe -vf (slow).
     -p      Print assembly platform.
     -v      Print assembly version.
     -fv     Print assembly file version.
