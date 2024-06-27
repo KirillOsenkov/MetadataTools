@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using GuiLabs.Metadata;
 using Mono.Cecil;
 
 public class FileInfo
@@ -32,6 +33,20 @@ public class FileInfo
         return fileInfo;
     }
 
+    private PEFile peFile;
+    public PEFile PEFile
+    {
+        get
+        {
+            if (peFile == null)
+            {
+                peFile = PEFile.ReadInfo(FilePath);
+            }
+
+            return peFile;
+        }
+    }
+
     private bool? isManagedAssembly;
     public bool IsManagedAssembly
     {
@@ -39,7 +54,7 @@ public class FileInfo
         {
             if (isManagedAssembly == null)
             {
-                isManagedAssembly = GetIsManagedAssembly(FilePath);
+                isManagedAssembly = IsManagedFileExtension(FilePath) && PEFile.ManagedAssembly;
             }
 
             return isManagedAssembly.Value;
@@ -53,19 +68,25 @@ public class FileInfo
             return false;
         }
 
-        if (!filePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-            !filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-            !filePath.EndsWith(".winmd", StringComparison.OrdinalIgnoreCase))
+        if (!IsManagedFileExtension(filePath))
         {
             return false;
         }
 
-        if (!GuiLabs.Metadata.PEFile.IsManagedAssembly(filePath))
+        if (!PEFile.IsManagedAssembly(filePath))
         {
             return false;
         }
 
         return true;
+    }
+
+    public static bool IsManagedFileExtension(string filePath)
+    {
+        return
+            filePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".winmd", StringComparison.OrdinalIgnoreCase);
     }
 
     private string assemblyName;
