@@ -272,6 +272,14 @@ namespace MetadataTools
             if (count > 4 && new string(chars, 0, 4) == "BSJB")
             {
                 Log("Portable pdb", ConsoleColor.Green);
+                var portable = PdbInfo.TryReadPortablePdb(pdb);
+                if (portable != null)
+                {
+                    PrintNameValue("Guid", portable.Guid.ToString());
+                    PrintNameValue("Stamp", Convert.ToHexString(portable.Stamp));
+                    PrintSourceLink(portable.SourceLink);
+                }
+
                 return;
             }
 

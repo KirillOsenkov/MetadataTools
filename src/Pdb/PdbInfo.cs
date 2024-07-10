@@ -146,12 +146,12 @@ namespace MetadataTools
 
         public static bool IsMatch(ModuleInfo moduleInfo, string pdbFilePath)
         {
-            var pdbGuid = TryReadPdbGuid(pdbFilePath);
-            if (pdbGuid != Guid.Empty)
+            var pdb = TryReadPortablePdb(pdbFilePath);
+            if (pdb != null)
             {
                 foreach (var debugDirectoryEntry in moduleInfo.PdbEntries)
                 {
-                    if (debugDirectoryEntry.Guid == pdbGuid)
+                    if (debugDirectoryEntry.Guid == pdb.Guid)
                     {
                         return true;
                     }
@@ -163,7 +163,7 @@ namespace MetadataTools
             return IsMatchWindowsPdb(moduleInfo.PdbEntries, pdbFilePath);
         }
 
-        public static Guid TryReadPdbGuid(string pdbFilePath)
+        public static PortablePdb TryReadPortablePdb(string pdbFilePath)
         {
             try
             {
@@ -171,7 +171,7 @@ namespace MetadataTools
                 {
                     if (stream.Length < 1024)
                     {
-                        return Guid.Empty;
+                        return null;
                     }
 
                     if (stream.ReadByte() != 'B' ||
@@ -180,7 +180,7 @@ namespace MetadataTools
                         stream.ReadByte() != 'B')
                     {
                         // not a portable Pdb
-                        return Guid.Empty;
+                        return null;
                     }
 
                     stream.Position = 0;
@@ -188,16 +188,23 @@ namespace MetadataTools
                     using (var provider = MetadataReaderProvider.FromPortablePdbStream(stream))
                     {
                         var metadataReader = provider.GetMetadataReader();
+
                         var id = metadataReader.DebugMetadataHeader.Id;
                         var guid = new Guid(id.Take(16).ToArray());
                         var stamp = id.Skip(16).ToArray();
-                        return guid;
+
+                        var pdb = new PortablePdb();
+                        pdb.Guid = guid;
+                        pdb.Stamp = stamp;
+                        pdb.SourceLink = ReadSourceLinkFromPortablePdb(metadataReader);
+
+                        return pdb;
                     }
                 }
             }
             catch (Exception)
             {
-                return Guid.Empty;
+                return null;
             }
         }
 
@@ -212,7 +219,7 @@ namespace MetadataTools
 
         public static readonly Guid SourceLinkGuid = new Guid("{CC110556-A091-4D38-9FEC-25AB9A351A6A}");
 
-        public static void ReadSourceLinkFromPortablePdb(ModuleInfo moduleInfo, MetadataReader metadataReader)
+        public static string ReadSourceLinkFromPortablePdb(MetadataReader metadataReader)
         {
             foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
             {
@@ -222,10 +229,19 @@ namespace MetadataTools
                 {
                     var bytes = metadataReader.GetBlobBytes(customDebugInformation.Value);
                     var text = new StreamReader(new MemoryStream(bytes)).ReadToEnd();
-                    moduleInfo.SourceLink = text;
+                    return text;
                 }
             }
+
+            return null;
         }
+    }
+
+    public class PortablePdb
+    {
+        public Guid Guid { get; internal set; }
+        public byte[] Stamp { get; internal set; }
+        public string SourceLink { get; internal set; }
     }
 
     public class PdbChecksum
