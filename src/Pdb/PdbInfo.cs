@@ -17,6 +17,7 @@ namespace MetadataTools
         public string FilePath { get; set; }
         public string SourceLink { get; set; }
         public IReadOnlyList<PdbRecord> PdbEntries { get; set; }
+        public IList<PdbChecksum> PdbChecksums { get; set; }
         public bool HasEmbeddedPdb { get; set; }
         public bool Reproducible { get; set; }
 
@@ -27,6 +28,8 @@ namespace MetadataTools
 
             var list = new List<PdbRecord>();
             moduleInfo.PdbEntries = list;
+
+            moduleInfo.PdbChecksums = new List<PdbChecksum>();
 
             try
             {
@@ -59,6 +62,16 @@ namespace MetadataTools
                         {
                             moduleInfo.Reproducible = true;
                         }
+                        else if (entry.Type == DebugDirectoryEntryType.PdbChecksum)
+                        {
+                            var data = reader.ReadPdbChecksumDebugDirectoryData(entry);
+                            var checksum = new PdbChecksum
+                            {
+                                Algorithm = data.AlgorithmName,
+                                Checksum = Convert.ToHexString(data.Checksum.ToArray())
+                            };
+                            moduleInfo.PdbChecksums.Add(checksum);
+                        }
                     }
                 }
 
@@ -72,14 +85,15 @@ namespace MetadataTools
             return moduleInfo;
         }
 
-        public static string ReadSourceLink(string assemblyFilePath, bool hasEmbeddedPdb)
+        public static string ReadSourceLink(string assemblyFilePath, bool hasEmbeddedPdb, string pdbFilePath = null)
         {
-            string pdbFilePath = Path.ChangeExtension(assemblyFilePath, ".pdb");
+            pdbFilePath ??= Path.ChangeExtension(assemblyFilePath, ".pdb");
             if (hasEmbeddedPdb || File.Exists(pdbFilePath))
             {
                 var readerParameters = new Mono.Cecil.ReaderParameters
                 {
                     ReadSymbols = true,
+                    SymbolReaderProvider = new DefaultSymbolReaderProvider(throwIfNoSymbol: false) {  },
                     ThrowIfSymbolsAreNotMatching = false,
                     ReadingMode = Mono.Cecil.ReadingMode.Deferred
                 };
@@ -103,10 +117,7 @@ namespace MetadataTools
 
                 if (File.Exists(pdbFilePath))
                 {
-                    var bytes = File.ReadAllBytes(pdbFilePath);
-                    var stream = new MemoryStream(bytes);
-                    var reader5 = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(stream, new SymReaderMetadataProvider());
-                    var data = PdbSrcSvr.GetSourceServerData(reader5);
+                    var data = PdbInfo.ReadSourceServerDataFromNativePdb(pdbFilePath);
                     return data;
                 }
             }
@@ -213,6 +224,21 @@ namespace MetadataTools
                 return Guid.Empty;
             }
         }
+
+        public static string ReadSourceServerDataFromNativePdb(string pdbFilePath)
+        {
+            var bytes = File.ReadAllBytes(pdbFilePath);
+            var stream = new MemoryStream(bytes);
+            var reader5 = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(stream, new SymReaderMetadataProvider());
+            var data = PdbSrcSvr.GetSourceServerData(reader5);
+            return data;
+        }
+    }
+
+    public class PdbChecksum
+    {
+        public string Algorithm { get; internal set; }
+        public string Checksum { get; internal set; }
     }
 
     public class PdbRecord

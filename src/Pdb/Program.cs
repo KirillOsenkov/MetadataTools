@@ -76,6 +76,7 @@ namespace MetadataTools
                         }
 
                         CheckMatch(dll, pdb);
+                        PrintPdbInfo(pdb);
                         return 0;
                     }
                     else if (args[1].StartsWith("http", StringComparison.OrdinalIgnoreCase))
@@ -185,7 +186,7 @@ namespace MetadataTools
                     if (CheckMatch(dll, pdb))
                     {
                         PrintPdbInfo(pdb);
-                        var sourceLink = ModuleInfo.ReadSourceLink(dll, false);
+                        var sourceLink = ModuleInfo.ReadSourceLink(dll, hasEmbeddedPdb: false, pdb);
                         PrintSourceLink(sourceLink);
                         return true;
                     }
