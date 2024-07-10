@@ -30,6 +30,13 @@ namespace MetadataTools
                     }
 
                     PrintAssemblyInfo(dll);
+
+                    var pdb = Path.ChangeExtension(dll, ".pdb");
+                    if (File.Exists(pdb))
+                    {
+                        CheckMatch(dll, pdb);
+                        PrintPdbInfo(pdb);
+                    }
                 }
                 else if (args[0].StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
@@ -38,10 +45,10 @@ namespace MetadataTools
                 }
                 else if (args[0].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
                 {
-                    var files = GetFiles(args[0]);
-                    foreach (var file in files)
+                    var pdbs = GetFiles(args[0]);
+                    foreach (var pdb in pdbs)
                     {
-                        PrintPdbInfo(file);
+                        PrintPdbInfo(pdb);
                     }
 
                     return 0;
@@ -64,7 +71,12 @@ namespace MetadataTools
                         return 3;
                     }
 
-                    bool found = PrintAssemblyInfo(dll);
+                    bool hasEmbeddedPdb = PrintAssemblyInfo(dll);
+                    if (hasEmbeddedPdb)
+                    {
+                        Error($"Assembly has embedded pdb, ignoring argument: {dll}");
+                        return 0;
+                    }
 
                     if (args[1].EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
                     {
@@ -81,7 +93,7 @@ namespace MetadataTools
                     }
                     else if (args[1].StartsWith("http", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!found)
+                        if (!hasEmbeddedPdb)
                         {
                             DownloadSymbols(dll, args[1]);
                         }
@@ -186,8 +198,6 @@ namespace MetadataTools
                     if (CheckMatch(dll, pdb))
                     {
                         PrintPdbInfo(pdb);
-                        var sourceLink = ModuleInfo.ReadSourceLink(dll, hasEmbeddedPdb: false, pdb);
-                        PrintSourceLink(sourceLink);
                         return true;
                     }
                 }
@@ -218,6 +228,13 @@ namespace MetadataTools
                 Console.WriteLine();
             }
 
+            foreach (var checksum in moduleInfo.PdbChecksums)
+            {
+                PrintNameValue("Algorithm", checksum.Algorithm);
+                PrintNameValue("Checksum", checksum.Checksum);
+                Console.WriteLine();
+            }
+
             bool found = false;
 
             if (moduleInfo.HasEmbeddedPdb)
@@ -226,15 +243,10 @@ namespace MetadataTools
                 found = true;
             }
 
-            var pdb = Path.ChangeExtension(dll, ".pdb");
-            if (!found && File.Exists(pdb))
+            if (moduleInfo.SourceLink != null)
             {
-                Console.Write("Found " + Path.GetFileName(pdb) + ": ");
-                found = CheckMatch(dll, pdb);
-                PrintPdbInfo(pdb);
+                PrintSourceLink(moduleInfo.SourceLink);
             }
-
-            PrintSourceLink(moduleInfo.SourceLink);
 
             return found;
         }
@@ -268,6 +280,8 @@ namespace MetadataTools
                 if (new string(chars) == "Microsoft C/C++ MSF 7.00")
                 {
                     Log("Native pdb: Microsoft C/C++ MSF 7.00", ConsoleColor.Blue);
+                    var data = PdbInfo.ReadSourceServerDataFromNativePdb(pdb);
+                    PrintSourceLink(data);
                     return;
                 }
             }

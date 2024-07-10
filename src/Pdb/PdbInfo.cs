@@ -12,8 +12,6 @@ namespace MetadataTools
 {
     public class ModuleInfo
     {
-        public static readonly Guid SourceLinkGuid = new Guid("{CC110556-A091-4D38-9FEC-25AB9A351A6A}");
-
         public string FilePath { get; set; }
         public string SourceLink { get; set; }
         public IReadOnlyList<PdbRecord> PdbEntries { get; set; }
@@ -75,7 +73,10 @@ namespace MetadataTools
                     }
                 }
 
-                moduleInfo.SourceLink = ReadSourceLink(assemblyFilePath, moduleInfo.HasEmbeddedPdb);
+                if (moduleInfo.HasEmbeddedPdb)
+                {
+                    moduleInfo.SourceLink = ReadSourceLinkFromEmbeddedPdb(assemblyFilePath);
+                }
             }
             catch (Exception ex)
             {
@@ -85,59 +86,34 @@ namespace MetadataTools
             return moduleInfo;
         }
 
-        public static string ReadSourceLink(string assemblyFilePath, bool hasEmbeddedPdb, string pdbFilePath = null)
+        public static string ReadSourceLinkFromEmbeddedPdb(string assemblyFilePath)
         {
-            pdbFilePath ??= Path.ChangeExtension(assemblyFilePath, ".pdb");
-            if (hasEmbeddedPdb || File.Exists(pdbFilePath))
+            var readerParameters = new Mono.Cecil.ReaderParameters
             {
-                var readerParameters = new Mono.Cecil.ReaderParameters
+                ReadSymbols = true,
+                SymbolReaderProvider = new DefaultSymbolReaderProvider(throwIfNoSymbol: false) { },
+                ThrowIfSymbolsAreNotMatching = false,
+                ReadingMode = Mono.Cecil.ReadingMode.Deferred
+            };
+            using var module = Mono.Cecil.ModuleDefinition.ReadModule(assemblyFilePath, readerParameters);
+            if (module.HasCustomDebugInformations)
+            {
+                foreach (var custom in module.CustomDebugInformations)
                 {
-                    ReadSymbols = true,
-                    SymbolReaderProvider = new DefaultSymbolReaderProvider(throwIfNoSymbol: false) {  },
-                    ThrowIfSymbolsAreNotMatching = false,
-                    ReadingMode = Mono.Cecil.ReadingMode.Deferred
-                };
-                using var module = Mono.Cecil.ModuleDefinition.ReadModule(assemblyFilePath, readerParameters);
-                if (module.HasCustomDebugInformations)
-                {
-                    foreach (var custom in module.CustomDebugInformations)
+                    if (custom is not SourceLinkDebugInformation sourceLinkDebugInformation)
                     {
-                        if (custom is not SourceLinkDebugInformation sourceLinkDebugInformation)
-                        {
-                            continue;
-                        }
-
-                        var sourceLink = sourceLinkDebugInformation.Content;
-                        if (!string.IsNullOrWhiteSpace(sourceLink))
-                        {
-                            return sourceLink;
-                        }
+                        continue;
                     }
-                }
 
-                if (File.Exists(pdbFilePath))
-                {
-                    var data = PdbInfo.ReadSourceServerDataFromNativePdb(pdbFilePath);
-                    return data;
+                    var sourceLink = sourceLinkDebugInformation.Content;
+                    if (!string.IsNullOrWhiteSpace(sourceLink))
+                    {
+                        return sourceLink;
+                    }
                 }
             }
 
             return null;
-        }
-
-        private static void GetSourceLinkFromPortablePdb(ModuleInfo moduleInfo, MetadataReader metadataReader)
-        {
-            foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
-            {
-                var customDebugInformation = metadataReader.GetCustomDebugInformation(customDebugInfoHandle);
-                var guid = metadataReader.GetGuid(customDebugInformation.Kind);
-                if (guid == SourceLinkGuid)
-                {
-                    var bytes = metadataReader.GetBlobBytes(customDebugInformation.Value);
-                    var text = new StreamReader(new MemoryStream(bytes)).ReadToEnd();
-                    moduleInfo.SourceLink = text;
-                }
-            }
         }
     }
 
@@ -232,6 +208,23 @@ namespace MetadataTools
             var reader5 = SymUnmanagedReaderFactory.CreateReader<ISymUnmanagedReader5>(stream, new SymReaderMetadataProvider());
             var data = PdbSrcSvr.GetSourceServerData(reader5);
             return data;
+        }
+
+        public static readonly Guid SourceLinkGuid = new Guid("{CC110556-A091-4D38-9FEC-25AB9A351A6A}");
+
+        public static void ReadSourceLinkFromPortablePdb(ModuleInfo moduleInfo, MetadataReader metadataReader)
+        {
+            foreach (var customDebugInfoHandle in metadataReader.CustomDebugInformation)
+            {
+                var customDebugInformation = metadataReader.GetCustomDebugInformation(customDebugInfoHandle);
+                var guid = metadataReader.GetGuid(customDebugInformation.Kind);
+                if (guid == SourceLinkGuid)
+                {
+                    var bytes = metadataReader.GetBlobBytes(customDebugInformation.Value);
+                    var text = new StreamReader(new MemoryStream(bytes)).ReadToEnd();
+                    moduleInfo.SourceLink = text;
+                }
+            }
         }
     }
 
