@@ -163,6 +163,7 @@ namespace RefDump
                     ReportReferences(assemblyDefinition, references);
 
                     Log(assemblyDefinition.Name.FullName, ConsoleColor.Green);
+                    Log(filePath, ConsoleColor.DarkGray);
 
                     foreach (var reference in references)
                     {
