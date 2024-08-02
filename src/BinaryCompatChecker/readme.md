@@ -35,6 +35,15 @@ https://www.nuget.org/packages/checkbinarycompat
 ```
 Usage: checkbinarycompat <file-spec>* <option>* @<response-file>*
 
+Inspects assemblies and app.config files in a directory and reports potential issues.
+Writes a report of possible issues to BinaryCompatReport.txt (sorted alphabetically).
+File name/path can be customized using -out:<reportPath.txt>
+If the file exists, it is used as a baseline.
+If the report matches the baseline, it succeeds and returns exit code 0.
+If the report doesn't match the baseline, the report is written and exit code is 1.
+You can specify a separate baseline file using -baseline:<baselinePath.txt>
+This way you can compare with the baseline and write the report to a different file.
+
 File specs may be specified more than once. Each file spec is one of the following:
 
     * absolute directory path
@@ -52,18 +61,19 @@ File specs may be specified more than once. Each file spec is one of the followi
 Options:
     All options with parameters (other than -out:) may be specified more than once.
 
-    !<exclude-pattern>      Exclude a relative path or file pattern from analysis.
-    -l                      Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
-    -s                      Recursive (visit specified directories recursively). Default is non-recursive.
-    -closure:<file.dll>     Path to a root assembly of a closure (to report unused references).
-    -resolve:<directory>    Additional directory to resolve reference assemblies from.
-    -p:<pattern>            Semicolon-separated file pattern(s) such as *.dll;*.exe.
-    -out:<report.txt>       Write report to <report.txt> instead of BinaryCompatReport.txt.
-    -ignoreVersionMismatch  Do not report assembly version mismatches.
-    -ivt                    Report internal API surface area consumed via InternalsVisibleTo.
-    -embeddedInteropTypes   Report embedded interop types.
-    @response.rsp           Response file containing additional command-line arguments, one per line.
-    -?:                     Display help.
+    !<exclude-pattern>       Exclude a relative path or file pattern from analysis.
+    -l                       Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
+    -s                       Recursive (visit specified directories recursively). Default is non-recursive.
+    -closure:<file.dll>      Path to a root assembly of a closure (to report unused references).
+    -resolve:<directory>     Additional directory to resolve reference assemblies from.
+    -p:<pattern>             Semicolon-separated file pattern(s) such as *.dll;*.exe.
+    -baseline:<baseline.txt> Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
+    -out:<report.txt>        Write report to <report.txt> instead of BinaryCompatReport.txt.
+    -ignoreVersionMismatch   Do not report assembly version mismatches.
+    -ivt                     Report internal API surface area consumed via InternalsVisibleTo.
+    -embeddedInteropTypes    Report embedded interop types.
+    @response.rsp            Response file containing additional command-line arguments, one per line.
+    -?:                      Display help.
 ```
 
 ## Baseline
