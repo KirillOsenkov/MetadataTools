@@ -47,6 +47,24 @@ namespace BinaryCompatChecker
         {
             bool success = true;
 
+            string reportFile = commandLine.ReportFile;
+            reportFile = Path.GetFullPath(reportFile);
+
+            string baselineFile = commandLine.BaselineFile;
+            if (string.IsNullOrWhiteSpace(baselineFile))
+            {
+                baselineFile = reportFile;
+            }
+            else
+            {
+                baselineFile = Path.GetFullPath(baselineFile);
+                if (!File.Exists(baselineFile))
+                {
+                    WriteError($"Baseline file doesn't exist: {commandLine.BaselineFile}");
+                    return false;
+                }
+            }
+
             var appConfigFiles = new List<string>();
 
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
@@ -131,9 +149,6 @@ namespace BinaryCompatChecker
 
             CheckAppConfigFiles(appConfigFiles);
 
-            string reportFile = commandLine.ReportFile;
-            reportFile = Path.GetFullPath(reportFile);
-
             if (commandLine.ReportUnreferencedAssemblies)
             {
                 HashSet<string> closure = new(CommandLine.PathComparer);
@@ -171,22 +186,15 @@ namespace BinaryCompatChecker
 
             if (reportLines.Count > 0)
             {
-                if (!File.Exists(reportFile))
+                if (File.Exists(baselineFile))
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-
-                    // initial baseline creation mode
-                    File.WriteAllLines(reportFile, reportLines);
-                    WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
-                }
-                else
-                {
-                    var baseline = File.ReadAllLines(reportFile);
+                    var baseline = File.ReadAllLines(baselineFile);
                     if (!Enumerable.SequenceEqual(baseline, reportLines))
                     {
-                        WriteError(@"BinaryCompatChecker failed.
- The current assembly binary compatibility report is different from the checked-in baseline.
- Baseline file: " + reportFile);
+                        WriteError($@"Binary compatibility check failed.
+ The current assembly binary compatibility report is different from the baseline file.
+ Baseline file: {baselineFile}
+ Wrote report file: {reportFile}");
                         OutputDiff(baseline, reportLines);
                         try
                         {
@@ -200,8 +208,16 @@ namespace BinaryCompatChecker
                     }
                     else
                     {
-                        WriteLine($"{reportFile} hasn't changed", ConsoleColor.Green);
+                        WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
                     }
+                }
+                else if (!File.Exists(reportFile))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+
+                    // initial baseline creation mode
+                    File.WriteAllLines(reportFile, reportLines);
+                    WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
                 }
 
                 ListExaminedAssemblies(reportFile);
