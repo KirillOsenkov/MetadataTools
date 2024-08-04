@@ -390,6 +390,7 @@ public class FileInfo
 
                         if (IsManagedAssembly)
                         {
+                            ReadModule();
                             //ListBinaryInfo.CheckPlatform(this);
 
                             platformText = Architecture;
