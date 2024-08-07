@@ -198,10 +198,12 @@ namespace BinaryCompatChecker
                         OutputDiff(baseline, reportLines);
                         try
                         {
+                            Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
                             File.WriteAllLines(reportFile, reportLines);
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
+                            WriteError(ex.Message);
                         }
 
                         success = false;
