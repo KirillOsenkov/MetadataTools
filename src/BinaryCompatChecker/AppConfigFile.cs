@@ -128,14 +128,12 @@ namespace BinaryCompatChecker
             var runtime = configuration.Element("runtime");
             if (runtime == null)
             {
-                Error($"Element 'runtime' not found");
                 return;
             }
 
             var assemblyBinding = runtime.Elements(Xmlns("assemblyBinding"));
             if (assemblyBinding == null || !assemblyBinding.Any())
             {
-                Error($"Element 'assemblyBinding' not found");
                 return;
             }
 
