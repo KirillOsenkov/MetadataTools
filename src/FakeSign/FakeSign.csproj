@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SelfContained>False</SelfContained>
+    <PublishSingleFile>True</PublishSingleFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>
