@@ -363,6 +363,10 @@ public class FileInfo
                         {
                             ListBinaryInfo.CheckSigned(this);
                         }
+                        else
+                        {
+                            ReadModule();
+                        }
 
                         signedText = FullSigned ?? "";
                     }
