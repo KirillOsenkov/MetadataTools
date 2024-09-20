@@ -141,7 +141,7 @@ public partial class Checker
             var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}' with version {newVersion}.";
             if (foundVersions.Count > 0)
             {
-                message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct())}";
+                message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct().OrderBy(s => s))}";
             }
 
             diagnostics.Add(message);
