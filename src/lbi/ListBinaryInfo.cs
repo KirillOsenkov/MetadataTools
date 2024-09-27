@@ -19,6 +19,8 @@ lbi.exe [<pattern>]
         [-nr]
         [-mo]
         [-sn]
+        [-snv]
+        [-mvid]
         [-p]
         [-v]
         [-fv]
@@ -37,6 +39,7 @@ lbi.exe [<pattern>]
 
     -sn     Print assembly strong named/delay-signed/public-signed.
     -snv    Validate assembly strong name using sn.exe -vf (slow).
+    -mvid   Print assembly MVID.
     -p      Print assembly platform.
     -v      Print assembly version.
     -fv     Print assembly file version.
@@ -72,6 +75,7 @@ Examples:
     private static bool checkPlatform;
     private static bool printVersion;
     private static bool printFileVersion;
+    private static bool printMvid;
     private static bool printInformationalVersion;
     private static bool printTargetFramework;
     private static bool managedOnly = false;
@@ -179,6 +183,13 @@ Examples:
         {
             arguments.Remove(fileVersionArgument);
             printFileVersion = true;
+        }
+
+        var mvidArgument = arguments.FirstOrDefault(a => a == "-mvid");
+        if (mvidArgument != null)
+        {
+            arguments.Remove(mvidArgument);
+            printMvid = true;
         }
 
         var informationalVersionArgument = arguments.FirstOrDefault(a => a == "-iv");
@@ -407,6 +418,7 @@ Examples:
             validateSn ||
             checkPlatform ||
             printFileVersion ||
+            printMvid ||
             printInformationalVersion;
 
         var infos = new List<FileInfo>(files.Count);
@@ -531,6 +543,12 @@ Examples:
                 AppendSeparator();
                 sb.Append(fileInfo.InformationalVersion);
             }
+
+            if (printMvid && fileInfo.Mvid != default)
+            {
+                AppendSeparator();
+                sb.Append(fileInfo.Mvid.ToString("d"));
+            }
         }
 
         return sb.ToString();
@@ -625,6 +643,11 @@ Examples:
                     if (printInformationalVersion && !string.IsNullOrWhiteSpace(fileInfo.InformationalVersion))
                     {
                         Highlight(" " + fileInfo.InformationalVersion, ConsoleColor.DarkGreen, newLineAtEnd: false);
+                    }
+
+                    if (printMvid && fileInfo.Mvid != default)
+                    {
+                        Highlight(" " + fileInfo.Mvid.ToString("d"), ConsoleColor.Gray, newLineAtEnd: false);
                     }
                 }
 

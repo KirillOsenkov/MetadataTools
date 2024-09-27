@@ -112,6 +112,16 @@ public class FileInfo
         }
     }
 
+    private Guid mvid = default;
+    public Guid Mvid
+    {
+        get
+        {
+            ReadModule();
+            return mvid;
+        }
+    }
+
     private string targetFramework = null;
     public string TargetFramework
     {
@@ -192,6 +202,8 @@ public class FileInfo
         using (var module = ModuleDefinition.ReadModule(filePath, parameters))
         {
             version = module.Assembly.Name.Version.ToString();
+
+            mvid = module.Mvid;
 
             var flags = module.Attributes;
             if ((flags & ModuleAttributes.Required32Bit) != 0)
