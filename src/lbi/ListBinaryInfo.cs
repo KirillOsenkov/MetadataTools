@@ -626,7 +626,7 @@ Examples:
                         var platformText = fileInfo.PlatformText;
                         if (!string.IsNullOrEmpty(platformText))
                         {
-                            Highlight(" " + platformText, ConsoleColor.DarkMagenta, newLineAtEnd: false);
+                            Highlight(" " + platformText, ConsoleColor.Magenta, newLineAtEnd: false);
                         }
                     }
 
@@ -749,25 +749,6 @@ Examples:
     {
         if (string.IsNullOrEmpty(text))
         {
-            return;
-        }
-
-        // corflags
-        if (text.Contains("32BITPREF"))
-        {
-            fileInfo.Platform = text;
-            return;
-        }
-
-        if (text.Contains("32BITREQ  : 1"))
-        {
-            fileInfo.Architecture = "x86";
-            return;
-        }
-
-        if (text.Contains("32BITREQ  : 0"))
-        {
-            fileInfo.Architecture = "Any CPU";
             return;
         }
 

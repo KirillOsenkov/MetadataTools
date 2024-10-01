@@ -18,7 +18,7 @@ public class FileInfo
 
     // set by corflags
     public string Architecture { get; set; }
-    public string Platform { get; set; }
+    public string Prefer32Bit { get; set; }
 
     public static FileInfo Get(string filePath, bool isConfirmedManagedAssembly = false)
     {
@@ -205,24 +205,24 @@ public class FileInfo
 
             mvid = module.Mvid;
 
+            var architecture = module.Architecture;
+            Architecture = architecture
+                .ToString()
+                .Replace("AMD64", "x64")
+                .Replace("I386", "AnyCPU");
+
             var flags = module.Attributes;
-            if ((flags & ModuleAttributes.Required32Bit) != 0)
+            if (architecture == TargetArchitecture.I386)
             {
-                Architecture = "x86";
-            }
-            else
-            {
-                Architecture = "Any CPU";
+                if ((flags & ModuleAttributes.Required32Bit) != 0)
+                {
+                    Architecture = "x86 (32-bit required)";
+                }
             }
 
             if ((flags & ModuleAttributes.Preferred32Bit) != 0)
             {
-                Platform = "32BITPREF : 1";
-                Architecture = "Any CPU";
-            }
-            else
-            {
-                Platform = "32BITPREF : 0";
+                Prefer32Bit = "32-bit preferred";
             }
 
             bool hasStrongNameDataDirectory = HasStrongName(module);
@@ -410,9 +410,9 @@ public class FileInfo
                             //ListBinaryInfo.CheckPlatform(this);
 
                             platformText = Architecture;
-                            if (Platform != "32BITPREF : 0" && Platform != null)
+                            if (Prefer32Bit != null)
                             {
-                                platformText += "(" + Platform + ")";
+                                platformText += "(" + Prefer32Bit + ")";
                             }
                         }
                     }
