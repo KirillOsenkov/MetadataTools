@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Mono.Cecil;
 
@@ -318,13 +319,23 @@ public partial class Checker
                 if (Directory.Exists(combined))
                 {
                     var first = Directory.GetDirectories(combined);
-                    if (first.Length == 1)
+                    foreach (var item in first)
                     {
-                        var candidate = Path.Combine(first[0], shortName + ".dll");
-                        if (File.Exists(candidate))
+                        try
                         {
-                            resolvedFromFramework.Add(candidate);
-                            return candidate;
+                            var candidate = Path.Combine(item, shortName + ".dll");
+                            if (File.Exists(candidate))
+                            {
+                                var fileVersion = AssemblyName.GetAssemblyName(candidate);
+                                if (fileVersion != null && string.Equals(fileVersion.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    resolvedFromFramework.Add(candidate);
+                                    return candidate;
+                                }
+                            }
+                        }
+                        catch
+                        {
                         }
                     }
                 }
