@@ -15,6 +15,8 @@ public partial class Checker
 
         foreach (var appConfigFilePath in appConfigFiles)
         {
+            WriteLine(appConfigFilePath, ConsoleColor.DarkYellow);
+
             var appConfigFileName = Path.GetFileName(appConfigFilePath);
             var appConfigFile = AppConfigFile.Read(appConfigFilePath);
             if (appConfigFile.Errors.Any())
