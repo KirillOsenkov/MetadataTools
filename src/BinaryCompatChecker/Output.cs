@@ -87,6 +87,11 @@ public partial class Checker
     {
         foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
         {
+            if (!versionMismatch.ExpectedReference.HasPublicKey && !versionMismatch.ActualAssembly.Name.HasPublicKey)
+            {
+                continue;
+            }
+
             string referencedFullName = versionMismatch.ExpectedReference.FullName;
             if (referencedFullName.StartsWith("netstandard,"))
             {
