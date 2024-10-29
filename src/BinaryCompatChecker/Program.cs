@@ -32,7 +32,7 @@ namespace BinaryCompatChecker
 
             bool success = new Checker().Check();
             return success ? 0 : 1;
-       }
+        }
 
         public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
 
@@ -104,7 +104,7 @@ namespace BinaryCompatChecker
 
                 if (IsNetFrameworkAssembly(assemblyDefinition))
                 {
-                    if (IsFacadeAssembly(assemblyDefinition))
+                    if (IsFacadeAssembly(assemblyDefinition) && commandLine.ReportFacade)
                     {
                         var relativePath = GetRelativePath(file);
                         diagnostics.Add($"Facade assembly: {relativePath}");
@@ -124,7 +124,10 @@ namespace BinaryCompatChecker
                     if (resolvedAssemblyDefinition == null)
                     {
                         unresolvedAssemblies.Add(reference.Name);
-                        diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
+                        if (commandLine.ReportMissingAssemblies)
+                        {
+                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
+                        }
 
                         continue;
                     }
@@ -301,12 +304,16 @@ namespace BinaryCompatChecker
                     var resolved = memberReference.Resolve();
                     if (resolved == null)
                     {
-                        string typeOrMember = memberReference is TypeReference ? "type" : "member";
-                        diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
-
-                        if (referenceToAssembly != null && resolveCache.TryGetValue(referenceToAssembly, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                        bool report = memberReference is TypeReference ? commandLine.ReportMissingTypes : commandLine.ReportMissingMembers;
+                        if (report)
                         {
-                            assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
+                            string typeOrMember = memberReference is TypeReference ? "type" : "member";
+                            diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
+
+                            if (referenceToAssembly != null && resolveCache.TryGetValue(referenceToAssembly, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                            {
+                                assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
+                            }
                         }
                     }
                     else

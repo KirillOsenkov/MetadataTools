@@ -69,9 +69,17 @@ Options:
     -p:<pattern>             Semicolon-separated file pattern(s) such as *.dll;*.exe.
     -baseline:<baseline.txt> Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
     -out:<report.txt>        Write report to <report.txt> instead of BinaryCompatReport.txt.
+
     -ignoreVersionMismatch   Do not report assembly version mismatches.
+    -ignoreFacade            Do not report facade assemblies.
+    -ignoreMissingAssemblies Do not report missing or unresolved assemblies.
+    -ignoreMissingTypes      Do not report missing types.
+    -ignoreMissingMembers    Do not report missing members.
+    -ignoreInterfaces        Do not report missing interface implementations.
     -ivt                     Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes    Report embedded interop types.
+    -intPtrCtors             Report IntPtr constructors (Mono).
+
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
 ```

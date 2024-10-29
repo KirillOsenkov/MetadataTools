@@ -75,7 +75,7 @@ public partial class Checker
 
                                     bool sawGenerics = false;
                                     var matching = FindInterfaceMethodImplementation(typeDef, interfaceMethod, ref sawGenerics);
-                                    if (matching == null && !sawGenerics)
+                                    if (matching == null && !sawGenerics && commandLine.ReportInterfaceMismatch)
                                     {
                                         var interfaceAssembly = GetAssemblyName(interfaceMethod);
                                         diagnostics.Add($"In assembly '{assemblyFullName}': Type {typeDef.FullName} does not implement interface method {interfaceMethod.FullName} from assembly {interfaceAssembly}");
@@ -201,7 +201,10 @@ public partial class Checker
             }
             else
             {
-                diagnostics.Add($"In assembly '{referencing.Name.FullName}': Failed to resolve type reference '{referencedType.FullName}' in assembly '{reference.Name}'");
+                if (commandLine.ReportMissingTypes)
+                {
+                    diagnostics.Add($"In assembly '{referencing.Name.FullName}': Failed to resolve type reference '{referencedType.FullName}' in assembly '{reference.Name}'");
+                }
             }
         }
     }

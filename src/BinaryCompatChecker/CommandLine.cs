@@ -12,6 +12,11 @@ public class CommandLine
     public bool ReportVersionMismatch { get; set; } = true;
     public bool ReportIntPtrConstructors { get; set; }
     public bool ReportUnreferencedAssemblies { get; set; } = false;
+    public bool ReportFacade { get; set; } = true;
+    public bool ReportMissingAssemblies { get; set; } = true;
+    public bool ReportMissingTypes { get; set; } = true;
+    public bool ReportMissingMembers { get; set; } = true;
+    public bool ReportInterfaceMismatch { get; set; } = true;
 
     public string BaselineFile { get; set; }
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
@@ -122,6 +127,46 @@ public class CommandLine
                 arg.Equals("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
             {
                 ReportVersionMismatch = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/ignoreFacade", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreFacade", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportFacade = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/ignoreMissingAssemblies", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreMissingAssemblies", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportMissingAssemblies = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/ignoreMissingTypes", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreMissingTypes", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportMissingTypes = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/ignoreMissingMembers", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreMissingMembers", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportMissingMembers = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/ignoreInterfaces", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-ignoreInterfaces", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportInterfaceMismatch = false;
                 arguments.Remove(arg);
                 continue;
             }
@@ -527,7 +572,7 @@ File specs may be specified more than once. Each file spec is one of the followi
 
 Options:", ConsoleColor.White);
         Checker.Write(@"
-    All options with parameters (other than -out:) may be specified more than once.");
+    All options with parameters (other than -out: and -ignore*) may be specified more than once.");
         Checker.Write(@"
 
     !<exclude-pattern>       Exclude a relative path or file pattern from analysis.
@@ -538,9 +583,17 @@ Options:", ConsoleColor.White);
     -p:<pattern>             Semicolon-separated file pattern(s) such as *.dll;*.exe.
     -baseline:<baseline.txt> Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
     -out:<report.txt>        Write report to <report.txt> instead of BinaryCompatReport.txt.
+
     -ignoreVersionMismatch   Do not report assembly version mismatches.
+    -ignoreFacade            Do not report facade assemblies.
+    -ignoreMissingAssemblies Do not report missing or unresolved assemblies.
+    -ignoreMissingTypes      Do not report missing types.
+    -ignoreMissingMembers    Do not report missing members.
+    -ignoreInterfaces        Do not report missing interface implementations.
     -ivt                     Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes    Report embedded interop types.
+    -intPtrCtors             Report IntPtr constructors (Mono).
+
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
 ");
