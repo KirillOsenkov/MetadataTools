@@ -293,7 +293,6 @@ public class CommandLine
         {
             patterns.Add("*.dll");
             patterns.Add("*.exe");
-            patterns.Add("*.dll.config");
             patterns.Add("*.exe.config");
         }
 
