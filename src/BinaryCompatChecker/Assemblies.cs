@@ -310,7 +310,7 @@ public partial class Checker
                 desktop = true;
             }
 
-            if (frameworkRedirects.ContainsKey(reference.Name))
+            if (frameworkRedirects.TryGetValue(reference.Name, out var frameworkRedirectVersion) && reference.Version <= frameworkRedirectVersion)
             {
                 desktop = true;
                 isFrameworkRedirect = true;
