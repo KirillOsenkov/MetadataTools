@@ -22,6 +22,8 @@ public class CommandLine
     public string SourceAppConfig { get; set; }
     public IReadOnlyList<string> DestinationAppConfigs { get; set; }
 
+    public IReadOnlyList<string> IgnoreVersionMismatchForAppConfigs { get; set; } = Array.Empty<string>();
+
     public string BaselineFile { get; set; }
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
     public bool ListAssemblies { get; set; }
@@ -127,11 +129,23 @@ public class CommandLine
 
         foreach (var arg in arguments.ToArray())
         {
-            if (arg.Equals("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
+            if (arg.StartsWith("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase) ||
+                arg.StartsWith("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
             {
                 ReportVersionMismatch = false;
                 arguments.Remove(arg);
+
+                int prefixLength = "/ignoreVersionMismatch".Length;
+                if (arg.Length > prefixLength + 1 && arg[prefixLength] == ':')
+                {
+                    var configs = arg.Substring(prefixLength + 1).Split(';', ',');
+                    if (configs.Length > 0)
+                    {
+                        IgnoreVersionMismatchForAppConfigs = configs;
+                        ReportVersionMismatch = true;
+                    }
+                }
+
                 continue;
             }
 
@@ -639,6 +653,11 @@ Options:", ConsoleColor.White);
 
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
+
+-ignoreVersionMismatch can optionally specify a list of app.config file names (semicolon-separated)
+that should be ignored for version mismatch reporting. If there is a version mismatch that is covered
+by A.exe.config, but not B.exe.config, you can suppress warnings about B.exe.config using:
+-ignoreVersionMismatch:B.exe.config
 
 There is a separate command for the tool to replicate binding redirects from an app.config file
 to one or more other app.config files:

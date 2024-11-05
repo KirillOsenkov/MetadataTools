@@ -83,6 +83,11 @@ Options:
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
 
+-ignoreVersionMismatch can optionally specify a list of app.config file names (semicolon-separated)
+that should be ignored for version mismatch reporting. If there is a version mismatch that is covered
+by A.exe.config, but not B.exe.config, you can suppress warnings about B.exe.config using:
+-ignoreVersionMismatch:B.exe.config
+
 There is a separate command for the tool to replicate binding redirects from an app.config file
 to one or more other app.config files:
 checkbinarycompat -replicateBindingRedirects <source.exe.config> <destination.exe.config>+

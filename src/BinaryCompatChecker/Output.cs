@@ -112,21 +112,27 @@ public partial class Checker
                 continue;
             }
 
-            // handled by all app.config files
-            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count >= appConfigCount)
-            {
-                continue;
-            }
-
             actualFilePath = GetRelativePath(actualFilePath);
 
             string appConfigs = "";
-            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count > 0)
+
+            if (appConfigCount > 0)
             {
-                appConfigs = string.Join(", ", allAppConfigNames.Where(a => !versionMismatch.HandledByAppConfigs.Contains(a)));
-                if (!string.IsNullOrEmpty(appConfigs))
+                var exceptConfigs =
+                    versionMismatch.HandledByAppConfigs.Concat(
+                    commandLine.IgnoreVersionMismatchForAppConfigs);
+                var defendants = allAppConfigNames
+                    .Except(exceptConfigs, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                // all app.configs have been exonerated, do not report the version mismatch
+                if (defendants.Length == 0)
                 {
-                    appConfigs = $" Not handled by: {appConfigs}";
+                    continue;
+                }
+                else if (versionMismatch.HandledByAppConfigs.Count > 0)
+                {
+                    appConfigs = $" Not handled by: {string.Join(", ", defendants)}";
                 }
             }
 
