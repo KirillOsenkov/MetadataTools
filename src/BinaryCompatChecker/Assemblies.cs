@@ -21,6 +21,7 @@ public partial class Checker
         "Microsoft.CSharp",
         "Microsoft.VisualBasic",
         "Microsoft.VisualC",
+        "Microsoft.WindowsCE.Forms",
         "netstandard",
         "PresentationCore",
         "PresentationFramework",
@@ -327,10 +328,25 @@ public partial class Checker
                             if (File.Exists(candidate))
                             {
                                 var fileVersion = AssemblyName.GetAssemblyName(candidate);
-                                if (fileVersion != null && string.Equals(fileVersion.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase))
+                                if (fileVersion != null)
                                 {
-                                    resolvedFromFramework.Add(candidate);
-                                    return candidate;
+                                    bool match = false;
+
+                                    if (string.Equals(fileVersion.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        match = true;
+                                    }
+
+                                    if (frameworkRedirects.Contains((reference.Name, reference.Version.ToString())))
+                                    {
+                                        match = true;
+                                    }
+
+                                    if (match)
+                                    {
+                                        resolvedFromFramework.Add(candidate);
+                                        return candidate;
+                                    }
                                 }
                             }
                         }
@@ -446,4 +462,59 @@ public partial class Checker
 
         return filePath;
     }
+
+    private static HashSet<(string, string)> frameworkRedirects = new()
+    {
+        ("Microsoft.VisualBasic", "7.0.5000.0"),
+        ("Microsoft.VisualBasic", "7.0.5500.0"),
+        ("Microsoft.WindowsCE.Forms", "1.0.5000.0"),
+        ("Microsoft.WindowsCE.Forms", "1.0.5500.0"),
+        ("System", "1.0.0.0"),
+        ("System", "1.0.5000.0"),
+        ("System", "1.0.5500.0"),
+        ("System.AppContext", "4.1.0.0"),
+        ("System.ComponentModel.Primitives", "4.1.0.0"),
+        ("System.ComponentModel.TypeConverter", "4.1.0.0"),
+        ("System.Data", "1.0.5000.0"),
+        ("System.Data", "1.0.5500.0"),
+        ("System.Data.Common", "4.1.0.0"),
+        ("System.Data.Common", "4.2.0.0"),
+        ("System.Diagnostics.Process", "4.1.0.0"),
+        ("System.Diagnostics.StackTrace", "4.1.0.0"),
+        ("System.Diagnostics.Tracing", "4.1.0.0"),
+        ("System.Diagnostics.Tracing", "4.2.0.0"),
+        ("System.Drawing", "1.0.5000.0"),
+        ("System.Drawing", "1.0.5500.0"),
+        ("System.Globalization.Extensions", "4.1.0.0"),
+        ("System.IO", "4.1.0.0"),
+        ("System.IO.Compression", "4.2.0.0"),
+        ("System.Linq", "4.1.0.0"),
+        ("System.Linq.Expressions", "4.1.0.0"),
+        ("System.Net.Http", "4.2.0.0"),
+        ("System.Net.NetworkInformation", "4.1.0.0"),
+        ("System.Net.Sockets", "4.1.0.0"),
+        ("System.Net.Sockets", "4.2.0.0"),
+        ("System.Reflection", "4.1.0.0"),
+        ("System.Runtime", "4.1.0.0"),
+        ("System.Runtime.Extensions", "4.1.0.0"),
+        ("System.Runtime.InteropServices", "4.1.0.0"),
+        ("System.Runtime.Serialization.Primitives", "4.1.0.0"),
+        ("System.Runtime.Serialization.Primitives", "4.2.0.0"),
+        ("System.Runtime.Serialization.Xml", "4.1.0.0"),
+        ("System.Security.Cryptography.Algorithms", "4.2.0.0"),
+        ("System.Security.Cryptography.Algorithms", "4.3.0.0"),
+        ("System.Security.Cryptography.X509Certificates", "4.1.0.0"),
+        ("System.Security.SecureString", "4.1.0.0"),
+        ("System.Text.RegularExpressions", "4.1.0.0"),
+        ("System.Threading.Overlapped", "4.1.0.0"),
+        ("System.Web.Services", "1.0.5000.0"),
+        ("System.Web.Services", "1.0.5500.0"),
+        ("System.Windows.Forms", "1.0.5000.0"),
+        ("System.Windows.Forms", "1.0.5500.0"),
+        ("System.Xml", "1.0.0.0"),
+        ("System.Xml", "1.0.5000.0"),
+        ("System.Xml", "1.0.5500.0"),
+        ("System.Xml.ReaderWriter", "4.1.0.0"),
+        ("System.Xml.XPath.XDocument", "4.1.0.0"),
+    };
 }
