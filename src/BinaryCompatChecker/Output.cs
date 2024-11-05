@@ -107,6 +107,11 @@ public partial class Checker
                 continue;
             }
 
+            if (IsFrameworkRedirect(versionMismatch.ExpectedReference.Name))
+            {
+                continue;
+            }
+
             if (resolvedFromFramework.Contains(actualFilePath))
             {
                 continue;
@@ -132,11 +137,11 @@ public partial class Checker
                 }
                 else if (versionMismatch.HandledByAppConfigs.Count > 0)
                 {
-                    appConfigs = $" Not handled by: {string.Join(", ", defendants)}";
+                    appConfigs = $". Not handled by: {string.Join(", ", defendants)}";
                 }
             }
 
-            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`.{appConfigs}");
+            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`{appConfigs}");
         }
     }
 

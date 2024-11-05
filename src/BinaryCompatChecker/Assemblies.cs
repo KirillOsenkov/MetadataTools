@@ -16,12 +16,13 @@ public partial class Checker
 
     private static HashSet<string> frameworkNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "mscorlib",
         "Accessibility",
         "Microsoft.CSharp",
         "Microsoft.VisualBasic",
         "Microsoft.VisualC",
+        "Microsoft.Win32.Primitives",
         "Microsoft.WindowsCE.Forms",
+        "mscorlib",
         "netstandard",
         "PresentationCore",
         "PresentationFramework",
@@ -66,7 +67,7 @@ public partial class Checker
 
     private readonly List<VersionMismatch> versionMismatches = new List<VersionMismatch>();
 
-    private readonly HashSet<string> resolvedFromFramework = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> resolvedFromFramework = new HashSet<string>(CommandLine.PathComparer);
 
     public class CustomAssemblyResolver : BaseAssemblyResolver
     {
@@ -91,6 +92,11 @@ public partial class Checker
         return
             shortName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
             frameworkNames.Contains(shortName);
+    }
+
+    private static bool IsFrameworkRedirect(string shortName)
+    {
+        return frameworkRedirects.ContainsKey(shortName);
     }
 
     private static bool IsRoslynAssembly(string assemblyName)
@@ -358,12 +364,9 @@ public partial class Checker
                                         {
                                             match = true;
                                         }
-                                        else if (isFrameworkRedirect && frameworkRedirects.TryGetValue(reference.Name, out var redirectVersion))
+                                        else if (isFrameworkRedirect)
                                         {
-                                            if (reference.Version <= redirectVersion)
-                                            {
-                                                match = true;
-                                            }
+                                            match = true;
                                         }
                                     }
 
@@ -488,58 +491,126 @@ public partial class Checker
         return filePath;
     }
 
+    private static readonly Version LessThan4100 = new Version("4.0.99.99");
+    private static readonly Version LessThan4200 = new Version("4.1.99.99");
+    private static readonly Version LessThan4300 = new Version("4.2.99.99");
+
     private static Dictionary<string, Version> frameworkRedirects = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Microsoft.VisualBasic"] = new Version("7.0.5000.0"),
         ["Microsoft.VisualBasic"] = new Version("7.0.5500.0"),
-        ["Microsoft.WindowsCE.Forms"] = new Version("1.0.5000.0"),
         ["Microsoft.WindowsCE.Forms"] = new Version("1.0.5500.0"),
-        ["System"] = new Version("1.0.0.0"),
-        ["System"] = new Version("1.0.5000.0"),
         ["System"] = new Version("1.0.5500.0"),
-        ["System.AppContext"] = new Version("4.1.0.0"),
-        ["System.ComponentModel.Primitives"] = new Version("4.1.0.0"),
-        ["System.ComponentModel.TypeConverter"] = new Version("4.1.0.0"),
-        ["System.Data"] = new Version("1.0.5000.0"),
+        ["System.AppContext"] = LessThan4200,
+        ["System.Collections"] = LessThan4100,
+        ["System.Collections.Concurrent"] = LessThan4100,
+        ["System.Collections.NonGeneric"] = LessThan4100,
+        ["System.Collections.Specialized"] = LessThan4100,
+        ["System.ComponentModel"] = LessThan4100,
+        ["System.ComponentModel.Annotations"] = LessThan4100,
+        ["System.ComponentModel.EventBasedAsync"] = LessThan4100,
+        ["System.ComponentModel.Primitives"] = LessThan4200,
+        ["System.ComponentModel.TypeConverter"] = LessThan4200,
+        ["System.Console"] = LessThan4100,
         ["System.Data"] = new Version("1.0.5500.0"),
-        ["System.Data.Common"] = new Version("4.1.0.0"),
-        ["System.Data.Common"] = new Version("4.2.0.0"),
-        ["System.Diagnostics.Process"] = new Version("4.1.0.0"),
-        ["System.Diagnostics.StackTrace"] = new Version("4.1.0.0"),
-        ["System.Diagnostics.Tracing"] = new Version("4.1.0.0"),
-        ["System.Diagnostics.Tracing"] = new Version("4.2.0.0"),
-        ["System.Drawing"] = new Version("1.0.5000.0"),
+        ["System.Data.Common"] = LessThan4300,
+        ["System.Diagnostics.Contracts"] = LessThan4100,
+        ["System.Diagnostics.Debug"] = LessThan4100,
+        ["System.Diagnostics.FileVersionInfo"] = LessThan4100,
+        ["System.Diagnostics.Process"] = LessThan4200,
+        ["System.Diagnostics.StackTrace"] = LessThan4200,
+        ["System.Diagnostics.TextWriterTraceListener"] = LessThan4100,
+        ["System.Diagnostics.Tools"] = LessThan4100,
+        ["System.Diagnostics.TraceSource"] = LessThan4100,
+        ["System.Diagnostics.Tracing"] = LessThan4300,
         ["System.Drawing"] = new Version("1.0.5500.0"),
-        ["System.Globalization.Extensions"] = new Version("4.1.0.0"),
-        ["System.IO"] = new Version("4.1.0.0"),
-        ["System.IO.Compression"] = new Version("4.2.0.0"),
-        ["System.Linq"] = new Version("4.1.0.0"),
-        ["System.Linq.Expressions"] = new Version("4.1.0.0"),
-        ["System.Net.Http"] = new Version("4.2.0.0"),
-        ["System.Net.NetworkInformation"] = new Version("4.1.0.0"),
-        ["System.Net.Sockets"] = new Version("4.1.0.0"),
-        ["System.Net.Sockets"] = new Version("4.2.0.0"),
-        ["System.Reflection"] = new Version("4.1.0.0"),
-        ["System.Runtime"] = new Version("4.1.0.0"),
-        ["System.Runtime.Extensions"] = new Version("4.1.0.0"),
-        ["System.Runtime.InteropServices"] = new Version("4.1.0.0"),
-        ["System.Runtime.Serialization.Primitives"] = new Version("4.1.0.0"),
-        ["System.Runtime.Serialization.Primitives"] = new Version("4.2.0.0"),
-        ["System.Runtime.Serialization.Xml"] = new Version("4.1.0.0"),
-        ["System.Security.Cryptography.Algorithms"] = new Version("4.2.0.0"),
-        ["System.Security.Cryptography.Algorithms"] = new Version("4.3.0.0"),
-        ["System.Security.Cryptography.X509Certificates"] = new Version("4.1.0.0"),
-        ["System.Security.SecureString"] = new Version("4.1.0.0"),
-        ["System.Text.RegularExpressions"] = new Version("4.1.0.0"),
-        ["System.Threading.Overlapped"] = new Version("4.1.0.0"),
-        ["System.Web.Services"] = new Version("1.0.5000.0"),
+        ["System.Drawing.Primitives"] = LessThan4100,
+        ["System.Dynamic.Runtime"] = LessThan4100,
+        ["System.Globalization"] = LessThan4100,
+        ["System.Globalization.Calendars"] = LessThan4100,
+        ["System.Globalization.Extensions"] = LessThan4200,
+        ["System.IO"] = LessThan4200,
+        ["System.IO.Compression"] = LessThan4300,
+        ["System.IO.Compression.ZipFile"] = LessThan4100,
+        ["System.IO.FileSystem"] = LessThan4100,
+        ["System.IO.FileSystem.DriveInfo"] = LessThan4100,
+        ["System.IO.FileSystem.Primitives"] = LessThan4100,
+        ["System.IO.FileSystem.Watcher"] = LessThan4100,
+        ["System.IO.IsolatedStorage"] = LessThan4100,
+        ["System.IO.MemoryMappedFiles"] = LessThan4100,
+        ["System.IO.Pipes"] = LessThan4100,
+        ["System.IO.UnmanagedMemoryStream"] = LessThan4100,
+        ["System.Linq"] = LessThan4200,
+        ["System.Linq.Expressions"] = LessThan4200,
+        ["System.Linq.Parallel"] = LessThan4100,
+        ["System.Linq.Queryable"] = LessThan4100,
+        ["System.Net.Http"] = LessThan4300,
+        ["System.Net.Http.Rtc"] = LessThan4100,
+        ["System.Net.NameResolution"] = LessThan4100,
+        ["System.Net.NetworkInformation"] = LessThan4200,
+        ["System.Net.Ping"] = LessThan4100,
+        ["System.Net.Primitives"] = LessThan4100,
+        ["System.Net.Requests"] = LessThan4100,
+        ["System.Net.Security"] = LessThan4100,
+        ["System.Net.Sockets"] = LessThan4300,
+        ["System.Net.WebHeaderCollection"] = LessThan4100,
+        ["System.Net.WebSockets"] = LessThan4100,
+        ["System.Net.WebSockets.Client"] = LessThan4100,
+        ["System.ObjectModel"] = LessThan4100,
+        ["System.Reflection"] = LessThan4200,
+        ["System.Reflection.Emit"] = LessThan4100,
+        ["System.Reflection.Emit.ILGeneration"] = LessThan4100,
+        ["System.Reflection.Emit.Lightweight"] = LessThan4100,
+        ["System.Reflection.Extensions"] = LessThan4100,
+        ["System.Reflection.Primitives"] = LessThan4100,
+        ["System.Resources.Reader"] = LessThan4100,
+        ["System.Resources.ResourceManager"] = LessThan4100,
+        ["System.Resources.Writer"] = LessThan4100,
+        ["System.Runtime"] = LessThan4200,
+        ["System.Runtime.CompilerServices.VisualC"] = LessThan4100,
+        ["System.Runtime.Extensions"] = LessThan4200,
+        ["System.Runtime.InteropServices"] = LessThan4200,
+        ["System.Runtime.Handles"] = LessThan4100,
+        ["System.Runtime.InteropServices.RuntimeInformation"] = LessThan4100,
+        ["System.Runtime.InteropServices.WindowsRuntime"] = LessThan4100,
+        ["System.Runtime.Numerics"] = LessThan4100,
+        ["System.Runtime.Serialization.Formatters"] = LessThan4100,
+        ["System.Runtime.Serialization.Json"] = LessThan4100,
+        ["System.Runtime.Serialization.Primitives"] = LessThan4300,
+        ["System.Runtime.Serialization.Xml"] = LessThan4200,
+        ["System.Security.Claims"] = LessThan4100,
+        ["System.Security.Cryptography.Algorithms"] = LessThan4300,
+        ["System.Security.Cryptography.Csp"] = LessThan4100,
+        ["System.Security.Cryptography.Encoding"] = LessThan4100,
+        ["System.Security.Cryptography.Primitives"] = LessThan4100,
+        ["System.Security.Cryptography.X509Certificates"] = LessThan4200,
+        ["System.Security.Principal"] = LessThan4100,
+        ["System.Security.SecureString"] = LessThan4200,
+        ["System.ServiceModel.Duplex"] = LessThan4100,
+        ["System.ServiceModel.Http"] = LessThan4100,
+        ["System.ServiceModel.NetTcp"] = LessThan4100,
+        ["System.ServiceModel.Primitives"] = LessThan4100,
+        ["System.ServiceModel.Security"] = LessThan4100,
+        ["System.Text.Encoding"] = LessThan4100,
+        ["System.Text.Encoding.Extensions"] = LessThan4100,
+        ["System.Text.RegularExpressions"] = LessThan4200,
+        ["System.Threading"] = LessThan4100,
+        ["System.Threading.Overlapped"] = LessThan4200,
+        ["System.Threading.Tasks"] = LessThan4100,
+        ["System.Threading.Tasks.Parallel"] = LessThan4100,
+        ["System.Threading.Thread"] = LessThan4100,
+        ["System.Threading.ThreadPool"] = LessThan4100,
+        ["System.Threading.Timer"] = LessThan4100,
+        ["System.ValueTuple"] = LessThan4100,
         ["System.Web.Services"] = new Version("1.0.5500.0"),
-        ["System.Windows.Forms"] = new Version("1.0.5000.0"),
+        ["System.Windows"] = LessThan4200,
         ["System.Windows.Forms"] = new Version("1.0.5500.0"),
-        ["System.Xml"] = new Version("1.0.0.0"),
-        ["System.Xml"] = new Version("1.0.5000.0"),
         ["System.Xml"] = new Version("1.0.5500.0"),
-        ["System.Xml.ReaderWriter"] = new Version("4.1.0.0"),
-        ["System.Xml.XPath.XDocument"] = new Version("4.1.0.0"),
+        ["System.Xml.ReaderWriter"] = LessThan4200,
+        ["System.Xml.Serialization"] = LessThan4200,
+        ["System.Xml.XDocument"] = LessThan4100,
+        ["System.Xml.XmlDocument"] = LessThan4100,
+        ["System.Xml.XmlSerializer"] = LessThan4100,
+        ["System.Xml.XPath"] = LessThan4100,
+        ["System.Xml.XPath.XDocument"] = LessThan4200,
     };
 }
