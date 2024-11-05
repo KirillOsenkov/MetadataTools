@@ -298,11 +298,21 @@ public partial class Checker
         }
 
         bool desktop = false;
+        bool isFrameworkRedirect = false;
 
-        // 4.0.1.0 is .NETPortable,Version=v5.0, still resolve from desktop
-        if (IsWindows && version <= new Version(4, 0, 10, 0))
+        if (IsWindows)
         {
-            desktop = true;
+            // 4.0.1.0 is .NETPortable,Version=v5.0, still resolve from desktop
+            if (version <= new Version(4, 0, 10, 0))
+            {
+                desktop = true;
+            }
+
+            if (frameworkRedirects.ContainsKey(reference.Name))
+            {
+                desktop = true;
+                isFrameworkRedirect = true;
+            }
         }
 
         // resolve desktop framework assemblies from the GAC
@@ -332,14 +342,27 @@ public partial class Checker
                                 {
                                     bool match = false;
 
-                                    if (string.Equals(fileVersion.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase))
+                                    if (fileVersion.Name.Equals(reference.Name, StringComparison.OrdinalIgnoreCase))
                                     {
-                                        match = true;
-                                    }
-
-                                    if (frameworkRedirects.Contains((reference.Name, reference.Version.ToString())))
-                                    {
-                                        match = true;
+                                        if (string.Equals(fileVersion.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            match = true;
+                                        }
+                                        else if (
+                                            reference.Version.Major == 0 &&
+                                            reference.Version.Minor == 0 &&
+                                            reference.Version.Build == 0 &&
+                                            reference.Version.Revision == 0)
+                                        {
+                                            match = true;
+                                        }
+                                        else if (isFrameworkRedirect && frameworkRedirects.TryGetValue(reference.Name, out var redirectVersion))
+                                        {
+                                            if (reference.Version <= redirectVersion)
+                                            {
+                                                match = true;
+                                            }
+                                        }
                                     }
 
                                     if (match)
@@ -463,58 +486,58 @@ public partial class Checker
         return filePath;
     }
 
-    private static HashSet<(string, string)> frameworkRedirects = new()
+    private static Dictionary<string, Version> frameworkRedirects = new(StringComparer.OrdinalIgnoreCase)
     {
-        ("Microsoft.VisualBasic", "7.0.5000.0"),
-        ("Microsoft.VisualBasic", "7.0.5500.0"),
-        ("Microsoft.WindowsCE.Forms", "1.0.5000.0"),
-        ("Microsoft.WindowsCE.Forms", "1.0.5500.0"),
-        ("System", "1.0.0.0"),
-        ("System", "1.0.5000.0"),
-        ("System", "1.0.5500.0"),
-        ("System.AppContext", "4.1.0.0"),
-        ("System.ComponentModel.Primitives", "4.1.0.0"),
-        ("System.ComponentModel.TypeConverter", "4.1.0.0"),
-        ("System.Data", "1.0.5000.0"),
-        ("System.Data", "1.0.5500.0"),
-        ("System.Data.Common", "4.1.0.0"),
-        ("System.Data.Common", "4.2.0.0"),
-        ("System.Diagnostics.Process", "4.1.0.0"),
-        ("System.Diagnostics.StackTrace", "4.1.0.0"),
-        ("System.Diagnostics.Tracing", "4.1.0.0"),
-        ("System.Diagnostics.Tracing", "4.2.0.0"),
-        ("System.Drawing", "1.0.5000.0"),
-        ("System.Drawing", "1.0.5500.0"),
-        ("System.Globalization.Extensions", "4.1.0.0"),
-        ("System.IO", "4.1.0.0"),
-        ("System.IO.Compression", "4.2.0.0"),
-        ("System.Linq", "4.1.0.0"),
-        ("System.Linq.Expressions", "4.1.0.0"),
-        ("System.Net.Http", "4.2.0.0"),
-        ("System.Net.NetworkInformation", "4.1.0.0"),
-        ("System.Net.Sockets", "4.1.0.0"),
-        ("System.Net.Sockets", "4.2.0.0"),
-        ("System.Reflection", "4.1.0.0"),
-        ("System.Runtime", "4.1.0.0"),
-        ("System.Runtime.Extensions", "4.1.0.0"),
-        ("System.Runtime.InteropServices", "4.1.0.0"),
-        ("System.Runtime.Serialization.Primitives", "4.1.0.0"),
-        ("System.Runtime.Serialization.Primitives", "4.2.0.0"),
-        ("System.Runtime.Serialization.Xml", "4.1.0.0"),
-        ("System.Security.Cryptography.Algorithms", "4.2.0.0"),
-        ("System.Security.Cryptography.Algorithms", "4.3.0.0"),
-        ("System.Security.Cryptography.X509Certificates", "4.1.0.0"),
-        ("System.Security.SecureString", "4.1.0.0"),
-        ("System.Text.RegularExpressions", "4.1.0.0"),
-        ("System.Threading.Overlapped", "4.1.0.0"),
-        ("System.Web.Services", "1.0.5000.0"),
-        ("System.Web.Services", "1.0.5500.0"),
-        ("System.Windows.Forms", "1.0.5000.0"),
-        ("System.Windows.Forms", "1.0.5500.0"),
-        ("System.Xml", "1.0.0.0"),
-        ("System.Xml", "1.0.5000.0"),
-        ("System.Xml", "1.0.5500.0"),
-        ("System.Xml.ReaderWriter", "4.1.0.0"),
-        ("System.Xml.XPath.XDocument", "4.1.0.0"),
+        ["Microsoft.VisualBasic"] = new Version("7.0.5000.0"),
+        ["Microsoft.VisualBasic"] = new Version("7.0.5500.0"),
+        ["Microsoft.WindowsCE.Forms"] = new Version("1.0.5000.0"),
+        ["Microsoft.WindowsCE.Forms"] = new Version("1.0.5500.0"),
+        ["System"] = new Version("1.0.0.0"),
+        ["System"] = new Version("1.0.5000.0"),
+        ["System"] = new Version("1.0.5500.0"),
+        ["System.AppContext"] = new Version("4.1.0.0"),
+        ["System.ComponentModel.Primitives"] = new Version("4.1.0.0"),
+        ["System.ComponentModel.TypeConverter"] = new Version("4.1.0.0"),
+        ["System.Data"] = new Version("1.0.5000.0"),
+        ["System.Data"] = new Version("1.0.5500.0"),
+        ["System.Data.Common"] = new Version("4.1.0.0"),
+        ["System.Data.Common"] = new Version("4.2.0.0"),
+        ["System.Diagnostics.Process"] = new Version("4.1.0.0"),
+        ["System.Diagnostics.StackTrace"] = new Version("4.1.0.0"),
+        ["System.Diagnostics.Tracing"] = new Version("4.1.0.0"),
+        ["System.Diagnostics.Tracing"] = new Version("4.2.0.0"),
+        ["System.Drawing"] = new Version("1.0.5000.0"),
+        ["System.Drawing"] = new Version("1.0.5500.0"),
+        ["System.Globalization.Extensions"] = new Version("4.1.0.0"),
+        ["System.IO"] = new Version("4.1.0.0"),
+        ["System.IO.Compression"] = new Version("4.2.0.0"),
+        ["System.Linq"] = new Version("4.1.0.0"),
+        ["System.Linq.Expressions"] = new Version("4.1.0.0"),
+        ["System.Net.Http"] = new Version("4.2.0.0"),
+        ["System.Net.NetworkInformation"] = new Version("4.1.0.0"),
+        ["System.Net.Sockets"] = new Version("4.1.0.0"),
+        ["System.Net.Sockets"] = new Version("4.2.0.0"),
+        ["System.Reflection"] = new Version("4.1.0.0"),
+        ["System.Runtime"] = new Version("4.1.0.0"),
+        ["System.Runtime.Extensions"] = new Version("4.1.0.0"),
+        ["System.Runtime.InteropServices"] = new Version("4.1.0.0"),
+        ["System.Runtime.Serialization.Primitives"] = new Version("4.1.0.0"),
+        ["System.Runtime.Serialization.Primitives"] = new Version("4.2.0.0"),
+        ["System.Runtime.Serialization.Xml"] = new Version("4.1.0.0"),
+        ["System.Security.Cryptography.Algorithms"] = new Version("4.2.0.0"),
+        ["System.Security.Cryptography.Algorithms"] = new Version("4.3.0.0"),
+        ["System.Security.Cryptography.X509Certificates"] = new Version("4.1.0.0"),
+        ["System.Security.SecureString"] = new Version("4.1.0.0"),
+        ["System.Text.RegularExpressions"] = new Version("4.1.0.0"),
+        ["System.Threading.Overlapped"] = new Version("4.1.0.0"),
+        ["System.Web.Services"] = new Version("1.0.5000.0"),
+        ["System.Web.Services"] = new Version("1.0.5500.0"),
+        ["System.Windows.Forms"] = new Version("1.0.5000.0"),
+        ["System.Windows.Forms"] = new Version("1.0.5500.0"),
+        ["System.Xml"] = new Version("1.0.0.0"),
+        ["System.Xml"] = new Version("1.0.5000.0"),
+        ["System.Xml"] = new Version("1.0.5500.0"),
+        ["System.Xml.ReaderWriter"] = new Version("4.1.0.0"),
+        ["System.Xml.XPath.XDocument"] = new Version("4.1.0.0"),
     };
 }
