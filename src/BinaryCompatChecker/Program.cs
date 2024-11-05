@@ -78,11 +78,16 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
-                if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
-                    file.EndsWith(".dll.config", CommandLine.PathComparison))
+
+                if (file.EndsWith(".config", CommandLine.PathComparison))
                 {
-                    appConfigFiles.Add(file);
-                    continue;
+                    if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
+                        file.EndsWith(".dll.config", CommandLine.PathComparison) ||
+                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison))
+                    {
+                        appConfigFiles.Add(file);
+                        continue;
+                    }
                 }
 
                 var assemblyDefinition = Load(file);
