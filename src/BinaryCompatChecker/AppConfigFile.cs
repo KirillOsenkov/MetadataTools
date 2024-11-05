@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
@@ -16,6 +17,9 @@ namespace BinaryCompatChecker
         private string filePath;
         private XDocument document;
         private XElement assemblyBindingElement = null;
+
+        public string FilePath => filePath;
+        public string FileName => Path.GetFileName(filePath);
 
         private AppConfigFile(string filePath)
         {

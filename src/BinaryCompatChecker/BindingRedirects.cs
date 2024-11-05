@@ -7,13 +7,15 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
-    private void CheckAppConfigFiles(IEnumerable<string> appConfigFiles)
+    private void CheckAppConfigFiles(IEnumerable<string> appConfigFilePaths)
     {
         var versionMismatchesByName = versionMismatches
             .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var appConfigFilePath in appConfigFiles)
+        List<AppConfigFile> appConfigFiles = new();
+
+        foreach (var appConfigFilePath in appConfigFilePaths)
         {
             WriteLine(appConfigFilePath, ConsoleColor.DarkYellow);
 
@@ -27,10 +29,15 @@ public partial class Checker
                 }
             }
 
+            appConfigFiles.Add(appConfigFile);
+        }
+
+        foreach (var appConfigFile in appConfigFiles)
+        {
             foreach (var bindingRedirect in appConfigFile.BindingRedirects)
             {
                 CheckBindingRedirect(
-                    appConfigFileName,
+                    appConfigFile.FileName,
                     bindingRedirect.Name,
                     bindingRedirect.PublicKeyToken,
                     bindingRedirect.OldVersionRangeStart,
