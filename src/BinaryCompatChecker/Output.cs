@@ -113,7 +113,7 @@ public partial class Checker
             }
 
             // handled by all app.config files
-            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count == appConfigCount)
+            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count >= appConfigCount)
             {
                 continue;
             }
@@ -123,7 +123,11 @@ public partial class Checker
             string appConfigs = "";
             if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count > 0)
             {
-                appConfigs = $" Not handled by: {string.Join(", ", allAppConfigNames.Where(a => !versionMismatch.HandledByAppConfigs.Contains(a)))}";
+                appConfigs = string.Join(", ", allAppConfigNames.Where(a => !versionMismatch.HandledByAppConfigs.Contains(a)));
+                if (!string.IsNullOrEmpty(appConfigs))
+                {
+                    appConfigs = $" Not handled by: {appConfigs}";
+                }
             }
 
             diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`.{appConfigs}");

@@ -326,6 +326,11 @@ namespace BinaryCompatChecker
                     AssemblyIdentityElement = assemblyIdentity
                 };
 
+                if (bindingRedirects.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Error($"Duplicate binding redirect: {name}");
+                }
+
                 bindingRedirects.Add(bindingRedirectResult);
             }
         }

@@ -149,7 +149,10 @@ public partial class Checker
 
                 if (handled)
                 {
-                    versionMismatch.HandledByAppConfigs.Add(appConfigFileName);
+                    if (!versionMismatch.HandledByAppConfigs.Contains(appConfigFileName))
+                    {
+                        versionMismatch.HandledByAppConfigs.Add(appConfigFileName);
+                    }
                 }
             }
         }
