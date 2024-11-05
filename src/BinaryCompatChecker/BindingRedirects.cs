@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Mono.Cecil;
 
 namespace BinaryCompatChecker;
 
@@ -32,6 +33,12 @@ public partial class Checker
             appConfigFiles.Add(appConfigFile);
         }
 
+        var assemblies = this.resolveCache.Values
+            .Concat(this.filePathToModuleDefinition.Values)
+            .Where(v => v != null)
+            .Distinct()
+            .ToArray();
+
         foreach (var appConfigFile in appConfigFiles)
         {
             foreach (var bindingRedirect in appConfigFile.BindingRedirects)
@@ -43,6 +50,7 @@ public partial class Checker
                     bindingRedirect.OldVersionRangeStart,
                     bindingRedirect.OldVersionRangeEnd,
                     bindingRedirect.NewVersion,
+                    assemblies,
                     versionMismatchesByName);
             }
         }
@@ -60,16 +68,11 @@ public partial class Checker
         Version oldVersionStart,
         Version oldVersionEnd,
         Version newVersion,
+        IReadOnlyList<AssemblyDefinition> assemblies,
         Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
         bool foundNewVersion = false;
         var foundVersions = new List<Version>();
-
-        var assemblies = this.resolveCache.Values
-            .Concat(this.filePathToModuleDefinition.Values)
-            .Where(v => v != null)
-            .Distinct()
-            .ToArray();
 
         foreach (var assembly in assemblies)
         {
@@ -83,9 +86,11 @@ public partial class Checker
                 continue;
             }
 
-            foundVersions.Add(assembly.Name.Version);
+            var assemblyVersion = assembly.Name.Version;
 
-            if (assembly.Name.Version == newVersion)
+            foundVersions.Add(assemblyVersion);
+
+            if (assemblyVersion == newVersion)
             {
                 foundNewVersion = true;
                 var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
@@ -102,13 +107,13 @@ public partial class Checker
                 continue;
             }
 
-            if (assembly.Name.Version < oldVersionStart)
+            if (assemblyVersion < oldVersionStart)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}'");
                 continue;
             }
 
-            if (assembly.Name.Version > oldVersionEnd)
+            if (assemblyVersion > oldVersionEnd)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}'");
                 continue;
