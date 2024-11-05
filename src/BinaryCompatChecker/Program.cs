@@ -30,6 +30,12 @@ namespace BinaryCompatChecker
                 return -1;
             }
 
+            if (commandLine.ReplicateBindingRedirects)
+            {
+                AppConfigFile.ReplicateBindingRedirects(commandLine.SourceAppConfig, commandLine.DestinationAppConfigs);
+                return 0;
+            }
+
             bool success = new Checker().Check();
             return success ? 0 : 1;
         }

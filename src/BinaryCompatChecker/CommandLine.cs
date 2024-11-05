@@ -18,6 +18,10 @@ public class CommandLine
     public bool ReportMissingMembers { get; set; } = true;
     public bool ReportInterfaceMismatch { get; set; } = true;
 
+    public bool ReplicateBindingRedirects { get; set; }
+    public string SourceAppConfig { get; set; }
+    public IReadOnlyList<string> DestinationAppConfigs { get; set; }
+
     public string BaselineFile { get; set; }
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
     public bool ListAssemblies { get; set; }
@@ -212,6 +216,14 @@ public class CommandLine
                 continue;
             }
 
+            if (arg.Equals("/replicatebindingredirects", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-replicatebindingredirects", StringComparison.OrdinalIgnoreCase))
+            {
+                arguments.Remove(arg);
+                ReplicateBindingRedirects = true;
+                continue;
+            }
+
             if (arg.StartsWith("/out:") || arg.StartsWith("-out:"))
             {
                 var report = arg.Substring(5);
@@ -287,6 +299,38 @@ public class CommandLine
                 arguments.Remove(arg);
                 continue;
             }
+
+            if (arg.StartsWith("-") || arg.StartsWith("/"))
+            {
+                Checker.WriteError($"Unknown argument: {arg}");
+                return false;
+            }
+        }
+
+        if (ReplicateBindingRedirects)
+        {
+            if (arguments.Count == 0)
+            {
+                Checker.WriteError($"Specify a source app.config file and one or more destination app.config files for -replicateBindingRedirects");
+                return false;
+            }
+
+            SourceAppConfig = Path.GetFullPath(arguments[0]);
+            if (!File.Exists(SourceAppConfig))
+            {
+                Checker.WriteError($"File not found: {SourceAppConfig}");
+                return false;
+            }
+
+            DestinationAppConfigs = arguments.Skip(1).Select(p => Path.GetFullPath(p)).ToArray();
+            var nonExistingDestination = DestinationAppConfigs.FirstOrDefault(f => !File.Exists(f));
+            if (nonExistingDestination != null)
+            {
+                Checker.WriteError($"File not found: {nonExistingDestination}");
+                return false;
+            }
+
+            return true;
         }
 
         if (patterns.Count == 0)
@@ -595,6 +639,13 @@ Options:", ConsoleColor.White);
 
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
+
+There is a separate command for the tool to replicate binding redirects from an app.config file
+to one or more other app.config files:
 ");
+
+        Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Checker.Write(@" -replicateBindingRedirects <source.exe.config> <destination.exe.config>+", ConsoleColor.White);
+        Checker.WriteLine();
     }
 }

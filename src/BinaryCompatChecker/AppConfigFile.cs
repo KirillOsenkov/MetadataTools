@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace BinaryCompatChecker
@@ -16,7 +17,9 @@ namespace BinaryCompatChecker
 
         private string filePath;
         private XDocument document;
-        private XElement assemblyBindingElement = null;
+        private XElement configurationElement = null;
+        private XElement runtimeElement = null;
+        private XElement firstAssemblyBindingElement = null;
 
         public string FilePath => filePath;
         public string FileName => Path.GetFileName(filePath);
@@ -34,6 +37,7 @@ namespace BinaryCompatChecker
             public Version OldVersionRangeStart { get; set; }
             public Version OldVersionRangeEnd { get; set; }
             public Version NewVersion { get; set; }
+            public XElement AssemblyBindingElement { get; set; }
             public XElement DependentAssemblyElement { get; set; }
             public XElement AssemblyIdentityElement { get; set; }
             public XElement BindingRedirectElement { get; set; }
@@ -43,7 +47,7 @@ namespace BinaryCompatChecker
                 return $"Name={Name} Culture={Culture} PublicKeyToken={PublicKeyToken} OldVersion={OldVersionRangeStart}-{OldVersionRangeEnd} NewVersion={NewVersion}";
             }
 
-            public void AddOrUpdateElement(XElement parent)
+            public void AddOrUpdateElement()
             {
                 if (NewVersion == null || ( OldVersionRangeStart == NewVersion && OldVersionRangeEnd == NewVersion))
                 {
@@ -63,7 +67,7 @@ namespace BinaryCompatChecker
                 if (DependentAssemblyElement == null)
                 {
                     DependentAssemblyElement = new XElement(Xmlns("dependentAssembly"));
-                    parent.Add(DependentAssemblyElement);
+                    AssemblyBindingElement.Add(DependentAssemblyElement);
                 }
 
                 if (AssemblyIdentityElement == null)
@@ -106,19 +110,112 @@ namespace BinaryCompatChecker
             return appConfigFile;
         }
 
-        public void Write()
+        public static void ReplicateBindingRedirects(string sourceFilePath, IEnumerable<string> destinationFilePaths)
         {
-            foreach (var bindingRedirect in bindingRedirects)
+            var sourceAppConfig = Read(sourceFilePath);
+            foreach (var destination in destinationFilePaths)
             {
-                bindingRedirect.AddOrUpdateElement(assemblyBindingElement);
+                ReplicateBindingRedirects(sourceAppConfig, destination);
+            }
+        }
+
+        private static void ReplicateBindingRedirects(AppConfigFile appConfig, string destinationFilePath)
+        {
+            var destination = Read(destinationFilePath);
+
+            foreach (var bindingRedirect in appConfig.BindingRedirects)
+            {
+                // need to clone to ensure new XElements are created in the new tree
+                var newBindingRedirect = new BindingRedirect
+                {
+                    Name = bindingRedirect.Name,
+                    Culture = bindingRedirect.Culture,
+                    PublicKeyToken = bindingRedirect.PublicKeyToken,
+                    OldVersionRangeStart = bindingRedirect.OldVersionRangeStart,
+                    OldVersionRangeEnd = bindingRedirect.OldVersionRangeEnd,
+                    NewVersion = bindingRedirect.NewVersion
+                };
+                destination.AddBindingRedirect(newBindingRedirect);
             }
 
-            document.Save(filePath);
+            destination.Write();
+        }
+
+        public void Write()
+        {
+            if (runtimeElement == null)
+            {
+                runtimeElement = new XElement("runtime");
+                configurationElement.Add(runtimeElement);
+            }
+
+            if (firstAssemblyBindingElement == null)
+            {
+                firstAssemblyBindingElement = new XElement(Xmlns("assemblyBinding"));
+                runtimeElement.Add(firstAssemblyBindingElement);
+            }
+
+            foreach (var bindingRedirect in bindingRedirects)
+            {
+                if (bindingRedirect.AssemblyBindingElement == null)
+                {
+                    bindingRedirect.AssemblyBindingElement = firstAssemblyBindingElement;
+                }
+
+                bindingRedirect.AddOrUpdateElement();
+            }
+
+            Save();
+        }
+
+        private void Save()
+        {
+            var originalBytes = File.ReadAllBytes(filePath);
+            byte[] newBytes = null;
+
+            var xws = new XmlWriterSettings
+            {
+                Indent = true
+            };
+            using (var memoryStream = new MemoryStream())
+            using (var xmlWriter = XmlWriter.Create(memoryStream, xws))
+            {
+                document.Save(xmlWriter);
+                xmlWriter.Flush();
+                newBytes = memoryStream.ToArray();
+            }
+
+            if (!Enumerable.SequenceEqual(originalBytes, newBytes))
+            {
+                Console.WriteLine($"Writing {filePath}");
+                File.WriteAllBytes(filePath, newBytes);
+            }
         }
 
         public void AddBindingRedirect(BindingRedirect bindingRedirect)
         {
-            bindingRedirects.Add(bindingRedirect);
+            var existing = bindingRedirects.FirstOrDefault(b => b.Name.Equals(bindingRedirect.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                existing.Name = bindingRedirect.Name;
+                existing.Culture = bindingRedirect.Culture;
+                existing.PublicKeyToken = bindingRedirect.PublicKeyToken;
+                existing.OldVersionRangeStart = bindingRedirect.OldVersionRangeStart;
+
+                // if the existing version is something like 100.0.0.0, don't touch it
+                if (bindingRedirect.OldVersionRangeEnd == null ||
+                    existing.OldVersionRangeEnd == null ||
+                    bindingRedirect.OldVersionRangeEnd > existing.OldVersionRangeEnd)
+                {
+                    existing.OldVersionRangeEnd = bindingRedirect.OldVersionRangeEnd;
+                }
+
+                existing.NewVersion = bindingRedirect.NewVersion;
+            }
+            else
+            {
+                bindingRedirects.Add(bindingRedirect);
+            }
         }
 
         private static XName Xmlns(string shortName) => XName.Get(shortName, "urn:schemas-microsoft-com:asm.v1");
@@ -128,22 +225,22 @@ namespace BinaryCompatChecker
             void Error(string text) => errors.Add(text);
 
             document = XDocument.Load(appConfigFilePath);
-            var configuration = document.Root;
-            var runtime = configuration.Element("runtime");
-            if (runtime == null)
+            configurationElement = document.Root;
+            runtimeElement = configurationElement.Element("runtime");
+            if (runtimeElement == null)
             {
                 return;
             }
 
-            var assemblyBinding = runtime.Elements(Xmlns("assemblyBinding"));
-            if (assemblyBinding == null || !assemblyBinding.Any())
+            var assemblyBindingElements = runtimeElement.Elements(Xmlns("assemblyBinding"));
+            if (assemblyBindingElements == null || !assemblyBindingElements.Any())
             {
                 return;
             }
 
-            assemblyBindingElement = assemblyBinding.FirstOrDefault();
+            firstAssemblyBindingElement = assemblyBindingElements.FirstOrDefault();
 
-            var dependentAssemblyElements = assemblyBinding.Elements(Xmlns("dependentAssembly"));
+            var dependentAssemblyElements = assemblyBindingElements.Elements(Xmlns("dependentAssembly"));
             foreach (var dependentAssembly in dependentAssemblyElements)
             {
                 var assemblyIdentity = dependentAssembly.Element(Xmlns("assemblyIdentity"));
@@ -223,6 +320,7 @@ namespace BinaryCompatChecker
                     OldVersionRangeStart = oldVersionStart,
                     OldVersionRangeEnd = oldVersionEnd,
                     NewVersion = newVersion,
+                    AssemblyBindingElement = dependentAssembly.Parent,
                     DependentAssemblyElement = dependentAssembly,
                     BindingRedirectElement = bindingRedirect,
                     AssemblyIdentityElement = assemblyIdentity

@@ -82,6 +82,10 @@ Options:
 
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
+
+There is a separate command for the tool to replicate binding redirects from an app.config file
+to one or more other app.config files:
+checkbinarycompat -replicateBindingRedirects <source.exe.config> <destination.exe.config>+
 ```
 
 ## Baseline
