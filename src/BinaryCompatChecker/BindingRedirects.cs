@@ -57,7 +57,7 @@ public partial class Checker
 
         if (commandLine.ReportVersionMismatch)
         {
-            ReportVersionMismatches(versionMismatchesByName);
+            ReportVersionMismatches(appConfigFiles, versionMismatchesByName);
         }
     }
 
@@ -76,11 +76,6 @@ public partial class Checker
 
         foreach (var assembly in assemblies)
         {
-            if (assembly == null)
-            {
-                continue;
-            }
-
             if (!string.Equals(assembly.Name?.Name, name, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -122,10 +117,11 @@ public partial class Checker
 
         if (versionMismatchesByName.TryGetValue(name, out List<VersionMismatch> mismatches))
         {
-            versionMismatchesByName.Remove(name);
             for (int i = mismatches.Count - 1; i >= 0; i--)
             {
                 var versionMismatch = mismatches[i];
+
+                bool handled = false;
 
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;
                 if (actualVersion != newVersion)
@@ -144,8 +140,16 @@ public partial class Checker
                     if (diagnostic != null)
                     {
                         diagnostics.Add(diagnostic);
-                        continue;
                     }
+                }
+                else
+                {
+                    handled = true;
+                }
+
+                if (handled)
+                {
+                    versionMismatch.HandledByAppConfigs.Add(appConfigFileName);
                 }
             }
         }

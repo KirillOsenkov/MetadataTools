@@ -53,6 +53,8 @@ public partial class Checker
         public AssemblyDefinition Referencer;
         public AssemblyNameReference ExpectedReference;
         public AssemblyDefinition ActualAssembly;
+
+        public List<string> HandledByAppConfigs { get; } = new();
     }
 
     public class IVTUsage

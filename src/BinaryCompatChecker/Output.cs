@@ -83,8 +83,11 @@ public partial class Checker
         reportLines.Add(text);
     }
 
-    private void ReportVersionMismatches(Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
+    private void ReportVersionMismatches(List<AppConfigFile> appConfigFiles, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
+        int appConfigCount = appConfigFiles.Count;
+        var allAppConfigNames = appConfigFiles.Select(f => f.FileName).ToArray();
+
         foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
         {
             if (!versionMismatch.ExpectedReference.HasPublicKey && !versionMismatch.ActualAssembly.Name.HasPublicKey)
@@ -109,9 +112,21 @@ public partial class Checker
                 continue;
             }
 
+            // handled by all app.config files
+            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count == appConfigCount)
+            {
+                continue;
+            }
+
             actualFilePath = GetRelativePath(actualFilePath);
 
-            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`");
+            string appConfigs = "";
+            if (appConfigCount > 0 && versionMismatch.HandledByAppConfigs.Count > 0)
+            {
+                appConfigs = $" Not handled by: {string.Join(", ", allAppConfigNames.Where(a => !versionMismatch.HandledByAppConfigs.Contains(a)))}";
+            }
+
+            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`.{appConfigs}");
         }
     }
 
