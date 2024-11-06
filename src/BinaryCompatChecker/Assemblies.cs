@@ -372,6 +372,10 @@ public partial class Checker
                                         {
                                             match = true;
                                         }
+                                        else if (reference.IsRetargetable)
+                                        {
+                                            match = true;
+                                        }
                                     }
 
                                     if (match)
@@ -617,4 +621,16 @@ public partial class Checker
         ["System.Xml.XPath"] = LessThan4100,
         ["System.Xml.XPath.XDocument"] = LessThan4200,
     };
+}
+
+public static class VersionExtensions
+{
+    public static bool Is(this Version version, int major = 0, int minor = 0, int build = 0, int revision = 0)
+    {
+        return version != null &&
+            version.Major == major &&
+            version.Minor == minor &&
+            version.Build == build &&
+            version.Revision == revision;
+    }
 }
