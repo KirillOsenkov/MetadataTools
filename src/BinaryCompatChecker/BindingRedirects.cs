@@ -18,7 +18,13 @@ public partial class Checker
 
         foreach (var appConfigFilePath in appConfigFilePaths)
         {
-            WriteLine(appConfigFilePath, ConsoleColor.DarkYellow);
+            Write(appConfigFilePath, ConsoleColor.Magenta);
+            if (commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase))
+            {
+                Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+            }
+
+            WriteLine();
 
             var appConfigFileName = Path.GetFileName(appConfigFilePath);
             var appConfigFile = AppConfigFile.Read(appConfigFilePath);
