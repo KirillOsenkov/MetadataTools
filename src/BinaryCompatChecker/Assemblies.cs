@@ -35,16 +35,20 @@ public partial class Checker
         "WindowsFormsIntegration"
     };
 
-    private string dotnetRuntimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+    private static string dotnetRuntimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location);
+    private static string windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-    private static string desktopNetFrameworkDirectory =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET");
+    private static string desktopNetFrameworkDirectory = Path.Combine(windowsDirectory, "Microsoft.NET");
 
     private List<string> desktopNetFrameworkDirectories = new List<string>
     {
         Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_MSIL"),
         Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_32"),
         Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_64"),
+        Path.Combine(windowsDirectory, "assembly", "GAC_MSIL"),
+        Path.Combine(windowsDirectory, "assembly", "GAC_32"),
+        Path.Combine(windowsDirectory, "assembly", "GAC_64"),
+        Path.Combine(windowsDirectory, "assembly", "GAC"),
     };
 
     private static string mscorlibFilePath = Path.Combine(desktopNetFrameworkDirectory, "Framework", "v4.0.30319", "mscorlib.dll");
