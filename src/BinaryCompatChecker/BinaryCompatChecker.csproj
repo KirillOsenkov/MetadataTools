@@ -36,7 +36,8 @@
 
   <ItemGroup>
     <!--<PackageReference Include="Mono.Cecil" Version="0.11.4" />-->
-    <Reference Include="C:\cecil\bin\Release\netstandard2.0\Mono.Cecil.dll" />
+    <!-- built from https://github.com/jbevain/cecil/pull/806 -->
+    <Reference Include="..\..\lib\Mono.Cecil.dll" />
   </ItemGroup>
 <!--
   <Target Name="PrepareNupkgInfo" AfterTargets="CoreBuild">
