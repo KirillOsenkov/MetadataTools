@@ -13,8 +13,10 @@ namespace BinaryCompatChecker
         private Regex m_inclusionRegex;
         private Regex m_exclusionRegex;
 
-        public Regex InclusionRegex => m_inclusionRegex ??= new Regex(InclusionPattern);
-        public Regex ExclusionRegex => m_exclusionRegex ??= new Regex(ExclusionPattern);
+        private static RegexOptions regexOptions = Checker.IsWindows ? RegexOptions.IgnoreCase : RegexOptions.None;
+
+        public Regex InclusionRegex => m_inclusionRegex ??= new Regex(InclusionPattern, regexOptions);
+        public Regex ExclusionRegex => m_exclusionRegex ??= new Regex(ExclusionPattern, regexOptions);
 
         public IncludeExcludePattern(string inclusionPattern, string exclusionPattern)
         {
