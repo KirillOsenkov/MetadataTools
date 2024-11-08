@@ -1,9 +1,9 @@
 # MetadataTools
 
 Included features and dotnet global tools:
- * **BinaryCompatChecker** - (https://nuget.org/packages/checkbinarycompat) a tool that given a set of managed assemblies will detect binary incompatibilities, such as types missing from referenced assemblies, missing methods, etc.
- * **lbi** - (https://nuget.org/packages/lbi) - a tool to list assemblies and their versions and other information, optionally grouping by assembly version.
- * **RefDump** - (https://nuget.org/packages/refdump) given an assembly prints a list of all types from all referenced assemblies used by the current assembly. Can also dump both typerefs and memberrefs to an Xml file.
+ * **BinaryCompatChecker** - (https://nuget.org/packages/checkbinarycompat) a tool that given a set of managed assemblies will detect binary incompatibilities, such as types missing from referenced assemblies, missing methods, etc. It will also check .exe.config files (app.config) and validate all binding redirects, and report missing binding redirects where necessary.
+ * **lbi** - (https://nuget.org/packages/lbi) - a tool to list assemblies and their versions and other information, optionally grouping by assembly version. Similar to `dir /s` but also prints version, target framework, etc.
+ * **RefDump** - (https://nuget.org/packages/refdump) given an assembly prints a list of all types from all referenced assemblies used by the current assembly. Finds all assemblies in a directory (recursively if needed) that reference a given one.
 ![image](https://user-images.githubusercontent.com/679326/119587059-bed59a80-bd82-11eb-9ed1-9ace56ae13e5.png)
 
  * **Pdb**
