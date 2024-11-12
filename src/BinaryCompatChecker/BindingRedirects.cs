@@ -51,11 +51,7 @@ public partial class Checker
             {
                 CheckBindingRedirect(
                     appConfigFile.FileName,
-                    bindingRedirect.Name,
-                    bindingRedirect.PublicKeyToken,
-                    bindingRedirect.OldVersionRangeStart,
-                    bindingRedirect.OldVersionRangeEnd,
-                    bindingRedirect.NewVersion,
+                    bindingRedirect,
                     assemblies,
                     versionMismatchesByName);
             }
@@ -69,14 +65,17 @@ public partial class Checker
 
     private void CheckBindingRedirect(
         string appConfigFileName,
-        string name,
-        string publicKeyToken,
-        Version oldVersionStart,
-        Version oldVersionEnd,
-        Version newVersion,
+        AppConfigFile.BindingRedirect bindingRedirect,
         IReadOnlyList<AssemblyDefinition> assemblies,
         Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
+        string name = bindingRedirect.Name;
+        string publicKeyToken = bindingRedirect.PublicKeyToken;
+        Version oldVersionStart = bindingRedirect.OldVersionRangeStart;
+        Version oldVersionEnd = bindingRedirect.OldVersionRangeEnd;
+        Version newVersion = bindingRedirect.NewVersion;
+        var codeBases = bindingRedirect.CodeBases;
+
         bool foundNewVersion = false;
         var foundVersions = new List<Version>();
 
@@ -128,29 +127,30 @@ public partial class Checker
                 var versionMismatch = mismatches[i];
 
                 bool handled = false;
+                string diagnostic = null;
 
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;
-                if (actualVersion != newVersion)
+                var expectedVersion = versionMismatch.ExpectedReference.Version;
+
+                bool expectedIsInRange = expectedVersion >= oldVersionStart && expectedVersion <= oldVersionEnd;
+
+                if (expectedVersion < oldVersionStart && expectedVersion != actualVersion)
                 {
-                    string diagnostic = null;
-
-                    if (actualVersion < oldVersionStart)
-                    {
-                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}' (Expected by '{versionMismatch.Referencer.Name}')";
-                    }
-                    else if (actualVersion > oldVersionEnd)
-                    {
-                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.ActualAssembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}' (Expected by '{versionMismatch.Referencer.Name}')";
-                    }
-
-                    if (diagnostic != null)
-                    {
-                        diagnostics.Add(diagnostic);
-                    }
+                    diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is lower than bindingRedirect range start '{oldVersionStart}' and not equal to actual version '{actualVersion}'";
                 }
-                else
+                else if (expectedVersion > oldVersionEnd && expectedVersion != actualVersion)
+                {
+                    diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is higher than bindingRedirect range end '{oldVersionEnd}' and not equal to actual version '{actualVersion}'";
+                }
+
+                if (expectedIsInRange && foundNewVersion)
                 {
                     handled = true;
+                }
+
+                if (diagnostic != null)
+                {
+                    diagnostics.Add(diagnostic);
                 }
 
                 if (handled)
