@@ -41,6 +41,7 @@ namespace BinaryCompatChecker
             public XElement DependentAssemblyElement { get; set; }
             public XElement AssemblyIdentityElement { get; set; }
             public XElement BindingRedirectElement { get; set; }
+            public IReadOnlyList<CodeBase> CodeBases { get; set; } = Array.Empty<CodeBase>();
 
             public override string ToString()
             {
@@ -95,6 +96,18 @@ namespace BinaryCompatChecker
             }
         }
 
+        public class CodeBase
+        {
+            public Version Version { get; set; }
+            public string Href { get; set; }
+            public XElement CodeBaseElement { get; set; }
+
+            public override string ToString()
+            {
+                return $"version={Version} href={Href}";
+            }
+        }
+
         public static AppConfigFile Read(string filePath)
         {
             var appConfigFile = new AppConfigFile(filePath);
@@ -133,7 +146,8 @@ namespace BinaryCompatChecker
                     PublicKeyToken = bindingRedirect.PublicKeyToken,
                     OldVersionRangeStart = bindingRedirect.OldVersionRangeStart,
                     OldVersionRangeEnd = bindingRedirect.OldVersionRangeEnd,
-                    NewVersion = bindingRedirect.NewVersion
+                    NewVersion = bindingRedirect.NewVersion,
+                    CodeBases = bindingRedirect.CodeBases.Select(c => new CodeBase { Version = c.Version, Href = c.Href }).ToArray()
                 };
                 destination.AddBindingRedirect(newBindingRedirect);
             }
@@ -267,49 +281,94 @@ namespace BinaryCompatChecker
                 }
 
                 var bindingRedirect = dependentAssembly.Element(Xmlns("bindingRedirect"));
-                if (bindingRedirect == null)
+                var codeBases = dependentAssembly.Elements(Xmlns("codeBase"));
+
+                if (bindingRedirect == null && (codeBases == null || !codeBases.Any()))
                 {
-                    Error($"dependentAssembly for {name} doesn't have a bindingRedirect subelement");
+                    Error($"dependentAssembly for {name} doesn't have a bindingRedirect or codeBase subelements");
                     continue;
                 }
 
-                var oldVersionString = GetAttributeValue(bindingRedirect, "oldVersion");
-                if (oldVersionString == null)
+                Version oldVersionStart = null;
+                Version oldVersionEnd = null;
+                Version newVersion = null;
+
+                if (bindingRedirect != null)
                 {
-                    Error($"bindingRedirect for {name} is missing the 'oldVersion' attribute");
-                    continue;
+                    var oldVersionString = GetAttributeValue(bindingRedirect, "oldVersion");
+                    if (oldVersionString == null)
+                    {
+                        Error($"bindingRedirect for {name} is missing the 'oldVersion' attribute");
+                        continue;
+                    }
+
+                    var newVersionString = GetAttributeValue(bindingRedirect, "newVersion");
+                    if (newVersionString == null)
+                    {
+                        Error($"bindingRedirect for {name} is missing the 'newVersion' attribute");
+                        continue;
+                    }
+
+                    Tuple<string, string> range = ParseVersionRange(oldVersionString);
+                    if (range == null)
+                    {
+                        Error($"oldVersion range for {name} is in incorrect format");
+                        continue;
+                    }
+
+                    if (!Version.TryParse(range.Item1, out oldVersionStart))
+                    {
+                        Error($"Can't parse old start version: {range.Item1}");
+                        continue;
+                    }
+
+                    if (!Version.TryParse(range.Item2, out oldVersionEnd))
+                    {
+                        Error($"Can't parse old end version: {range.Item2}");
+                        continue;
+                    }
+
+                    if (!Version.TryParse(newVersionString, out newVersion))
+                    {
+                        Error($"Can't parse newVersion: {newVersion}");
+                        continue;
+                    }
                 }
 
-                var newVersionString = GetAttributeValue(bindingRedirect, "newVersion");
-                if (newVersionString == null)
-                {
-                    Error($"bindingRedirect for {name} is missing the 'newVersion' attribute");
-                    continue;
-                }
+                var codeBaseList = new List<CodeBase>();
 
-                Tuple<string, string> range = ParseVersionRange(oldVersionString);
-                if (range == null)
+                if (codeBases != null && codeBases.Any())
                 {
-                    Error($"oldVersion range for {name} is in incorrect format");
-                    continue;
-                }
+                    foreach (var codeBase in codeBases)
+                    {
+                        var versionString = GetAttributeValue(codeBase, "version");
+                        if (versionString == null)
+                        {
+                            Error($"codeBase for {name} is missing the 'version' attribute");
+                            goto nextDependentAssembly;
+                        }
 
-                if (!Version.TryParse(range.Item1, out var oldVersionStart))
-                {
-                    Error($"Can't parse old start version: {range.Item1}");
-                    continue;
-                }
+                        var hrefString = GetAttributeValue(codeBase, "href");
+                        if (hrefString == null)
+                        {
+                            Error($"codeBase for {name} is missing the 'href' attribute");
+                            goto nextDependentAssembly;
+                        }
 
-                if (!Version.TryParse(range.Item2, out var oldVersionEnd))
-                {
-                    Error($"Can't parse old end version: {range.Item2}");
-                    continue;
-                }
+                        if (!Version.TryParse(versionString, out var version))
+                        {
+                            Error($"Can't parse version for codeBase for {name}: {versionString}");
+                            goto nextDependentAssembly;
+                        }
 
-                if (!Version.TryParse(newVersionString, out var newVersion))
-                {
-                    Error($"Can't parse newVersion: {newVersion}");
-                    continue;
+                        var newCodeBase = new CodeBase()
+                        {
+                            Version = version,
+                            Href = hrefString,
+                            CodeBaseElement = codeBase
+                        };
+                        codeBaseList.Add(newCodeBase);
+                    }
                 }
 
                 var bindingRedirectResult = new BindingRedirect
@@ -323,15 +382,19 @@ namespace BinaryCompatChecker
                     AssemblyBindingElement = dependentAssembly.Parent,
                     DependentAssemblyElement = dependentAssembly,
                     BindingRedirectElement = bindingRedirect,
-                    AssemblyIdentityElement = assemblyIdentity
+                    AssemblyIdentityElement = assemblyIdentity,
+                    CodeBases = codeBaseList
                 };
 
                 if (bindingRedirects.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 {
                     Error($"Duplicate binding redirect: {name}");
+                    continue;
                 }
 
                 bindingRedirects.Add(bindingRedirectResult);
+
+            nextDependentAssembly:;
             }
         }
 
