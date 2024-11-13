@@ -27,6 +27,7 @@ namespace BinaryCompatChecker
         public string Directory => Path.GetDirectoryName(filePath);
 
         public bool HasCodeBases { get; set; }
+        public bool IgnoreVersionMismatch { get; set; }
 
         private AppConfigFile(string filePath)
         {

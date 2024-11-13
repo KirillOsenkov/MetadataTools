@@ -93,8 +93,10 @@ namespace BinaryCompatChecker
 
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
+                bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
+
                 Write(appConfigFilePath, ConsoleColor.Magenta);
-                if (commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase))
+                if (ignoreVersionMismatch)
                 {
                     Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
                 }
@@ -103,6 +105,11 @@ namespace BinaryCompatChecker
 
                 var appConfigFileName = Path.GetFileName(appConfigFilePath);
                 var appConfigFile = AppConfigFile.Read(appConfigFilePath);
+                if (ignoreVersionMismatch)
+                {
+                    appConfigFile.IgnoreVersionMismatch = true;
+                }
+
                 if (appConfigFile.Errors.Any())
                 {
                     foreach (var error in appConfigFile.Errors)
