@@ -703,7 +703,7 @@ Options:", ConsoleColor.White);
     -intPtrCtors             Report IntPtr constructors (Mono).
 
     If any of the below three output options are specified, all other output is suppressed.
-    Use this to limit the output to only the information requires.
+    Use this to limit the output to only the information required.
     You can use any combination of these options:
 
     -outputExpectedWarnings  Only output old warnings that were in the baseline but no longer observed (and nothing else).
