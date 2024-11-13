@@ -70,13 +70,13 @@ public partial class Checker
 
             foundVersions.Add(assemblyName);
 
-            if (oldVersionStart != null && assemblyName.Version < oldVersionStart)
+            if (oldVersionStart != null && assemblyName.Version < oldVersionStart && !appConfigFile.IgnoreVersionMismatch)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}'");
                 continue;
             }
 
-            if (oldVersionEnd != null && assemblyName.Version > oldVersionEnd)
+            if (oldVersionEnd != null && assemblyName.Version > oldVersionEnd && !appConfigFile.IgnoreVersionMismatch)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}'");
                 continue;
