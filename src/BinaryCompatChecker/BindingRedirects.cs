@@ -147,6 +147,19 @@ public partial class Checker
             }
         }
 
+        if (!foundNewVersion && newVersion != null && codeBases.Any())
+        {
+            var match = codeBases.FirstOrDefault(c => c.Version == newVersion);
+            if (match != null)
+            {
+                match.AssemblyDefinition ??= Load(match.FilePath);
+                if (match.AssemblyDefinition != null && match.AssemblyDefinition.Name.Version == newVersion)
+                {
+                    foundNewVersion = true;
+                }
+            }
+        }
+
         if (!foundNewVersion)
         {
             var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}' with version {newVersion}.";
