@@ -187,14 +187,17 @@ public partial class Checker
         }
     }
 
+    private string GetResolveKey(string referenceFullName) => currentResolveDirectory + "\\" + referenceFullName;
+
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
     {
-        string resolveKey = currentResolveDirectory + reference.FullName;
-
+        string resolveKey = GetResolveKey(reference.FullName);
         if (resolveCache.TryGetValue(resolveKey, out AssemblyDefinition result))
         {
             return result;
         }
+
+        #if ResolveFromCodeBase
 
         foreach (var appConfig in appConfigFiles)
         {
@@ -232,7 +235,7 @@ public partial class Checker
                         var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
                         if (assemblyDefinition != null &&
                             string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
-                            assemblyDefinition.Name.Version == reference.Version)
+                            assemblyDefinition.Name.Version == resolvedVersion)
                         {
                             resolveCache[resolveKey] = assemblyDefinition;
                             return assemblyDefinition;
@@ -241,6 +244,8 @@ public partial class Checker
                 }
             }
         }
+
+#endif
 
         string filePath = TryResolve(reference);
 
