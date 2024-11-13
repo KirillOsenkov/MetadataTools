@@ -11,6 +11,7 @@ namespace BinaryCompatChecker;
 public partial class Checker
 {
     IAssemblyResolver resolver;
+    string currentResolveDirectory;
 
     private static Dictionary<string, bool> frameworkAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -188,6 +189,45 @@ public partial class Checker
 
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
     {
+        foreach (var appConfig in appConfigFiles)
+        {
+            if (!appConfig.HasCodeBases)
+            {
+                continue;
+            }
+
+            if (!CommandLine.PathComparer.Equals(appConfig.Directory, currentResolveDirectory))
+            {
+                continue;
+            }
+
+            foreach (var bindingRedirect in appConfig.BindingRedirects)
+            {
+                if (!string.Equals(bindingRedirect.Name, reference.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var codeBase in bindingRedirect.CodeBases)
+                {
+                    if (reference.Version == codeBase.Version)
+                    {
+                        var hrefPath = Path.Combine(currentResolveDirectory, codeBase.Href);
+                        if (File.Exists(hrefPath))
+                        {
+                            var assemblyDefinition = Load(hrefPath);
+                            if (assemblyDefinition != null &&
+                                string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
+                                assemblyDefinition.Name.Version == reference.Version)
+                            {
+                                return assemblyDefinition;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (resolveCache.TryGetValue(reference.FullName, out AssemblyDefinition result))
         {
             return result;

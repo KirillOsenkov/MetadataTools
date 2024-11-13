@@ -13,6 +13,7 @@ namespace BinaryCompatChecker
         private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
 
         private readonly List<string> assembliesExamined = new();
+        private readonly List<AppConfigFile> appConfigFiles = new();
         private readonly List<string> reportLines = new();
         private readonly List<IVTUsage> ivtUsages = new();
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
@@ -90,8 +91,6 @@ namespace BinaryCompatChecker
                 fileQueue.Enqueue(file);
             }
 
-            List<AppConfigFile> appConfigFiles = new();
-
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
                 Write(appConfigFilePath, ConsoleColor.Magenta);
@@ -156,6 +155,7 @@ namespace BinaryCompatChecker
                 List<string> referencePaths = new();
                 foreach (var reference in references)
                 {
+                    currentResolveDirectory = Path.GetDirectoryName(file);
                     var resolvedAssemblyDefinition = Resolve(reference);
                     if (resolvedAssemblyDefinition == null)
                     {

@@ -25,6 +25,8 @@ namespace BinaryCompatChecker
         public string FileName => Path.GetFileName(filePath);
         public string Directory => Path.GetDirectoryName(filePath);
 
+        public bool HasCodeBases { get; set; }
+
         private AppConfigFile(string filePath)
         {
             this.filePath = filePath;
@@ -369,6 +371,7 @@ namespace BinaryCompatChecker
                             CodeBaseElement = codeBase
                         };
                         codeBaseList.Add(newCodeBase);
+                        HasCodeBases = true;
                     }
                 }
 
