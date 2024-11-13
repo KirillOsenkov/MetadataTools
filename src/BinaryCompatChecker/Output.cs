@@ -83,7 +83,7 @@ public partial class Checker
         reportLines.Add(text);
     }
 
-    private void ReportVersionMismatches(List<AppConfigFile> appConfigFiles, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
+    private void ReportVersionMismatches(IReadOnlyList<AppConfigFile> appConfigFiles, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
         int appConfigCount = appConfigFiles.Count;
         var allAppConfigNames = appConfigFiles.Select(f => f.FileName).ToArray();

@@ -23,6 +23,7 @@ namespace BinaryCompatChecker
 
         public string FilePath => filePath;
         public string FileName => Path.GetFileName(filePath);
+        public string Directory => Path.GetDirectoryName(filePath);
 
         private AppConfigFile(string filePath)
         {
