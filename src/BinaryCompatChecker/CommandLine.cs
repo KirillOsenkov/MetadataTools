@@ -494,6 +494,17 @@ public class CommandLine
         {
             root = parts[0] + "\\";
             parts = parts.Skip(1).ToArray();
+
+            while (parts.Length > 0 &&
+                parts[0] is string first &&
+                !first.Contains("*") &&
+                !first.Contains("?") &&
+                first != "." &&
+                first != "..")
+            {
+                root = Path.Combine(root, first);
+                parts = parts.Skip(1).ToArray();
+            }
         }
 
         if (root == null)
