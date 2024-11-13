@@ -212,16 +212,12 @@ public partial class Checker
                 {
                     if (reference.Version == codeBase.Version)
                     {
-                        var hrefPath = Path.Combine(currentResolveDirectory, codeBase.Href);
-                        if (File.Exists(hrefPath))
+                        var assemblyDefinition = Load(codeBase.FilePath);
+                        if (assemblyDefinition != null &&
+                            string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
+                            assemblyDefinition.Name.Version == reference.Version)
                         {
-                            var assemblyDefinition = Load(hrefPath);
-                            if (assemblyDefinition != null &&
-                                string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
-                                assemblyDefinition.Name.Version == reference.Version)
-                            {
-                                return assemblyDefinition;
-                            }
+                            return assemblyDefinition;
                         }
                     }
                 }

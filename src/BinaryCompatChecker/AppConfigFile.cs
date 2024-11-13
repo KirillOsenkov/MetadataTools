@@ -104,6 +104,7 @@ namespace BinaryCompatChecker
             public Version Version { get; set; }
             public string Href { get; set; }
             public XElement CodeBaseElement { get; set; }
+            public string FilePath { get; set; }
 
             public override string ToString()
             {
@@ -339,7 +340,6 @@ namespace BinaryCompatChecker
                 }
 
                 var codeBaseList = new List<CodeBase>();
-
                 if (codeBases != null && codeBases.Any())
                 {
                     foreach (var codeBase in codeBases)
@@ -347,28 +347,36 @@ namespace BinaryCompatChecker
                         var versionString = GetAttributeValue(codeBase, "version");
                         if (versionString == null)
                         {
-                            Error($"codeBase for {name} is missing the 'version' attribute");
-                            goto nextDependentAssembly;
+                            Error($"codeBase for {name}: 'version' attribute missing");
+                            continue;
                         }
 
                         var hrefString = GetAttributeValue(codeBase, "href");
                         if (hrefString == null)
                         {
-                            Error($"codeBase for {name} is missing the 'href' attribute");
-                            goto nextDependentAssembly;
+                            Error($"codeBase for {name}: 'href' attribute missing");
+                            continue;
                         }
 
                         if (!Version.TryParse(versionString, out var version))
                         {
-                            Error($"Can't parse version for codeBase for {name}: {versionString}");
-                            goto nextDependentAssembly;
+                            Error($"codeBase for {name}: invalid version: {versionString}");
+                            continue;
+                        }
+
+                        string filePath = Path.Combine(Directory, hrefString);
+                        if (!File.Exists(filePath))
+                        {
+                            Error($"codeBase for {name}: 'href' file not found: {hrefString}");
+                            continue;
                         }
 
                         var newCodeBase = new CodeBase()
                         {
                             Version = version,
                             Href = hrefString,
-                            CodeBaseElement = codeBase
+                            CodeBaseElement = codeBase,
+                            FilePath = filePath
                         };
                         codeBaseList.Add(newCodeBase);
                         HasCodeBases = true;
@@ -397,8 +405,6 @@ namespace BinaryCompatChecker
                 }
 
                 bindingRedirects.Add(bindingRedirectResult);
-
-            nextDependentAssembly:;
             }
         }
 
