@@ -120,7 +120,14 @@ public partial class Checker
                 {
                     handled = true;
                 }
-                else
+
+                if (!handled && FindVersionFromCodeBase(resolvedVersion))
+                {
+                    handled = true;
+                    foundNewVersion = true;
+                }
+
+                if (!handled)
                 {
                     if (oldVersionStart != null && resolvedVersion < oldVersionStart)
                     {
@@ -129,6 +136,9 @@ public partial class Checker
                     else if (oldVersionEnd != null && resolvedVersion > oldVersionEnd)
                     {
                         diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is higher than bindingRedirect range end '{oldVersionEnd}' and not equal to actual version '{actualVersion}'";
+                    }
+                    else
+                    {
                     }
                 }
 
@@ -147,17 +157,9 @@ public partial class Checker
             }
         }
 
-        if (!foundNewVersion && newVersion != null && codeBases.Any())
+        if (!foundNewVersion && newVersion != null && FindVersionFromCodeBase(newVersion))
         {
-            var match = codeBases.FirstOrDefault(c => c.Version == newVersion);
-            if (match != null)
-            {
-                match.AssemblyDefinition ??= Load(match.FilePath);
-                if (match.AssemblyDefinition != null && match.AssemblyDefinition.Name.Version == newVersion)
-                {
-                    foundNewVersion = true;
-                }
-            }
+            foundNewVersion = true;
         }
 
         if (!foundNewVersion)
@@ -169,6 +171,26 @@ public partial class Checker
             }
 
             diagnostics.Add(message);
+        }
+
+        bool FindVersionFromCodeBase(Version requestedVersion)
+        {
+            if (requestedVersion == null || !codeBases.Any())
+            {
+                return false;
+            }
+
+            var match = codeBases.FirstOrDefault(c => c.Version == requestedVersion);
+            if (match != null)
+            {
+                match.AssemblyDefinition ??= Load(match.FilePath);
+                if (match.AssemblyDefinition != null && match.AssemblyDefinition.Name.Version == requestedVersion)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

@@ -197,56 +197,6 @@ public partial class Checker
             return result;
         }
 
-        #if ResolveFromCodeBase
-
-        foreach (var appConfig in appConfigFiles)
-        {
-            if (!appConfig.HasCodeBases)
-            {
-                continue;
-            }
-
-            if (!CommandLine.PathComparer.Equals(appConfig.Directory, currentResolveDirectory))
-            {
-                continue;
-            }
-
-            foreach (var bindingRedirect in appConfig.BindingRedirects)
-            {
-                if (!string.Equals(bindingRedirect.Name, reference.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var resolvedVersion = reference.Version;
-                if (bindingRedirect.OldVersionRangeStart != null &&
-                    bindingRedirect.OldVersionRangeEnd != null &&
-                    bindingRedirect.NewVersion != null &&
-                    resolvedVersion >= bindingRedirect.OldVersionRangeStart &&
-                    resolvedVersion <= bindingRedirect.OldVersionRangeEnd)
-                {
-                    resolvedVersion = bindingRedirect.NewVersion;
-                }
-
-                foreach (var codeBase in bindingRedirect.CodeBases)
-                {
-                    if (resolvedVersion == codeBase.Version)
-                    {
-                        var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
-                        if (assemblyDefinition != null &&
-                            string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
-                            assemblyDefinition.Name.Version == resolvedVersion)
-                        {
-                            resolveCache[resolveKey] = assemblyDefinition;
-                            return assemblyDefinition;
-                        }
-                    }
-                }
-            }
-        }
-
-#endif
-
         string filePath = TryResolve(reference);
 
         if (File.Exists(filePath))
@@ -279,6 +229,12 @@ public partial class Checker
         }
 
         result = TryResolveFromInputFiles(reference);
+        if (result != null)
+        {
+            return result;
+        }
+
+        result = TryResolveFromCodeBase(reference);
         if (result != null)
         {
             return result;
@@ -346,6 +302,56 @@ public partial class Checker
             if (File.Exists(candidate))
             {
                 return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private string TryResolveFromCodeBase(AssemblyNameReference reference)
+    {
+        foreach (var appConfig in appConfigFiles)
+        {
+            if (!appConfig.HasCodeBases)
+            {
+                continue;
+            }
+
+            if (!CommandLine.PathComparer.Equals(appConfig.Directory, currentResolveDirectory))
+            {
+                continue;
+            }
+
+            foreach (var bindingRedirect in appConfig.BindingRedirects)
+            {
+                if (!string.Equals(bindingRedirect.Name, reference.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var resolvedVersion = reference.Version;
+                if (bindingRedirect.OldVersionRangeStart != null &&
+                    bindingRedirect.OldVersionRangeEnd != null &&
+                    bindingRedirect.NewVersion != null &&
+                    resolvedVersion >= bindingRedirect.OldVersionRangeStart &&
+                    resolvedVersion <= bindingRedirect.OldVersionRangeEnd)
+                {
+                    resolvedVersion = bindingRedirect.NewVersion;
+                }
+
+                foreach (var codeBase in bindingRedirect.CodeBases)
+                {
+                    if (resolvedVersion == codeBase.Version)
+                    {
+                        var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
+                        if (assemblyDefinition != null &&
+                            string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
+                            assemblyDefinition.Name.Version == resolvedVersion)
+                        {
+                            return codeBase.FilePath;
+                        }
+                    }
+                }
             }
         }
 
