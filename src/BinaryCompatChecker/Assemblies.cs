@@ -669,4 +669,26 @@ public static class VersionExtensions
             version.Build == build &&
             version.Revision == revision;
     }
+
+    public static string GetString(this byte[] bytes)
+    {
+        if (bytes == null)
+        {
+            return null;
+        }
+
+        string result = BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+        return result;
+    }
+
+    public static string GetToken(this AssemblyNameDefinition assemblyName)
+    {
+        string result = assemblyName.PublicKeyToken.GetString();
+        if (string.IsNullOrEmpty(result))
+        {
+            result = "null";
+        }
+
+        return result;
+    }
 }
