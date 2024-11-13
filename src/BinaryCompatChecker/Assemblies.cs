@@ -183,7 +183,10 @@ public partial class Checker
         string filePath = assemblyDefinition.MainModule.FileName;
         if (!files.Contains(filePath))
         {
-            WriteLine(filePath, ConsoleColor.DarkGray);
+            if (commandLine.EnableDefaultOutput)
+            {
+                WriteLine(filePath, ConsoleColor.DarkGray);
+            }
         }
     }
 

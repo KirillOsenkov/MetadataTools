@@ -95,13 +95,16 @@ namespace BinaryCompatChecker
             {
                 bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
 
-                Write(appConfigFilePath, ConsoleColor.Magenta);
-                if (ignoreVersionMismatch)
+                if (commandLine.EnableDefaultOutput)
                 {
-                    Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
-                }
+                    Write(appConfigFilePath, ConsoleColor.Magenta);
+                    if (ignoreVersionMismatch)
+                    {
+                        Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+                    }
 
-                WriteLine();
+                    WriteLine();
+                }
 
                 var appConfigFileName = Path.GetFileName(appConfigFilePath);
                 var appConfigFile = AppConfigFile.Read(appConfigFilePath);
@@ -135,14 +138,17 @@ namespace BinaryCompatChecker
 
                 string targetFramework = GetTargetFramework(assemblyDefinition);
 
-                Write(file);
-                Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
-                if (targetFramework != null)
+                if (commandLine.EnableDefaultOutput)
                 {
-                    Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
-                }
+                    Write(file);
+                    Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
+                    if (targetFramework != null)
+                    {
+                        Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
+                    }
 
-                WriteLine("");
+                    WriteLine("");
+                }
 
                 if (IsNetFrameworkAssembly(assemblyDefinition))
                 {
@@ -237,10 +243,14 @@ namespace BinaryCompatChecker
                     var baseline = File.ReadAllLines(baselineFile);
                     if (!Enumerable.SequenceEqual(baseline, reportLines))
                     {
-                        WriteError($@"Binary compatibility check failed.
+                        if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                        {
+                            WriteError($@"Binary compatibility check failed.
  The current assembly binary compatibility report is different from the baseline file.
  Baseline file: {baselineFile}
  Wrote report file: {reportFile}");
+                        }
+
                         OutputDiff(baseline, reportLines);
                         try
                         {
@@ -256,7 +266,10 @@ namespace BinaryCompatChecker
                     }
                     else
                     {
-                        WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                        if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                        {
+                            WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                        }
                     }
                 }
                 else if (!File.Exists(reportFile))
@@ -265,14 +278,20 @@ namespace BinaryCompatChecker
 
                     // initial baseline creation mode
                     File.WriteAllLines(reportFile, reportLines);
-                    WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
+                    }
                 }
 
                 ListExaminedAssemblies(reportFile);
             }
             else
             {
-                WriteLine("No issues found", ConsoleColor.Green);
+                if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                {
+                    WriteLine("No issues found", ConsoleColor.Green);
+                }
             }
 
             if (commandLine.ReportIVT)

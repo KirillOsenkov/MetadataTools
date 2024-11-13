@@ -18,6 +18,11 @@ public class CommandLine
     public bool ReportMissingMembers { get; set; } = true;
     public bool ReportInterfaceMismatch { get; set; } = true;
 
+    public bool OutputExpectedWarnings { get; set; }
+    public bool OutputNewWarnings { get; set; }
+    public bool OutputSummary { get; set; }
+    public bool EnableDefaultOutput { get; set; } = true;
+
     public bool ReplicateBindingRedirects { get; set; }
     public string SourceAppConfig { get; set; }
     public IReadOnlyList<string> DestinationAppConfigs { get; set; }
@@ -192,6 +197,30 @@ public class CommandLine
                 continue;
             }
 
+            if (arg.Equals("/outputExpectedWarnings", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-outputExpectedWarnings", StringComparison.OrdinalIgnoreCase))
+            {
+                OutputExpectedWarnings = true;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/outputNewWarnings", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-outputNewWarnings", StringComparison.OrdinalIgnoreCase))
+            {
+                OutputNewWarnings = true;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/outputSummary", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-outputSummary", StringComparison.OrdinalIgnoreCase))
+            {
+                OutputSummary = true;
+                arguments.Remove(arg);
+                continue;
+            }
+
             if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase) ||
                 arg.Equals("-embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
             {
@@ -349,6 +378,11 @@ public class CommandLine
             }
 
             return true;
+        }
+
+        if (OutputExpectedWarnings || OutputNewWarnings || OutputSummary)
+        {
+            EnableDefaultOutput = false;
         }
 
         if (patterns.Count == 0)
@@ -667,6 +701,14 @@ Options:", ConsoleColor.White);
     -ivt                     Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes    Report embedded interop types.
     -intPtrCtors             Report IntPtr constructors (Mono).
+
+    If any of the below three output options are specified, all other output is suppressed.
+    Use this to limit the output to only the information requires.
+    You can use any combination of these options:
+
+    -outputExpectedWarnings  Only output old warnings that were in the baseline but no longer observed (and nothing else).
+    -outputNewWarnings       Only output new warnings that weren't in the baseline and nothing else.
+    -outputSummary           Output the summary comparing the report and the baseline.
 
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.

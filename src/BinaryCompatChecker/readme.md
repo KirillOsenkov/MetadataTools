@@ -80,6 +80,14 @@ Options:
     -embeddedInteropTypes    Report embedded interop types.
     -intPtrCtors             Report IntPtr constructors (Mono).
 
+    If any of the below three output options are specified, all other output is suppressed.
+    Use this to limit the output to only the information requires.
+    You can use any combination of these options:
+
+    -outputExpectedWarnings  Only output old warnings that were in the baseline but no longer observed (and nothing else).
+    -outputNewWarnings       Only output new warnings that weren't in the baseline and nothing else.
+    -outputSummary           Output the summary comparing the report and the baseline.
+
     @response.rsp            Response file containing additional command-line arguments, one per line.
     -?:                      Display help.
 

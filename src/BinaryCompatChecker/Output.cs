@@ -13,6 +13,11 @@ public partial class Checker
         WriteLine(text, ConsoleColor.Red, Console.Error);
     }
 
+    public static void WriteWarning(string text)
+    {
+        WriteLine(text, ConsoleColor.Yellow, Console.Error);
+    }
+
     public static void WriteLine(string text = "", ConsoleColor? color = null, TextWriter writer = null)
     {
         writer ??= Console.Out;
@@ -53,26 +58,54 @@ public partial class Checker
 
         if (removed.Any())
         {
-            WriteError("=================================");
-            WriteError("These expected lines are missing:");
-            foreach (var removedLine in removed)
+            if (commandLine.EnableDefaultOutput || commandLine.OutputExpectedWarnings)
             {
-                WriteError(removedLine);
+                if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                {
+                    WriteWarning("=================================");
+                    WriteWarning("These expected lines are missing:");
+                    WriteExpectedWarnings(removed);
+                    WriteWarning("=================================");
+                }
+                else
+                {
+                    WriteExpectedWarnings(removed);
+                }
             }
-
-            WriteError("=================================");
         }
 
         if (added.Any())
         {
-            WriteError("=================================");
-            WriteError("These actual lines are new:");
-            foreach (var addedLine in added)
+            if (commandLine.EnableDefaultOutput || commandLine.OutputNewWarnings)
             {
-                WriteError(addedLine);
+                if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                {
+                    WriteError("=================================");
+                    WriteError("These actual lines are new:");
+                    WriteNewWarnings(added);
+                    WriteError("=================================");
+                }
+                else
+                {
+                    WriteNewWarnings(added);
+                }
             }
+        }
+    }
 
-            WriteError("=================================");
+    private static void WriteExpectedWarnings(IEnumerable<string> removed)
+    {
+        foreach (var removedLine in removed)
+        {
+            WriteWarning(removedLine);
+        }
+    }
+
+    private static void WriteNewWarnings(IEnumerable<string> added)
+    {
+        foreach (var addedLine in added)
+        {
+            WriteError(addedLine);
         }
     }
 
@@ -186,7 +219,10 @@ public partial class Checker
         if (sb.Length > 0)
         {
             File.WriteAllText(filePath, sb.ToString());
-            WriteLine($"Wrote {filePath}", ConsoleColor.Green);
+            if (commandLine.EnableDefaultOutput)
+            {
+                WriteLine($"Wrote {filePath}", ConsoleColor.Green);
+            }
         }
     }
 
@@ -200,6 +236,9 @@ public partial class Checker
         string filePath = Path.ChangeExtension(reportFile, ".Assemblies.txt");
         assembliesExamined.Sort();
         File.WriteAllLines(filePath, assembliesExamined);
-        WriteLine($"Wrote {filePath}", ConsoleColor.Green);
+        if (commandLine.EnableDefaultOutput)
+        {
+            WriteLine($"Wrote {filePath}", ConsoleColor.Green);
+        }
     }
 }
