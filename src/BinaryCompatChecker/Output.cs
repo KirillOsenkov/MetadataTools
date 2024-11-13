@@ -137,11 +137,11 @@ public partial class Checker
                 }
                 else if (versionMismatch.HandledByAppConfigs.Count > 0)
                 {
-                    appConfigs = $". Not handled by: {string.Join(", ", defendants)}";
+                    appConfigs = $" Not handled by: {string.Join(", ", defendants)}";
                 }
             }
 
-            diagnostics.Add($"Assembly `{versionMismatch.Referencer.Name.Name}` is referencing `{referencedFullName}` but found `{versionMismatch.ActualAssembly.FullName}` at `{actualFilePath}`{appConfigs}");
+            diagnostics.Add($"Reference to '{referencedFullName}' from assembly '{versionMismatch.Referencer.Name.Name}' doesn't match '{versionMismatch.ActualAssembly.FullName}' at '{actualFilePath}'.{appConfigs}");
         }
     }
 

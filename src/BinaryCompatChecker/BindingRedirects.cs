@@ -53,46 +53,38 @@ public partial class Checker
         string appConfigFileName = appConfigFile.FileName;
 
         bool foundNewVersion = false;
-        var foundVersions = new List<Version>();
+        var foundVersions = new List<AssemblyNameDefinition>();
 
         foreach (var assembly in assemblies)
         {
-            if (!string.Equals(assembly.Name?.Name, name, StringComparison.OrdinalIgnoreCase))
+            var assemblyName = assembly.Name;
+            if (assemblyName == null)
             {
                 continue;
             }
 
-            var assemblyVersion = assembly.Name.Version;
-
-            foundVersions.Add(assemblyVersion);
-
-            if (assemblyVersion == newVersion)
+            if (!string.Equals(assemblyName.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                foundNewVersion = true;
-                var actualToken = BitConverter.ToString(assembly.Name.PublicKeyToken).Replace("-", "").ToLowerInvariant();
-                if (string.IsNullOrEmpty(actualToken))
-                {
-                    actualToken = "null";
-                }
-
-                if (!string.Equals(actualToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
-                {
-                    diagnostics.Add($"App.config: '{appConfigFileName}': publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualToken}'");
-                }
-
                 continue;
             }
 
-            if (oldVersionStart != null && assemblyVersion < oldVersionStart)
+            foundVersions.Add(assemblyName);
+
+            if (oldVersionStart != null && assemblyName.Version < oldVersionStart)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}'");
                 continue;
             }
 
-            if (oldVersionEnd != null && assemblyVersion > oldVersionEnd)
+            if (oldVersionEnd != null && assemblyName.Version > oldVersionEnd)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}'");
                 continue;
+            }
+
+            if (newVersion != null && assemblyName.Version == newVersion)
+            {
+                foundNewVersion = true;
             }
         }
 
@@ -104,6 +96,12 @@ public partial class Checker
 
                 bool handled = false;
                 string diagnostic = null;
+
+                string actualPublicKeyToken = versionMismatch.ActualAssembly.Name.GetToken();
+                if (!string.Equals(actualPublicKeyToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
+                {
+                    diagnostics.Add($"App.config: '{appConfigFileName}': publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualPublicKeyToken}'");
+                }
 
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;
                 var expectedVersion = versionMismatch.ExpectedReference.Version;
@@ -118,39 +116,20 @@ public partial class Checker
                     resolvedVersion = newVersion;
                 }
 
-                if (codeBases != null && codeBases.Any())
-                {
-                    foreach (var codeBase in codeBases)
-                    {
-                        if (resolvedVersion == codeBase.Version)
-                        {
-                            string hrefPath = Path.Combine(appConfigFile.Directory, codeBase.Href);
-                            if (File.Exists(hrefPath))
-                            {
-                                handled = true;
-                            }
-                            else
-                            {
-                                diagnostic = $"App.config: '{appConfigFile.FileName}': {name}: unable to find href: {codeBase.Href}";
-                            }
-
-                            break;
-                        }
-                    }
-                }
-
-                if (oldVersionStart != null && resolvedVersion < oldVersionStart && resolvedVersion != actualVersion)
-                {
-                    diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is lower than bindingRedirect range start '{oldVersionStart}' and not equal to actual version '{actualVersion}'";
-                }
-                else if (oldVersionEnd != null && resolvedVersion > oldVersionEnd && resolvedVersion != actualVersion)
-                {
-                    diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is higher than bindingRedirect range end '{oldVersionEnd}' and not equal to actual version '{actualVersion}'";
-                }
-
-                if (isInRange && foundNewVersion)
+                if (resolvedVersion == actualVersion)
                 {
                     handled = true;
+                }
+                else
+                {
+                    if (oldVersionStart != null && resolvedVersion < oldVersionStart)
+                    {
+                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is lower than bindingRedirect range start '{oldVersionStart}' and not equal to actual version '{actualVersion}'";
+                    }
+                    else if (oldVersionEnd != null && resolvedVersion > oldVersionEnd)
+                    {
+                        diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is higher than bindingRedirect range end '{oldVersionEnd}' and not equal to actual version '{actualVersion}'";
+                    }
                 }
 
                 if (diagnostic != null)
@@ -173,7 +152,7 @@ public partial class Checker
             var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}' with version {newVersion}.";
             if (foundVersions.Count > 0)
             {
-                message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.ToString()).Distinct().OrderBy(s => s))}";
+                message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.Version.ToString()).Distinct().OrderBy(s => s))}";
             }
 
             diagnostics.Add(message);
