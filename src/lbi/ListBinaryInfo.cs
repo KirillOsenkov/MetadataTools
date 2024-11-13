@@ -279,7 +279,7 @@ Examples:
         }
 
         var files = new List<string>();
-        if (File.Exists(patternList))
+        if (File.Exists(patternList) && Path.IsPathRooted(patternList))
         {
             var file = Path.GetFullPath(patternList);
             if (!managedOnly || FileInfo.GetIsManagedAssembly(file))
