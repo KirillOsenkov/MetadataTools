@@ -71,12 +71,48 @@ namespace BinaryCompatChecker
                 }
             }
 
-            var appConfigFiles = new List<string>();
+            var appConfigFilePaths = new List<string>();
 
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
             foreach (var file in commandLine.Files)
             {
+                if (file.EndsWith(".config", CommandLine.PathComparison))
+                {
+                    if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
+                        file.EndsWith(".dll.config", CommandLine.PathComparison) ||
+                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison))
+                    {
+                        appConfigFilePaths.Add(file);
+                        continue;
+                    }
+                }
+
                 fileQueue.Enqueue(file);
+            }
+
+            List<AppConfigFile> appConfigFiles = new();
+
+            foreach (var appConfigFilePath in appConfigFilePaths)
+            {
+                Write(appConfigFilePath, ConsoleColor.Magenta);
+                if (commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase))
+                {
+                    Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+                }
+
+                WriteLine();
+
+                var appConfigFileName = Path.GetFileName(appConfigFilePath);
+                var appConfigFile = AppConfigFile.Read(appConfigFilePath);
+                if (appConfigFile.Errors.Any())
+                {
+                    foreach (var error in appConfigFile.Errors)
+                    {
+                        diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
+                    }
+                }
+
+                appConfigFiles.Add(appConfigFile);
             }
 
             Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
@@ -84,17 +120,6 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
-
-                if (file.EndsWith(".config", CommandLine.PathComparison))
-                {
-                    if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
-                        file.EndsWith(".dll.config", CommandLine.PathComparison) ||
-                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison))
-                    {
-                        appConfigFiles.Add(file);
-                        continue;
-                    }
-                }
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)

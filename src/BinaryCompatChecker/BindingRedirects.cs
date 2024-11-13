@@ -8,36 +8,11 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
-    private void CheckAppConfigFiles(IEnumerable<string> appConfigFilePaths)
+    private void CheckAppConfigFiles(IReadOnlyList<AppConfigFile> appConfigFiles)
     {
         var versionMismatchesByName = versionMismatches
             .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.ToList(), StringComparer.OrdinalIgnoreCase);
-
-        List<AppConfigFile> appConfigFiles = new();
-
-        foreach (var appConfigFilePath in appConfigFilePaths)
-        {
-            Write(appConfigFilePath, ConsoleColor.Magenta);
-            if (commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase))
-            {
-                Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
-            }
-
-            WriteLine();
-
-            var appConfigFileName = Path.GetFileName(appConfigFilePath);
-            var appConfigFile = AppConfigFile.Read(appConfigFilePath);
-            if (appConfigFile.Errors.Any())
-            {
-                foreach (var error in appConfigFile.Errors)
-                {
-                    diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
-                }
-            }
-
-            appConfigFiles.Add(appConfigFile);
-        }
 
         var assemblies = this.resolveCache.Values
             .Concat(this.filePathToModuleDefinition.Values)
@@ -50,7 +25,7 @@ public partial class Checker
             foreach (var bindingRedirect in appConfigFile.BindingRedirects)
             {
                 CheckBindingRedirect(
-                    appConfigFile.FileName,
+                    appConfigFile,
                     bindingRedirect,
                     assemblies,
                     versionMismatchesByName);
@@ -64,7 +39,7 @@ public partial class Checker
     }
 
     private void CheckBindingRedirect(
-        string appConfigFileName,
+        AppConfigFile appConfigFile,
         AppConfigFile.BindingRedirect bindingRedirect,
         IReadOnlyList<AssemblyDefinition> assemblies,
         Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
@@ -75,6 +50,7 @@ public partial class Checker
         Version oldVersionEnd = bindingRedirect.OldVersionRangeEnd;
         Version newVersion = bindingRedirect.NewVersion;
         var codeBases = bindingRedirect.CodeBases;
+        string appConfigFileName = appConfigFile.FileName;
 
         bool foundNewVersion = false;
         var foundVersions = new List<Version>();
@@ -107,13 +83,13 @@ public partial class Checker
                 continue;
             }
 
-            if (assemblyVersion < oldVersionStart)
+            if (oldVersionStart != null && assemblyVersion < oldVersionStart)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is less than bindingRedirect range start '{oldVersionStart}'");
                 continue;
             }
 
-            if (assemblyVersion > oldVersionEnd)
+            if (oldVersionEnd != null && assemblyVersion > oldVersionEnd)
             {
                 diagnostics.Add($"App.config: '{appConfigFileName}': '{assembly.FullName}' version is higher than bindingRedirect range end '{oldVersionEnd}'");
                 continue;
@@ -131,19 +107,48 @@ public partial class Checker
 
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;
                 var expectedVersion = versionMismatch.ExpectedReference.Version;
+                Version resolvedVersion = expectedVersion;
 
-                bool expectedIsInRange = expectedVersion >= oldVersionStart && expectedVersion <= oldVersionEnd;
+                bool isInRange = oldVersionStart != null &&
+                    oldVersionEnd != null &&
+                    resolvedVersion >= oldVersionStart &&
+                    resolvedVersion <= oldVersionEnd;
+                if (isInRange)
+                {
+                    resolvedVersion = newVersion;
+                }
 
-                if (expectedVersion < oldVersionStart && expectedVersion != actualVersion)
+                if (codeBases != null && codeBases.Any())
+                {
+                    foreach (var codeBase in codeBases)
+                    {
+                        if (resolvedVersion == codeBase.Version)
+                        {
+                            string hrefPath = Path.Combine(appConfigFile.Directory, codeBase.Href);
+                            if (File.Exists(hrefPath))
+                            {
+                                handled = true;
+                            }
+                            else
+                            {
+                                diagnostic = $"App.config: '{appConfigFile.FileName}': {name}: unable to find href: {codeBase.Href}";
+                            }
+
+                            break;
+                        }
+                    }
+                }
+
+                if (oldVersionStart != null && resolvedVersion < oldVersionStart && resolvedVersion != actualVersion)
                 {
                     diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is lower than bindingRedirect range start '{oldVersionStart}' and not equal to actual version '{actualVersion}'";
                 }
-                else if (expectedVersion > oldVersionEnd && expectedVersion != actualVersion)
+                else if (oldVersionEnd != null && resolvedVersion > oldVersionEnd && resolvedVersion != actualVersion)
                 {
                     diagnostic = $"App.config: '{appConfigFileName}': '{versionMismatch.Referencer.Name}' references '{versionMismatch.ExpectedReference.FullName}' which is higher than bindingRedirect range end '{oldVersionEnd}' and not equal to actual version '{actualVersion}'";
                 }
 
-                if (expectedIsInRange && foundNewVersion)
+                if (isInRange && foundNewVersion)
                 {
                     handled = true;
                 }
