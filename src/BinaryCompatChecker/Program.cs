@@ -162,7 +162,7 @@ namespace BinaryCompatChecker
                         unresolvedAssemblies.Add(reference.Name);
                         if (commandLine.ReportMissingAssemblies)
                         {
-                            diagnostics.Add($"Reference to '{reference.FullName}' from assembly '{assemblyDefinition.Name.FullName}' couldn't be resolved.");
+                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
                         }
 
                         continue;
