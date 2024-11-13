@@ -33,6 +33,9 @@ public class CommandLine
     public static readonly StringComparison PathComparison = Checker.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     public static readonly StringComparer PathComparer = Checker.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
+    private HashSet<string> rootDirectories = new(PathComparer);
+    public IEnumerable<string> RootDirectories => rootDirectories;
+
     public static CommandLine Parse(string[] args)
     {
         var result = new CommandLine();
@@ -288,6 +291,7 @@ public class CommandLine
                 }
 
                 CustomResolveDirectories.Add(resolveDir);
+                AddRootDirectory(resolveDir);
 
                 arguments.Remove(arg);
                 continue;
@@ -374,7 +378,7 @@ public class CommandLine
         {
             if (Recursive)
             {
-                AddInclusion(Path.Combine(currentDirectory, "**") , currentDirectory);
+                AddInclusion(Path.Combine(currentDirectory, "**"), currentDirectory);
             }
             else
             {
@@ -468,7 +472,20 @@ public class CommandLine
             return false;
         }
 
+        AddRootDirectory(root);
+
         return AddFiles(root, parts.ToArray());
+    }
+
+    private void AddRootDirectory(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return;
+        }
+
+        root = root.TrimEnd(Path.DirectorySeparatorChar);
+        rootDirectories.Add(root);
     }
 
     private bool AddFiles(string root, string[] parts)

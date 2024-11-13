@@ -551,9 +551,12 @@ public partial class Checker
 
     private string GetRelativePath(string filePath)
     {
-        if (filePath.StartsWith(Environment.CurrentDirectory, StringComparison.OrdinalIgnoreCase))
+        foreach (var rootDirectory in commandLine.RootDirectories)
         {
-            filePath = filePath.Substring(Environment.CurrentDirectory.Length + 1);
+            if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                filePath = filePath.Substring(rootDirectory.Length + 1);
+            }
         }
 
         return filePath;
