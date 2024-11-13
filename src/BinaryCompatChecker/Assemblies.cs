@@ -189,6 +189,13 @@ public partial class Checker
 
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
     {
+        string resolveKey = currentResolveDirectory + reference.FullName;
+
+        if (resolveCache.TryGetValue(resolveKey, out AssemblyDefinition result))
+        {
+            return result;
+        }
+
         foreach (var appConfig in appConfigFiles)
         {
             if (!appConfig.HasCodeBases)
@@ -222,11 +229,12 @@ public partial class Checker
                 {
                     if (resolvedVersion == codeBase.Version)
                     {
-                        var assemblyDefinition = Load(codeBase.FilePath);
+                        var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
                         if (assemblyDefinition != null &&
                             string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
                             assemblyDefinition.Name.Version == reference.Version)
                         {
+                            resolveCache[resolveKey] = assemblyDefinition;
                             return assemblyDefinition;
                         }
                     }
@@ -234,17 +242,12 @@ public partial class Checker
             }
         }
 
-        if (resolveCache.TryGetValue(reference.FullName, out AssemblyDefinition result))
-        {
-            return result;
-        }
-
         string filePath = TryResolve(reference);
 
         if (File.Exists(filePath))
         {
             result = Load(filePath);
-            resolveCache[reference.FullName] = result;
+            resolveCache[resolveKey] = result;
 
             if (result != null)
             {
@@ -253,7 +256,7 @@ public partial class Checker
         }
         else
         {
-            resolveCache[reference.FullName] = null;
+            resolveCache[resolveKey] = null;
         }
 
         return result;

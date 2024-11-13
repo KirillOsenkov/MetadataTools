@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
+using Mono.Cecil;
 
 namespace BinaryCompatChecker
 {
@@ -105,6 +106,7 @@ namespace BinaryCompatChecker
             public string Href { get; set; }
             public XElement CodeBaseElement { get; set; }
             public string FilePath { get; set; }
+            public AssemblyDefinition AssemblyDefinition { get; set; }
 
             public override string ToString()
             {
