@@ -208,9 +208,19 @@ public partial class Checker
                     continue;
                 }
 
+                var resolvedVersion = reference.Version;
+                if (bindingRedirect.OldVersionRangeStart != null &&
+                    bindingRedirect.OldVersionRangeEnd != null &&
+                    bindingRedirect.NewVersion != null &&
+                    resolvedVersion >= bindingRedirect.OldVersionRangeStart &&
+                    resolvedVersion <= bindingRedirect.OldVersionRangeEnd)
+                {
+                    resolvedVersion = bindingRedirect.NewVersion;
+                }
+
                 foreach (var codeBase in bindingRedirect.CodeBases)
                 {
-                    if (reference.Version == codeBase.Version)
+                    if (resolvedVersion == codeBase.Version)
                     {
                         var assemblyDefinition = Load(codeBase.FilePath);
                         if (assemblyDefinition != null &&
