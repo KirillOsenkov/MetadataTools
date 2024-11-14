@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Mono.Cecil;
 
@@ -88,6 +87,21 @@ public partial class Checker
             }
         }
 
+        if (codeBases.Any())
+        {
+            foreach (var codeBase in codeBases)
+            {
+                codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
+                if (codeBase.AssemblyDefinition != null)
+                {
+                    if (!foundVersions.Contains(codeBase.AssemblyDefinition.Name))
+                    {
+                        foundVersions.Add(codeBase.AssemblyDefinition.Name);
+                    }
+                }
+            }
+        }
+
         if (versionMismatchesByName.TryGetValue(name, out List<VersionMismatch> mismatches))
         {
             for (int i = mismatches.Count - 1; i >= 0; i--)
@@ -164,7 +178,13 @@ public partial class Checker
 
         if (!foundNewVersion)
         {
-            var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}' with version {newVersion}.";
+            string withVersion = "";
+            if (newVersion != null)
+            {
+                withVersion = $" with version {newVersion}";
+            }
+
+            var message = $"App.config: '{appConfigFileName}': couldn't find assembly '{name}'{withVersion}.";
             if (foundVersions.Count > 0)
             {
                 message += $" Found versions: {string.Join(",", foundVersions.Select(v => v.Version.ToString()).Distinct().OrderBy(s => s))}";
