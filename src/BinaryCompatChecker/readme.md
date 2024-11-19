@@ -61,35 +61,36 @@ File specs may be specified more than once. Each file spec is one of the followi
 Options:
     All options with parameters (other than -out:) may be specified more than once.
 
-    !<exclude-pattern>       Exclude a relative path or file pattern from analysis.
-    -l                       Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
-    -s                       Recursive (visit specified directories recursively). Default is non-recursive.
-    -closure:<file.dll>      Path to a root assembly of a closure (to report unused references).
-    -resolve:<directory>     Additional directory to resolve reference assemblies from.
-    -p:<pattern>             Semicolon-separated file pattern(s) such as *.dll;*.exe.
-    -baseline:<baseline.txt> Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
-    -out:<report.txt>        Write report to <report.txt> instead of BinaryCompatReport.txt.
+    !<exclude-pattern>         Exclude a relative path or file pattern from analysis.
+    -l                         Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
+    -s                         Recursive (visit specified directories recursively). Default is non-recursive.
+    -closure:<file.dll>        Path to a root assembly of a closure (to report unused references).
+    -resolve:<directory>       Additional directory to resolve reference assemblies from.
+    -p:<pattern>               Semicolon-separated file pattern(s) such as *.dll;*.exe.
+    -baseline:<baseline.txt>   Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
+    -out:<report.txt>          Write report to <report.txt> instead of BinaryCompatReport.txt.
 
-    -ignoreVersionMismatch   Do not report assembly version mismatches.
-    -ignoreFacade            Do not report facade assemblies.
-    -ignoreMissingAssemblies Do not report missing or unresolved assemblies.
-    -ignoreMissingTypes      Do not report missing types.
-    -ignoreMissingMembers    Do not report missing members.
-    -ignoreInterfaces        Do not report missing interface implementations.
-    -ivt                     Report internal API surface area consumed via InternalsVisibleTo.
-    -embeddedInteropTypes    Report embedded interop types.
-    -intPtrCtors             Report IntPtr constructors (Mono).
+    -ignoreVersionMismatch     Do not report assembly version mismatches.
+    -ignoreFacade              Do not report facade assemblies.
+    -ignoreMissingAssemblies   Do not report missing or unresolved assemblies.
+    -ignoreFrameworkAssemblies Do not analyze .NET Framework assemblies.
+    -ignoreMissingTypes        Do not report missing types.
+    -ignoreMissingMembers      Do not report missing members.
+    -ignoreInterfaces          Do not report missing interface implementations.
+    -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
+    -embeddedInteropTypes      Report embedded interop types.
+    -intPtrCtors               Report IntPtr constructors (Mono).
 
     If any of the below three output options are specified, all other output is suppressed.
     Use this to limit the output to only the information required.
     You can use any combination of these options:
 
-    -outputExpectedWarnings  Only output old warnings that were in the baseline but no longer observed (and nothing else).
-    -outputNewWarnings       Only output new warnings that weren't in the baseline and nothing else.
-    -outputSummary           Output the summary comparing the report and the baseline.
+    -outputExpectedWarnings    Only output old warnings that were in the baseline but no longer observed (and nothing else).
+    -outputNewWarnings         Only output new warnings that weren't in the baseline and nothing else.
+    -outputSummary             Output the summary comparing the report and the baseline.
 
-    @response.rsp            Response file containing additional command-line arguments, one per line.
-    -?:                      Display help.
+    @response.rsp              Response file containing additional command-line arguments, one per line.
+    -?:                        Display help.
 
 -ignoreVersionMismatch can optionally specify a list of app.config file names (semicolon-separated)
 that should be ignored for version mismatch reporting. If there is a version mismatch that is covered

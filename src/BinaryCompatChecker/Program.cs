@@ -158,7 +158,10 @@ namespace BinaryCompatChecker
                         diagnostics.Add($"Facade assembly: {relativePath}");
                     }
 
-                    continue;
+                    if (!commandLine.AnalyzeFrameworkAssemblies)
+                    {
+                        continue;
+                    }
                 }
 
                 // var relativePath = file.Substring(rootDirectory.Length + 1);
