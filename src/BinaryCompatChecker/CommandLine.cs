@@ -56,6 +56,7 @@ public class CommandLine
     public IEnumerable<string> Files => files;
     public IEnumerable<string> ClosureRootFiles => closureRootFiles;
     public IEnumerable<string> AllDirectories => allDirectories;
+    public bool ClosureOnlyMode => closureRootFiles.Count > 0 && files.Count == 0;
 
     public bool IsClosureRoot(string filePath)
     {
@@ -392,6 +393,20 @@ public class CommandLine
         if (OutputExpectedWarnings || OutputNewWarnings || OutputSummary)
         {
             EnableDefaultOutput = false;
+        }
+
+        if (arguments.Count == 0 && closureRootPatterns.Count > 0)
+        {
+            foreach (var closureRootPattern in closureRootPatterns)
+            {
+                if (!AddInclusion(closureRootPattern, currentDirectory))
+                {
+                    Checker.WriteError($"Expected directory, file glob or pattern: {closureRootPattern}");
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         if (patterns.Count == 0)

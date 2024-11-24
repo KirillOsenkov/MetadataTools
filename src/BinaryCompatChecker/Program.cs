@@ -8,7 +8,7 @@ namespace BinaryCompatChecker
 {
     public partial class Checker
     {
-        private readonly Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(CommandLine.PathComparer);
         private readonly Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
 
@@ -19,6 +19,7 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> files;
+        private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
 
         private static CommandLine commandLine;
 
@@ -73,6 +74,23 @@ namespace BinaryCompatChecker
             }
 
             var appConfigFilePaths = new List<string>();
+
+            if (commandLine.ClosureOnlyMode)
+            {
+                foreach (var closureRoot in commandLine.ClosureRootFiles)
+                {
+                    if (!closureRoot.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string candidateConfig = closureRoot + ".config";
+                    if (File.Exists(candidateConfig))
+                    {
+                        appConfigFilePaths.Add(candidateConfig);
+                    }
+                }
+            }
 
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
             foreach (var file in commandLine.Files)
@@ -129,6 +147,10 @@ namespace BinaryCompatChecker
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
+                if (!visitedFiles.Add(file))
+                {
+                    continue;
+                }
 
                 var assemblyDefinition = Load(file);
                 if (assemblyDefinition == null)
@@ -192,6 +214,11 @@ namespace BinaryCompatChecker
                     if (IsNetFrameworkAssembly(resolvedAssemblyDefinition))
                     {
                         continue;
+                    }
+
+                    if (commandLine.ClosureOnlyMode)
+                    {
+                        fileQueue.Enqueue(referenceFilePath);
                     }
 
                     CheckTypes(assemblyDefinition, resolvedAssemblyDefinition);
