@@ -712,9 +712,19 @@ File specs may be specified more than once. Each file spec is one of the followi
         - a pattern such as *.dll
         - semicolon-separated patterns such as *.dll;*.exe;*.exe.config
 
-    When no file-specs are specified, uses the current directory
-    non-recursively. Pass -s for recursion.
-    When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.");
+When no file-specs are specified, uses the current directory
+non-recursively. Pass -s for recursion.
+When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.
+
+If you only specify -closure:app.exe without specifying other files or patterns,
+it will check the app.exe.config (if exists) and the transitive closure of all
+references of app.exe, but not the other files in the directory. You can specify
+several -closure: arguments or several semicolon-separated files
+such as -closure:app.exe;Dependency1.dll in order to give a hint that
+Dependency1.dll is a runtime dependency and should be included in the closure.
+This mode is useful when there are multiple executables in the directory
+and you want to check the dependencies of one of them and the corresponding
+.exe.config file.");
         Checker.Write(@"
 
 Options:", ConsoleColor.White);
