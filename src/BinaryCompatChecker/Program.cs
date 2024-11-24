@@ -308,10 +308,14 @@ namespace BinaryCompatChecker
 
                     // initial baseline creation mode
                     File.WriteAllLines(reportFile, reportLines);
+
                     if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                     {
-                        WriteLine($"Wrote {reportFile}", ConsoleColor.Green);
+                        WriteError("Binary compatibility check failed.");
+                        WriteError($"Wrote {reportFile}");
                     }
+
+                    OutputDiff(Array.Empty<string>(), reportLines);
                 }
 
                 ListExaminedAssemblies(reportFile);
