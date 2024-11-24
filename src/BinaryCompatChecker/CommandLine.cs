@@ -311,8 +311,12 @@ public class CommandLine
             if (arg.StartsWith("/closure:") || arg.StartsWith("-closure:"))
             {
                 string closure = arg.Substring("/closure:".Length);
-                closure = closure.Trim('"');
-                closureRootPatterns.Add(closure);
+                var parts = closure.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var part in parts)
+                {
+                    closureRootPatterns.Add(part.Trim('"'));
+                }
+
                 ReportUnreferencedAssemblies = true;
                 arguments.Remove(arg);
                 continue;
