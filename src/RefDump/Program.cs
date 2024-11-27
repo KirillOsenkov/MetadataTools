@@ -40,6 +40,7 @@ namespace RefDump
             {
                 document = new XDocument();
                 rootXml = new XElement("Assemblies");
+                document.Add(rootXml);
             }
 
             if (FilterToAssembly != null)
@@ -79,6 +80,7 @@ namespace RefDump
             else
             {
                 Console.Error.WriteLine("File(s) not found: " + FileSpec);
+                return;
             }
 
             if (GenerateGraph)
