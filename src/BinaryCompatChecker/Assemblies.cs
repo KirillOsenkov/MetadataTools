@@ -243,10 +243,13 @@ public partial class Checker
             return result;
         }
 
-        result = TryResolveFromFramework(reference);
-        if (result != null)
+        if (commandLine.ResolveFromFramework)
         {
-            return result;
+            result = TryResolveFromFramework(reference);
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         result = TryResolveFromCustomDirectories(reference);
