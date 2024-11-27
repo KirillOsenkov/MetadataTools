@@ -99,7 +99,8 @@ namespace BinaryCompatChecker
                 {
                     if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
                         file.EndsWith(".dll.config", CommandLine.PathComparison) ||
-                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison))
+                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison) ||
+                        string.Equals(Path.GetFileName(file), "app.config", CommandLine.PathComparison))
                     {
                         appConfigFilePaths.Add(file);
                         continue;
