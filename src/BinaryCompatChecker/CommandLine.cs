@@ -714,7 +714,7 @@ File specs may be specified more than once. Each file spec is one of the followi
 
 When no file-specs are specified, uses the current directory
 non-recursively. Pass -s for recursion.
-When no patterns are specified, uses *.dll;*.exe;*.dll.config;*.exe.config.
+When no patterns are specified, uses *.dll;*.exe;*.exe.config.
 
 If you only specify -closure:app.exe without specifying other files or patterns,
 it will check the app.exe.config (if exists) and the transitive closure of all
