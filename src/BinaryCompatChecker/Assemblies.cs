@@ -402,6 +402,11 @@ public partial class Checker
                 return mscorlibFilePath;
             }
 
+            if (!commandLine.ResolveFromGac)
+            {
+                return null;
+            }
+
             foreach (var dir in desktopNetFrameworkDirectories)
             {
                 var combined = Path.Combine(dir, shortName);
@@ -461,6 +466,11 @@ public partial class Checker
         }
         else
         {
+            if (!commandLine.ResolveFromNetCore)
+            {
+                return null;
+            }
+
             var parent = Path.GetDirectoryName(dotnetRuntimeDirectory);
 
             string versionPrefix = version.Major.ToString();

@@ -87,7 +87,8 @@ Options:
     -ignoreMissingTypes        Do not report missing types.
     -ignoreMissingMembers      Do not report missing members.
     -ignoreInterfaces          Do not report missing interface implementations.
-    -doNotResolveFromFramework Do not resolve assemblies from GAC or .NET runtime directories.
+    -doNotResolveFromGAC       Do not resolve assemblies from GAC.
+    -doNotResolveFromNetCore   Do not resolve assemblies from .NET runtime directories.
     -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes      Report embedded interop types.
     -intPtrCtors               Report IntPtr constructors (Mono).

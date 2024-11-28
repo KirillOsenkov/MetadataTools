@@ -18,7 +18,9 @@ public class CommandLine
     public bool ReportMissingMembers { get; set; } = true;
     public bool ReportInterfaceMismatch { get; set; } = true;
     public bool AnalyzeFrameworkAssemblies { get; set; } = true;
-    public bool ResolveFromFramework { get; set; } = true;
+    public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
+    public bool ResolveFromNetCore { get; set; } = true;
+    public bool ResolveFromGac { get; set; } = true;
 
     public bool OutputExpectedWarnings { get; set; }
     public bool OutputNewWarnings { get; set; }
@@ -208,10 +210,18 @@ public class CommandLine
                 continue;
             }
 
-            if (arg.Equals("/doNotResolveFromFramework", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-doNotResolveFromFramework", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("/doNotResolveFromNetCore", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-doNotResolveFromNetCore", StringComparison.OrdinalIgnoreCase))
             {
-                ResolveFromFramework = false;
+                ResolveFromNetCore = false;
+                arguments.Remove(arg);
+                continue;
+            }
+
+            if (arg.Equals("/doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("-doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolveFromGac = false;
                 arguments.Remove(arg);
                 continue;
             }
@@ -757,7 +767,8 @@ Options:", ConsoleColor.White);
     -ignoreMissingTypes        Do not report missing types.
     -ignoreMissingMembers      Do not report missing members.
     -ignoreInterfaces          Do not report missing interface implementations.
-    -doNotResolveFromFramework Do not resolve assemblies from GAC or .NET runtime directories.
+    -doNotResolveFromGAC       Do not resolve assemblies from GAC.
+    -doNotResolveFromNetCore   Do not resolve assemblies from .NET runtime directories.
     -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes      Report embedded interop types.
     -intPtrCtors               Report IntPtr constructors (Mono).
