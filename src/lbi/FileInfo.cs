@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using AuthenticodeExaminer;
 using GuiLabs.Metadata;
 using Mono.Cecil;
 
@@ -387,6 +388,50 @@ public class FileInfo
         }
 
         return signedText;
+    }
+
+    private bool readAuthenticode;
+    private string authenticodeText = null;
+    public string GetAuthenticodeText(bool authenticode)
+    {
+        if (!authenticode)
+        {
+            return null;
+        }
+
+        if (!readAuthenticode)
+        {
+            lock (snLock)
+            {
+                if (!readAuthenticode)
+                {
+                    readAuthenticode = true;
+                    authenticodeText = GetAuthenticodeText();
+                }
+            }
+        }
+
+        return authenticodeText;
+    }
+
+    public const string NoAuthenticodeSignatures = "no Authenticode signatures";
+
+    private string GetAuthenticodeText()
+    {
+        var inspector = new FileInspector(this.FilePath);
+        var result = inspector.GetSignatures().ToArray();
+        if (result.Length > 1)
+        {
+            return $"Authenticode: {result.Length} signatures";
+        }
+        else if (result.Length == 1)
+        {
+            return $"Authenticode: {result.Length} signature";
+        }
+        else
+        {
+            return NoAuthenticodeSignatures;
+        }
     }
 
     private string platformText = null;

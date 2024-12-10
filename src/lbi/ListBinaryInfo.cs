@@ -3,14 +3,17 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
 class ListBinaryInfo
 {
+    public static bool IsWindows { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
     private static void PrintUsage()
     {
-        Console.WriteLine(@"Usage:
+        Console.WriteLine($@"Usage:
 lbi.exe [<pattern>]
         [-l[:<out.txt>]]
         [-d:<path>]*
@@ -39,6 +42,7 @@ lbi.exe [<pattern>]
 
     -sn     Print assembly strong named/delay-signed/public-signed.
     -snv    Validate assembly strong name using sn.exe -vf (slow).
+    -ac:    Print Authenticode signature information (Windows-only)
     -mvid   Print assembly MVID.
     -p      Print assembly platform.
     -v      Print assembly version.
@@ -72,6 +76,7 @@ Examples:
     private static string snExe;
     private static bool printSn;
     private static bool validateSn;
+    private static bool authenticode;
     private static bool checkPlatform;
     private static bool printVersion;
     private static bool printFileVersion;
@@ -161,6 +166,13 @@ Examples:
             arguments.Remove(snvArgument);
             FindCorflagsAndSn();
             validateSn = snExe != null;
+        }
+
+        var acArgument = arguments.FirstOrDefault(a => a == "-ac");
+        if (acArgument != null)
+        {
+            arguments.Remove(acArgument);
+            authenticode = IsWindows;
         }
 
         var platformArgument = arguments.FirstOrDefault(a => a == "-p");
@@ -416,6 +428,7 @@ Examples:
             printTargetFramework ||
             printSn ||
             validateSn ||
+            authenticode ||
             checkPlatform ||
             printFileVersion ||
             printMvid ||
@@ -551,6 +564,13 @@ Examples:
             }
         }
 
+        string authenticodeText = fileInfo.GetAuthenticodeText(authenticode);
+        if (!string.IsNullOrWhiteSpace(authenticodeText))
+        {
+            AppendSeparator();
+            sb.Append(authenticodeText);
+        }
+
         return sb.ToString();
     }
 
@@ -619,6 +639,18 @@ Examples:
                         }
 
                         Highlight($" {signedText}", color, newLineAtEnd: false);
+                    }
+
+                    var authenticodeText = fileInfo.GetAuthenticodeText(authenticode);
+                    if (!string.IsNullOrEmpty(authenticodeText))
+                    {
+                        var color = ConsoleColor.DarkGray;
+                        if (authenticodeText == FileInfo.NoAuthenticodeSignatures)
+                        {
+                            color = ConsoleColor.Red;
+                        }
+
+                        Highlight($" {authenticodeText}", color, newLineAtEnd: false);
                     }
 
                     if (checkPlatform)
