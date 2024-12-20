@@ -49,9 +49,8 @@ public class PEFile : Node
         PEHeader = new PEHeader(Buffer, peHeaderPointer);
         Add(PEHeader);
 
-        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80);
+        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80, PEHeader.SizeOfOptionalHeader.ReadInt16());
         Add(OptionalHeader);
-        OptionalHeader.Length = PEHeader.SizeOfOptionalHeader.ReadInt16();
     }
 
     public FourBytes PEHeaderPointer { get; set; }
@@ -90,8 +89,9 @@ public class PEHeader : Node
 
 public class OptionalHeader : Node
 {
-    public OptionalHeader(ByteBuffer buffer, int start) : base(buffer, start)
+    public OptionalHeader(ByteBuffer buffer, int start, short sizeOfOptionalHeader) : base(buffer, start)
     {
+        SizeOfOptionalHeader = sizeOfOptionalHeader;
     }
 
     public override void Parse()
@@ -108,6 +108,7 @@ public class OptionalHeader : Node
         Add(DataDirectories);
     }
 
+    public short SizeOfOptionalHeader { get; }
     public OptionalHeaderStandardFields StandardFields { get; set; }
     public OptionalHeaderWindowsFields WindowsFields { get; set; }
     public OptionalHeaderDataDirectories DataDirectories { get; set; }
@@ -154,7 +155,57 @@ public class OptionalHeaderWindowsFields : Node
 {
     public OptionalHeaderWindowsFields(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
     {
+        IsPE32Plus = isPE32Plus;
     }
+
+    public bool IsPE32Plus { get; }
+
+    public override void Parse()
+    {
+        ImageBase = AddFourOrEightBytes(IsPE32Plus);
+        SectionAlignment = AddFourBytes();
+        FileAlignment = AddFourBytes();
+        MajorOperationSystemVersion = AddTwoBytes();
+        MinorOperatingSystemVersion = AddTwoBytes();
+        MajorImageVersion = AddTwoBytes();
+        MinorImageVersion = AddTwoBytes();
+        MajorSubsystemVersion = AddTwoBytes();
+        MinorSubsystemVersion = AddTwoBytes();
+        Win32VersionValue = AddFourBytes();
+        SizeOfImage = AddFourBytes();
+        SizeOfHeaders = AddFourBytes();
+        Checksum = AddFourBytes();
+        Subsystem = AddTwoBytes();
+        DllCharacteristics = AddTwoBytes();
+        SizeOfStackReserve = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfStackCommit = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfHeapReserve = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfHeapCommit = AddFourOrEightBytes(IsPE32Plus);
+        LoaderFlags = AddFourBytes();
+        NumberOfRvaAndSizes = AddFourBytes();
+    }
+
+    public BytesNode ImageBase { get; set; }
+    public FourBytes SectionAlignment { get; set; }
+    public FourBytes FileAlignment { get; set; }
+    public TwoBytes MajorOperationSystemVersion { get; set; }
+    public TwoBytes MinorOperatingSystemVersion { get; set; }
+    public TwoBytes MajorImageVersion { get; set; }
+    public TwoBytes MinorImageVersion { get; set; }
+    public TwoBytes MajorSubsystemVersion { get; set; }
+    public TwoBytes MinorSubsystemVersion { get; set; }
+    public FourBytes Win32VersionValue { get; set; }
+    public FourBytes SizeOfImage { get; set; }
+    public FourBytes SizeOfHeaders { get; set; }
+    public FourBytes Checksum { get; set; }
+    public TwoBytes Subsystem { get; set; }
+    public TwoBytes DllCharacteristics { get; set; }
+    public BytesNode SizeOfStackReserve { get; set; }
+    public BytesNode SizeOfStackCommit { get; set; }
+    public BytesNode SizeOfHeapReserve { get; set; }
+    public BytesNode SizeOfHeapCommit { get; set; }
+    public FourBytes LoaderFlags { get; set; }
+    public FourBytes NumberOfRvaAndSizes { get; set; }
 }
 
 public class OptionalHeaderDataDirectories : Node
@@ -162,12 +213,50 @@ public class OptionalHeaderDataDirectories : Node
     public OptionalHeaderDataDirectories(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
     {
     }
+
+    public override void Parse()
+    {
+        ExportTable = AddEightBytes();
+        ImportTable = AddEightBytes();
+        ResourceTable = AddEightBytes();
+        ExceptionTable = AddEightBytes();
+        CertificateTable = AddEightBytes();
+        BaseRelocationTable = AddEightBytes();
+        Debug = AddEightBytes();
+        Architecture = AddEightBytes();
+        GlobalPtr = AddEightBytes();
+        TLSTable = AddEightBytes();
+        LoadConfigTable = AddEightBytes();
+        BoundImport = AddEightBytes();
+        IAT = AddEightBytes();
+        DelayImportDescriptor = AddEightBytes();
+        CLRRuntimeHeader = AddEightBytes();
+        ReservedZero = AddEightBytes();
+    }
+
+    public EightBytes ExportTable { get; set; }
+    public EightBytes ImportTable { get; set; }
+    public EightBytes ResourceTable { get; set; }
+    public EightBytes ExceptionTable { get; set; }
+    public EightBytes CertificateTable { get; set; }
+    public EightBytes BaseRelocationTable { get; set; }
+    public EightBytes Debug { get; set; }
+    public EightBytes Architecture { get; set; }
+    public EightBytes GlobalPtr { get; set; }
+    public EightBytes TLSTable { get; set; }
+    public EightBytes LoadConfigTable { get; set; }
+    public EightBytes BoundImport { get; set; }
+    public EightBytes IAT { get; set; }
+    public EightBytes DelayImportDescriptor { get; set; }
+    public EightBytes CLRRuntimeHeader { get; set; }
+    public EightBytes ReservedZero { get; set; }
 }
 
 public class ByteBuffer
 {
     public virtual short ReadInt16(int offset) => 0;
     public virtual uint ReadUInt32(int offset) => 0;
+    public virtual ulong ReadUInt64(int offset) => 0;
     public virtual int ReadInt32(int offset) => 0;
     public virtual byte ReadByte(int offset) => 0;
     public virtual byte[] ReadBytes(int offset, int count) => null;
@@ -188,6 +277,12 @@ public class StreamBuffer : ByteBuffer
     {
         Position = offset;
         return binaryReader.ReadUInt32();
+    }
+
+    public override ulong ReadUInt64(int offset)
+    {
+        Position = offset;
+        return binaryReader.ReadUInt64();
     }
 
     public override int ReadInt32(int offset)
@@ -299,6 +394,26 @@ public class Node
         return result;
     }
 
+    public EightBytes AddEightBytes()
+    {
+        int start = LastChildEnd;
+        var result = new EightBytes(Buffer, start);
+        Add(result);
+        return result;
+    }
+
+    public BytesNode AddFourOrEightBytes(bool eight)
+    {
+        if (eight)
+        {
+            return AddEightBytes();
+        }
+        else
+        {
+            return AddFourBytes();
+        }
+    }
+
     public override string ToString()
     {
         if (Length <= 32)
@@ -311,7 +426,20 @@ public class Node
     }
 }
 
-public class OneByte : Node
+public class BytesNode : Node
+{
+    public BytesNode(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+    }
+
+    public override string ToString()
+    {
+        var bytes = Buffer.ReadBytes(Start, Length);
+        return $"{bytes.ToHexString()}";
+    }
+}
+
+public class OneByte : BytesNode
 {
     public OneByte(ByteBuffer buffer, int offset) : base(buffer, offset)
     {
@@ -321,7 +449,7 @@ public class OneByte : Node
     public byte ReadByte() => Buffer.ReadByte(Start);
 }
 
-public class TwoBytes : Node
+public class TwoBytes : BytesNode
 {
     public TwoBytes(ByteBuffer buffer, int offset) : base(buffer, offset)
     {
@@ -331,7 +459,7 @@ public class TwoBytes : Node
     public short ReadInt16() => Buffer.ReadInt16(Start);
 }
 
-public class FourBytes : Node
+public class FourBytes : BytesNode
 {
     public FourBytes(ByteBuffer buffer, int start) : base(buffer, start)
     {
@@ -340,6 +468,18 @@ public class FourBytes : Node
 
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
     public int ReadInt32() => Buffer.ReadInt32(Start);
+}
+
+public class EightBytes : BytesNode
+{
+    public EightBytes(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+        Length = 8;
+    }
+
+    public uint ReadUint32() => Buffer.ReadUInt32(Start);
+    public int ReadInt32() => Buffer.ReadInt32(Start);
+    public ulong ReadUInt64() => Buffer.ReadUInt32(Start);
 }
 
 internal static class Extensions
