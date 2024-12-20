@@ -29,11 +29,15 @@ class Program
     }
 }
 
-public class PEFile(ByteBuffer buffer) : Node
+public class PEFile : Node
 {
+    public PEFile(ByteBuffer buffer) : base(buffer, 0)
+    {
+    }
+
     public override void Parse()
     {
-        PEHeaderPointer = new FourBytes(buffer, 0x3C);
+        PEHeaderPointer = new FourBytes(Buffer, 0x3C);
         Add(PEHeaderPointer);
 
         int peHeaderPointer = PEHeaderPointer.ReadInt32();
@@ -42,7 +46,7 @@ public class PEFile(ByteBuffer buffer) : Node
             peHeaderPointer = 0x80;
         }
 
-        PEHeader = new PEHeader(buffer, peHeaderPointer);
+        PEHeader = new PEHeader(Buffer, peHeaderPointer);
         Add(PEHeader);
     }
 
@@ -50,21 +54,28 @@ public class PEFile(ByteBuffer buffer) : Node
     public PEHeader PEHeader { get; set; }
 }
 
-public class PEHeader(ByteBuffer buffer, int offset) : Node
+public class PEHeader : Node
 {
+    public PEHeader(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+    }
+
     public override void Parse()
     {
-        PEHeaderSignature = new FourBytes(buffer, offset);
+        PEHeaderSignature = new FourBytes(Buffer, Start);
         Add(PEHeaderSignature);
 
-
+        Platform = new TwoBytes(Buffer, Start + 4);
+        Add(Platform);
     }
 
     public FourBytes PEHeaderSignature { get; set; }
+    public TwoBytes Platform { get; set; }
 }
 
 public class ByteBuffer
 {
+    public virtual short ReadInt16(int offset) => 0;
     public virtual uint ReadUInt32(int offset) => 0;
     public virtual int ReadInt32(int offset) => 0;
 }
@@ -92,6 +103,12 @@ public class StreamBuffer : ByteBuffer
         return binaryReader.ReadInt32();
     }
 
+    public override short ReadInt16(int offset)
+    {
+        Position = offset;
+        return binaryReader.ReadInt16();
+    }
+
     private long position;
     public long Position
     {
@@ -111,19 +128,18 @@ public class StreamBuffer : ByteBuffer
 
 public class Node
 {
-    protected List<Node> children;
-    protected List<Node> Children
+    public Node(ByteBuffer buffer, int start)
     {
-        get
-        {
-            if (children == null)
-            {
-                children = new();
-            }
-
-            return children;
-        }
+        Buffer = buffer;
+        Start = start;
     }
+
+    public ByteBuffer Buffer { get; set; }
+    public int Start { get; set; }
+    public int Length { get; set; }
+
+    protected List<Node> children;
+    protected List<Node> Children => children ??= [];
 
     public virtual void Parse()
     {
@@ -136,25 +152,23 @@ public class Node
     }
 }
 
-public class FourBytes : Node
+public class TwoBytes : Node
 {
-    private ByteBuffer buffer;
-    private readonly int offset;
-
-    public FourBytes(ByteBuffer buffer, int offset)
+    public TwoBytes(ByteBuffer buffer, int offset) : base(buffer, offset)
     {
-        this.buffer = buffer;
-        this.offset = offset;
+        Length = 2;
     }
 
-    public uint ReadUint32()
-    {
-        return buffer.ReadUInt32(offset);
-    }
-
-    public int ReadInt32()
-    {
-        return buffer.ReadInt32(offset);
-    }
+    public int ReadInt16() => Buffer.ReadInt16(Start);
 }
 
+public class FourBytes : Node
+{
+    public FourBytes(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+        Length = 4;
+    }
+
+    public uint ReadUint32() => Buffer.ReadUInt32(Start);
+    public int ReadInt32() => Buffer.ReadInt32(Start);
+}
