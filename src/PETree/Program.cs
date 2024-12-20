@@ -50,7 +50,7 @@ public class PEFile : Node
         PEHeader = new PEHeader { Start = peHeaderPointer };
         Add(PEHeader);
 
-        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80, PEHeader.SizeOfOptionalHeader.Value);
+        OptionalHeader = new OptionalHeader(PEHeader.SizeOfOptionalHeader.Value);
         Add(OptionalHeader);
 
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
@@ -90,7 +90,7 @@ public class PEHeader : Node
 
 public class OptionalHeader : Node
 {
-    public OptionalHeader(ByteBuffer buffer, int start, short sizeOfOptionalHeader) : base(buffer, start)
+    public OptionalHeader(short sizeOfOptionalHeader)
     {
         SizeOfOptionalHeader = sizeOfOptionalHeader;
     }
@@ -280,7 +280,7 @@ public class SectionHeader : Node
 {
     public override void Parse()
     {
-        Name = AddEightBytes();
+        Name = Add<EightByteString>();
         VirtualSize = AddFourBytes();
         VirtualAddress = AddFourBytes();
         SizeOfRawData = AddFourBytes();
@@ -292,7 +292,7 @@ public class SectionHeader : Node
         Characteristics = AddFourBytes();
     }
 
-    public EightBytes Name { get; set; }
+    public EightByteString Name { get; set; }
     public FourBytes VirtualSize { get; set; }
     public FourBytes VirtualAddress { get; set; }
     public FourBytes SizeOfRawData { get; set; }
@@ -377,18 +377,11 @@ public class StreamBuffer : ByteBuffer
         return binaryReader.ReadBytes(count);
     }
 
-    private long position;
     public long Position
     {
-        get => position;
+        get => stream.Position;
         set
         {
-            if (position == value)
-            {
-                return;
-            }
-
-            position = value;
             stream.Position = value;
         }
     }
@@ -457,6 +450,8 @@ public class Node
     public TwoBytes AddTwoBytes() => Add<TwoBytes>();
     public FourBytes AddFourBytes() => Add<FourBytes>();
     public EightBytes AddEightBytes() => Add<EightBytes>();
+
+    public byte[] ReadBytes(int offset, int length) => Buffer.ReadBytes(offset, length);
 
     public T Add<T>() where T : Node, new()
     {
@@ -552,6 +547,16 @@ public class EightBytes : BytesNode
     public ulong ReadUInt64() => Buffer.ReadUInt32(Start);
 }
 
+public class EightByteString : EightBytes
+{
+    public override void Parse()
+    {
+        Text = ReadBytes(Start, 8).ReadZeroTerminatedString();
+    }
+
+    public string Text { get; set; }
+}
+
 internal static class Extensions
 {
     public static string ToHexString(this byte[] bytes, char separator = ' ')
@@ -576,5 +581,24 @@ internal static class Extensions
         }
 
         return new string(c);
+    }
+
+    public static string ReadZeroTerminatedString(this byte[] bytes)
+    {
+        int read = 0;
+        int length = bytes.Length;
+        var buffer = new char[length];
+        while (read < length)
+        {
+            var current = bytes[read];
+            if (current == 0)
+            {
+                break;
+            }
+
+            buffer[read++] = (char)current;
+        }
+
+        return new string(buffer, 0, read);
     }
 }
