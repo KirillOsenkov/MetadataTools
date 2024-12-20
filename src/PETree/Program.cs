@@ -31,39 +31,40 @@ class Program
 
 public class PEFile : Node
 {
-    public PEFile(ByteBuffer buffer) : base(buffer, 0)
+    public PEFile(ByteBuffer buffer)
     {
+        Buffer = buffer;
     }
 
     public override void Parse()
     {
-        PEHeaderPointer = new FourBytes(Buffer, 0x3C);
+        PEHeaderPointer = new FourBytes { Start = 0x3C };
         Add(PEHeaderPointer);
 
-        int peHeaderPointer = PEHeaderPointer.ReadInt32();
+        int peHeaderPointer = PEHeaderPointer.Value;
         if (peHeaderPointer == 0)
         {
             peHeaderPointer = 0x80;
         }
 
-        PEHeader = new PEHeader(Buffer, peHeaderPointer);
+        PEHeader = new PEHeader { Start = peHeaderPointer };
         Add(PEHeader);
 
-        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80, PEHeader.SizeOfOptionalHeader.ReadInt16());
+        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80, PEHeader.SizeOfOptionalHeader.Value);
         Add(OptionalHeader);
+
+        SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
+        Add(SectionTable);
     }
 
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
+    public SectionTable SectionTable { get; set; }
 }
 
 public class PEHeader : Node
 {
-    public PEHeader(ByteBuffer buffer, int start) : base(buffer, start)
-    {
-    }
-
     public override void Parse()
     {
         PEHeaderSignature = AddFourBytes();
@@ -222,7 +223,7 @@ public class OptionalHeaderDataDirectories : Node
         ExceptionTable = AddEightBytes();
         CertificateTable = AddEightBytes();
         BaseRelocationTable = AddEightBytes();
-        Debug = AddEightBytes();
+        Debug = Add<DataDirectory>();
         Architecture = AddEightBytes();
         GlobalPtr = AddEightBytes();
         TLSTable = AddEightBytes();
@@ -230,7 +231,7 @@ public class OptionalHeaderDataDirectories : Node
         BoundImport = AddEightBytes();
         IAT = AddEightBytes();
         DelayImportDescriptor = AddEightBytes();
-        CLRRuntimeHeader = AddEightBytes();
+        CLRRuntimeHeader = Add<DataDirectory>();
         ReservedZero = AddEightBytes();
     }
 
@@ -240,7 +241,7 @@ public class OptionalHeaderDataDirectories : Node
     public EightBytes ExceptionTable { get; set; }
     public EightBytes CertificateTable { get; set; }
     public EightBytes BaseRelocationTable { get; set; }
-    public EightBytes Debug { get; set; }
+    public DataDirectory Debug { get; set; }
     public EightBytes Architecture { get; set; }
     public EightBytes GlobalPtr { get; set; }
     public EightBytes TLSTable { get; set; }
@@ -248,8 +249,75 @@ public class OptionalHeaderDataDirectories : Node
     public EightBytes BoundImport { get; set; }
     public EightBytes IAT { get; set; }
     public EightBytes DelayImportDescriptor { get; set; }
-    public EightBytes CLRRuntimeHeader { get; set; }
+    public DataDirectory CLRRuntimeHeader { get; set; }
     public EightBytes ReservedZero { get; set; }
+}
+
+public class SectionTable : Node
+{
+    public SectionTable(short count)
+    {
+        Count = count;
+    }
+
+    public short Count { get; }
+
+    public override void Parse()
+    {
+        var list = new List<SectionHeader>();
+        for (int i = 0; i < Count; i++)
+        {
+            list.Add(Add<SectionHeader>());
+        }
+
+        Sections = list;
+    }
+
+    public IReadOnlyList<SectionHeader> Sections { get; set; }
+}
+
+public class SectionHeader : Node
+{
+    public override void Parse()
+    {
+        Name = AddEightBytes();
+        VirtualSize = AddFourBytes();
+        VirtualAddress = AddFourBytes();
+        SizeOfRawData = AddFourBytes();
+        PointerToRawData = AddFourBytes();
+        PointerToRelocations = AddFourBytes();
+        PointerToLineNumbers = AddFourBytes();
+        NumberOfRelocations = AddTwoBytes();
+        NumberOfLineNumbers = AddTwoBytes();
+        Characteristics = AddFourBytes();
+    }
+
+    public EightBytes Name { get; set; }
+    public FourBytes VirtualSize { get; set; }
+    public FourBytes VirtualAddress { get; set; }
+    public FourBytes SizeOfRawData { get; set; }
+    public FourBytes PointerToRawData { get; set; }
+    public FourBytes PointerToRelocations { get; set; }
+    public FourBytes PointerToLineNumbers { get; set; }
+    public TwoBytes NumberOfRelocations { get; set; }
+    public TwoBytes NumberOfLineNumbers { get; set; }
+    public FourBytes Characteristics { get; set; }
+}
+
+public class DataDirectory : EightBytes
+{
+    public DataDirectory() : base()
+    {
+    }
+
+    public override void Parse()
+    {
+        RVA = AddFourBytes();
+        Size = AddFourBytes();
+    }
+
+    public FourBytes RVA { get; set; }
+    public FourBytes Size { get; set; }
 }
 
 public class ByteBuffer
@@ -328,6 +396,10 @@ public class StreamBuffer : ByteBuffer
 
 public class Node
 {
+    public Node()
+    {
+    }
+
     public Node(ByteBuffer buffer, int start)
     {
         Buffer = buffer;
@@ -365,39 +437,33 @@ public class Node
 
     public virtual void Add(Node node)
     {
+        // This needs to run before we add this node to Children,
+        // so we can access the previous child
+        int start = LastChildEnd;
+
         Children.Add(node);
+        node.Buffer = Buffer;
+
+        if (node.Start == 0)
+        {
+            node.Start = start;
+        }
+
         node.Parse();
         Length = LastChildEnd - Start;
     }
 
-    public OneByte AddOneByte()
-    {
-        int start = LastChildEnd;
-        var result = new OneByte(Buffer, start);
-        Add(result);
-        return result;
-    }
+    public OneByte AddOneByte() => Add<OneByte>();
+    public TwoBytes AddTwoBytes() => Add<TwoBytes>();
+    public FourBytes AddFourBytes() => Add<FourBytes>();
+    public EightBytes AddEightBytes() => Add<EightBytes>();
 
-    public TwoBytes AddTwoBytes()
+    public T Add<T>() where T : Node, new()
     {
         int start = LastChildEnd;
-        var result = new TwoBytes(Buffer, start);
-        Add(result);
-        return result;
-    }
-
-    public FourBytes AddFourBytes()
-    {
-        int start = LastChildEnd;
-        var result = new FourBytes(Buffer, start);
-        Add(result);
-        return result;
-    }
-
-    public EightBytes AddEightBytes()
-    {
-        int start = LastChildEnd;
-        var result = new EightBytes(Buffer, start);
+        var result = new T();
+        result.Buffer = Buffer;
+        result.Start = start;
         Add(result);
         return result;
     }
@@ -428,7 +494,7 @@ public class Node
 
 public class BytesNode : Node
 {
-    public BytesNode(ByteBuffer buffer, int start) : base(buffer, start)
+    public BytesNode()
     {
     }
 
@@ -441,7 +507,7 @@ public class BytesNode : Node
 
 public class OneByte : BytesNode
 {
-    public OneByte(ByteBuffer buffer, int offset) : base(buffer, offset)
+    public OneByte()
     {
         Length = 1;
     }
@@ -451,28 +517,32 @@ public class OneByte : BytesNode
 
 public class TwoBytes : BytesNode
 {
-    public TwoBytes(ByteBuffer buffer, int offset) : base(buffer, offset)
+    public TwoBytes()
     {
         Length = 2;
     }
 
     public short ReadInt16() => Buffer.ReadInt16(Start);
+
+    public short Value => ReadInt16();
 }
 
 public class FourBytes : BytesNode
 {
-    public FourBytes(ByteBuffer buffer, int start) : base(buffer, start)
+    public FourBytes()
     {
         Length = 4;
     }
 
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
     public int ReadInt32() => Buffer.ReadInt32(Start);
+
+    public int Value => ReadInt32();
 }
 
 public class EightBytes : BytesNode
 {
-    public EightBytes(ByteBuffer buffer, int start) : base(buffer, start)
+    public EightBytes()
     {
         Length = 8;
     }
