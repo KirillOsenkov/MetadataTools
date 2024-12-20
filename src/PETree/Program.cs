@@ -31,16 +31,47 @@ class Program
 
 public class ByteBuffer
 {
-
+    public virtual uint ReadUInt32(int offset) => 0;
+    public virtual int ReadInt32(int offset) => 0;
 }
 
 public class StreamBuffer : ByteBuffer
 {
     private FileStream stream;
+    private BinaryReader binaryReader;
 
     public StreamBuffer(FileStream stream)
     {
         this.stream = stream;
+        this.binaryReader = new BinaryReader(stream);
+    }
+
+    public override uint ReadUInt32(int offset)
+    {
+        Position = offset;
+        return binaryReader.ReadUInt32();
+    }
+
+    public override int ReadInt32(int offset)
+    {
+        Position = offset;
+        return binaryReader.ReadInt32();
+    }
+
+    private long position;
+    public long Position
+    {
+        get => position;
+        set
+        {
+            if (position == value)
+            {
+                return;
+            }
+
+            position = value;
+            stream.Position = value;
+        }
     }
 }
 
@@ -67,6 +98,7 @@ public class Node
     public virtual void Add(Node node)
     {
         Children.Add(node);
+        node.Parse();
     }
 }
 
@@ -80,22 +112,48 @@ public class FourBytes : Node
         this.buffer = buffer;
         this.offset = offset;
     }
-}
 
-public class PEFileNode : Node
-{
-    private ByteBuffer buffer;
-
-    public PEFileNode(ByteBuffer buffer)
+    public uint ReadUint32()
     {
-        this.buffer = buffer;
+        return buffer.ReadUInt32(offset);
     }
 
+    public int ReadInt32()
+    {
+        return buffer.ReadInt32(offset);
+    }
+}
+
+public class PEFileNode(ByteBuffer buffer) : Node
+{
     public override void Parse()
     {
         PEHeaderPointer = new FourBytes(buffer, 0x3C);
         Add(PEHeaderPointer);
+
+        int peHeaderPointer = PEHeaderPointer.ReadInt32();
+        if (peHeaderPointer == 0)
+        {
+            peHeaderPointer = 0x80;
+        }
+
+        PEHeader = new PEHeader(buffer, peHeaderPointer);
+        Add(PEHeader);
     }
 
     public FourBytes PEHeaderPointer { get; set; }
+    public PEHeader PEHeader { get; set; }
+}
+
+public class PEHeader(ByteBuffer buffer, int offset) : Node
+{
+    public override void Parse()
+    {
+        PEHeaderSignature = new FourBytes(buffer, offset);
+        Add(PEHeaderSignature);
+
+
+    }
+
+    public FourBytes PEHeaderSignature { get; set; }
 }
