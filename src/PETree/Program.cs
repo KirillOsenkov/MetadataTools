@@ -62,15 +62,25 @@ public class PEHeader : Node
 
     public override void Parse()
     {
-        PEHeaderSignature = new FourBytes(Buffer, Start);
-        Add(PEHeaderSignature);
+        PEHeaderSignature = AddFourBytes();
 
-        Platform = new TwoBytes(Buffer, Start + 4);
-        Add(Platform);
+        Platform = AddTwoBytes();
+        NumberOfSections = AddTwoBytes();
+        TimeDateStamp = AddFourBytes();
+        PointerToSymbolTable = AddFourBytes();
+        NumberOfSymbols = AddFourBytes();
+        SizeOfOptionalHeader = AddTwoBytes();
+        Characteristics = AddTwoBytes();
     }
 
     public FourBytes PEHeaderSignature { get; set; }
     public TwoBytes Platform { get; set; }
+    public TwoBytes NumberOfSections { get; set; }
+    public FourBytes TimeDateStamp { get; set; }
+    public FourBytes PointerToSymbolTable { get; set; }
+    public FourBytes NumberOfSymbols { get; set; }
+    public TwoBytes SizeOfOptionalHeader { get; set; }
+    public TwoBytes Characteristics { get; set; }
 }
 
 public class ByteBuffer
@@ -78,6 +88,7 @@ public class ByteBuffer
     public virtual short ReadInt16(int offset) => 0;
     public virtual uint ReadUInt32(int offset) => 0;
     public virtual int ReadInt32(int offset) => 0;
+    public virtual byte[] ReadBytes(int offset, int count) => null;
 }
 
 public class StreamBuffer : ByteBuffer
@@ -109,6 +120,12 @@ public class StreamBuffer : ByteBuffer
         return binaryReader.ReadInt16();
     }
 
+    public override byte[] ReadBytes(int offset, int count)
+    {
+        Position = offset;
+        return binaryReader.ReadBytes(count);
+    }
+
     private long position;
     public long Position
     {
@@ -137,9 +154,27 @@ public class Node
     public ByteBuffer Buffer { get; set; }
     public int Start { get; set; }
     public int Length { get; set; }
+    public int End => Start + Length;
+
+    public int LastChildEnd
+    {
+        get
+        {
+            int end = Start;
+
+            if (HasChildren)
+            {
+                end = Children[Children.Count - 1].End;
+            }
+
+            return end;
+        }
+    }
 
     protected List<Node> children;
     protected List<Node> Children => children ??= [];
+
+    public bool HasChildren => children != null && children.Count > 0;
 
     public virtual void Parse()
     {
@@ -149,6 +184,34 @@ public class Node
     {
         Children.Add(node);
         node.Parse();
+        Length = LastChildEnd - Start;
+    }
+
+    public TwoBytes AddTwoBytes()
+    {
+        int start = LastChildEnd;
+        var result = new TwoBytes(Buffer, start);
+        Add(result);
+        return result;
+    }
+
+    public FourBytes AddFourBytes()
+    {
+        int start = LastChildEnd;
+        var result = new FourBytes(Buffer, start);
+        Add(result);
+        return result;
+    }
+
+    public override string ToString()
+    {
+        if (Length <= 32)
+        {
+            var bytes = Buffer.ReadBytes(Start, Length);
+            return bytes.ToHexString();
+        }
+
+        return $"{Start:x0} ({Length} bytes)";
     }
 }
 
@@ -171,4 +234,31 @@ public class FourBytes : Node
 
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
     public int ReadInt32() => Buffer.ReadInt32(Start);
+}
+
+internal static class Extensions
+{
+    public static string ToHexString(this byte[] bytes, char separator = ' ')
+    {
+        if (bytes == null || bytes.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        const int multiplier = 3;
+        int digits = bytes.Length * multiplier;
+
+        char[] c = new char[digits];
+        byte b;
+        for (int i = 0; i < digits / multiplier; i++)
+        {
+            b = ((byte)(bytes[i] >> 4));
+            c[i * multiplier] = (char)(b > 9 ? b + 55 : b + 0x30);
+            b = ((byte)(bytes[i] & 0xF));
+            c[i * multiplier + 1] = (char)(b > 9 ? b + 55 : b + 0x30);
+            c[i * 3 + 2] = separator;
+        }
+
+        return new string(c);
+    }
 }
