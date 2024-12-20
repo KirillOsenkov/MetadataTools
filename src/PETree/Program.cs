@@ -48,10 +48,15 @@ public class PEFile : Node
 
         PEHeader = new PEHeader(Buffer, peHeaderPointer);
         Add(PEHeader);
+
+        OptionalHeader = new OptionalHeader(Buffer, peHeaderPointer + 80);
+        Add(OptionalHeader);
+        OptionalHeader.Length = PEHeader.SizeOfOptionalHeader.ReadInt16();
     }
 
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
+    public OptionalHeader OptionalHeader { get; set; }
 }
 
 public class PEHeader : Node
@@ -83,11 +88,88 @@ public class PEHeader : Node
     public TwoBytes Characteristics { get; set; }
 }
 
+public class OptionalHeader : Node
+{
+    public OptionalHeader(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+    }
+
+    public override void Parse()
+    {
+        StandardFields = new OptionalHeaderStandardFields(Buffer, Start);
+        Add(StandardFields);
+
+        var isPE32Plus = StandardFields.IsPE32Plus;
+
+        WindowsFields = new OptionalHeaderWindowsFields(Buffer, StandardFields.End, isPE32Plus);
+        Add(WindowsFields);
+
+        DataDirectories = new OptionalHeaderDataDirectories(Buffer, WindowsFields.End, isPE32Plus);
+        Add(DataDirectories);
+    }
+
+    public OptionalHeaderStandardFields StandardFields { get; set; }
+    public OptionalHeaderWindowsFields WindowsFields { get; set; }
+    public OptionalHeaderDataDirectories DataDirectories { get; set; }
+}
+
+public class OptionalHeaderStandardFields : Node
+{
+    public OptionalHeaderStandardFields(ByteBuffer buffer, int start) : base(buffer, start)
+    {
+    }
+
+    public override void Parse()
+    {
+        Magic = AddTwoBytes();
+        IsPE32Plus = Magic.ReadInt16() == 0x20B;
+
+        MajorLinkerVersion = AddOneByte();
+        MinorLinkerVersion = AddOneByte();
+        SizeOfCode = AddFourBytes();
+        SizeOfInitializedData = AddFourBytes();
+        SizeOfUninitializedData = AddFourBytes();
+        AddressOfEntryPoint = AddFourBytes();
+        BaseOfCode = AddFourBytes();
+
+        if (!IsPE32Plus)
+        {
+            BaseOfData = AddFourBytes();
+        }
+    }
+
+    public TwoBytes Magic { get; set; }
+    public bool IsPE32Plus { get; set; }
+    public OneByte MajorLinkerVersion { get; set; }
+    public OneByte MinorLinkerVersion { get; set; }
+    public FourBytes SizeOfCode { get; set; }
+    public FourBytes SizeOfInitializedData { get; set; }
+    public FourBytes SizeOfUninitializedData { get; set; }
+    public FourBytes AddressOfEntryPoint { get; set; }
+    public FourBytes BaseOfCode { get; set; }
+    public FourBytes BaseOfData { get; set; }
+}
+
+public class OptionalHeaderWindowsFields : Node
+{
+    public OptionalHeaderWindowsFields(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
+    {
+    }
+}
+
+public class OptionalHeaderDataDirectories : Node
+{
+    public OptionalHeaderDataDirectories(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
+    {
+    }
+}
+
 public class ByteBuffer
 {
     public virtual short ReadInt16(int offset) => 0;
     public virtual uint ReadUInt32(int offset) => 0;
     public virtual int ReadInt32(int offset) => 0;
+    public virtual byte ReadByte(int offset) => 0;
     public virtual byte[] ReadBytes(int offset, int count) => null;
 }
 
@@ -118,6 +200,12 @@ public class StreamBuffer : ByteBuffer
     {
         Position = offset;
         return binaryReader.ReadInt16();
+    }
+
+    public override byte ReadByte(int offset)
+    {
+        Position = offset;
+        return binaryReader.ReadByte();
     }
 
     public override byte[] ReadBytes(int offset, int count)
@@ -187,6 +275,14 @@ public class Node
         Length = LastChildEnd - Start;
     }
 
+    public OneByte AddOneByte()
+    {
+        int start = LastChildEnd;
+        var result = new OneByte(Buffer, start);
+        Add(result);
+        return result;
+    }
+
     public TwoBytes AddTwoBytes()
     {
         int start = LastChildEnd;
@@ -208,11 +304,21 @@ public class Node
         if (Length <= 32)
         {
             var bytes = Buffer.ReadBytes(Start, Length);
-            return bytes.ToHexString();
+            return $"{GetType().Name} {bytes.ToHexString()}";
         }
 
-        return $"{Start:x0} ({Length} bytes)";
+        return $"{GetType().Name} {Start:x0} ({Length} bytes)";
     }
+}
+
+public class OneByte : Node
+{
+    public OneByte(ByteBuffer buffer, int offset) : base(buffer, offset)
+    {
+        Length = 1;
+    }
+
+    public byte ReadByte() => Buffer.ReadByte(Start);
 }
 
 public class TwoBytes : Node
@@ -222,7 +328,7 @@ public class TwoBytes : Node
         Length = 2;
     }
 
-    public int ReadInt16() => Buffer.ReadInt16(Start);
+    public short ReadInt16() => Buffer.ReadInt16(Start);
 }
 
 public class FourBytes : Node
