@@ -24,9 +24,43 @@ class Program
         var length = stream.Length;
         var buffer = new StreamBuffer(stream);
 
-        var peFile = new PEFileNode(buffer);
+        var peFile = new PEFile(buffer);
         peFile.Parse();
     }
+}
+
+public class PEFile(ByteBuffer buffer) : Node
+{
+    public override void Parse()
+    {
+        PEHeaderPointer = new FourBytes(buffer, 0x3C);
+        Add(PEHeaderPointer);
+
+        int peHeaderPointer = PEHeaderPointer.ReadInt32();
+        if (peHeaderPointer == 0)
+        {
+            peHeaderPointer = 0x80;
+        }
+
+        PEHeader = new PEHeader(buffer, peHeaderPointer);
+        Add(PEHeader);
+    }
+
+    public FourBytes PEHeaderPointer { get; set; }
+    public PEHeader PEHeader { get; set; }
+}
+
+public class PEHeader(ByteBuffer buffer, int offset) : Node
+{
+    public override void Parse()
+    {
+        PEHeaderSignature = new FourBytes(buffer, offset);
+        Add(PEHeaderSignature);
+
+
+    }
+
+    public FourBytes PEHeaderSignature { get; set; }
 }
 
 public class ByteBuffer
@@ -124,36 +158,3 @@ public class FourBytes : Node
     }
 }
 
-public class PEFileNode(ByteBuffer buffer) : Node
-{
-    public override void Parse()
-    {
-        PEHeaderPointer = new FourBytes(buffer, 0x3C);
-        Add(PEHeaderPointer);
-
-        int peHeaderPointer = PEHeaderPointer.ReadInt32();
-        if (peHeaderPointer == 0)
-        {
-            peHeaderPointer = 0x80;
-        }
-
-        PEHeader = new PEHeader(buffer, peHeaderPointer);
-        Add(PEHeader);
-    }
-
-    public FourBytes PEHeaderPointer { get; set; }
-    public PEHeader PEHeader { get; set; }
-}
-
-public class PEHeader(ByteBuffer buffer, int offset) : Node
-{
-    public override void Parse()
-    {
-        PEHeaderSignature = new FourBytes(buffer, offset);
-        Add(PEHeaderSignature);
-
-
-    }
-
-    public FourBytes PEHeaderSignature { get; set; }
-}
