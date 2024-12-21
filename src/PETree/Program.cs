@@ -1,6 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 
 namespace GuiLabs.PEFile;
 
@@ -70,6 +71,17 @@ public class PEFile : Node
             int offset = ResolveDataDirectory(debugDirectoryAddress);
             DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
             Add(DebugDirectories);
+
+            if (DebugDirectories.Directories.FirstOrDefault(d => d.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb) is { } embeddedPdbDirectory)
+            {
+                var address = embeddedPdbDirectory.AddressOfRawData.Value;
+                var start = ResolveVirtualAddress(address);
+                if (start > 0)
+                {
+                    EmbeddedPdb = new EmbeddedPdb { Start = start, Length = embeddedPdbDirectory.SizeOfData.Value };
+                    Add(EmbeddedPdb);
+                }
+            }
         }
     }
 
@@ -80,6 +92,7 @@ public class PEFile : Node
     public CLIHeader CLIHeader { get; set; }
     public Metadata Metadata { get; set; }
     public DebugDirectories DebugDirectories { get; set; }
+    public EmbeddedPdb EmbeddedPdb { get; set; }
 
     public int ResolveDataDirectory(DataDirectory dataDirectory)
     {
@@ -426,6 +439,51 @@ public class Metadata : Node
     public IReadOnlyList<MetadataStream> Streams { get; set; }
 }
 
+public class EmbeddedPdb : Node
+{
+    public override void Parse()
+    {
+        var length = Length;
+
+        MPDB = AddFourBytes();
+        DecompressedSize = AddFourBytes();
+        CompressedStream = new CompressedDeflateStream
+        {
+            Length = length - 8,
+            DecompressedSize = DecompressedSize.Value
+        };
+        Add(CompressedStream);
+    }
+
+    public FourBytes MPDB { get; set; }
+    public FourBytes DecompressedSize { get; set; }
+    public CompressedDeflateStream CompressedStream { get; set; }
+}
+
+public class CompressedDeflateStream : Node
+{
+    public override void Parse()
+    {
+        var bytes = Buffer.ReadBytes(Start, Length);
+        var compressedMemoryStream = new MemoryStream(bytes);
+        var deflateStream = new DeflateStream(compressedMemoryStream, CompressionMode.Decompress, leaveOpen: true);
+        var decompressedStream = new MemoryStream(DecompressedSize);
+        deflateStream.CopyTo(decompressedStream);
+
+        var metadataBuffer = new StreamBuffer(decompressedStream);
+        PdbMetadata = new Metadata
+        {
+            Buffer = metadataBuffer,
+            Start = 0,
+            Length = (int)decompressedStream.Length,
+        };
+        PdbMetadata.Parse();
+    }
+
+    public int DecompressedSize { get; set; }
+    public Metadata PdbMetadata { get; set; }
+}
+
 public class MetadataStream : Node
 {
     public override void Parse()
@@ -529,10 +587,10 @@ public class ByteBuffer
 
 public class StreamBuffer : ByteBuffer
 {
-    private FileStream stream;
+    private Stream stream;
     private BinaryReader binaryReader;
 
-    public StreamBuffer(FileStream stream)
+    public StreamBuffer(Stream stream)
     {
         this.stream = stream;
         this.binaryReader = new BinaryReader(stream);
@@ -627,17 +685,34 @@ public class Node
 
     public virtual void Add(Node node)
     {
-        // This needs to run before we add this node to Children,
-        // so we can access the previous child
-        int start = LastChildEnd;
-
-        Children.Add(node);
-        node.Buffer = Buffer;
-
-        if (node.Start == 0)
+        bool inserted = false;
+        if (node.Start != 0)
         {
-            node.Start = start;
+            for (int i = 0; i < Children.Count; i++)
+            {
+                var child = Children[i];
+                if (child.Start > node.Start)
+                {
+                    Children.Insert(i, node);
+                    inserted = true;
+                    break;
+                }
+            }
         }
+
+        if (!inserted)
+        {
+            if (node.Start == 0)
+            {
+                // This needs to run before we add this node to Children,
+                // so we can access the previous child
+                node.Start = LastChildEnd;
+            }
+
+            Children.Add(node);
+        }
+
+        node.Buffer = Buffer;
 
         node.Parse();
         Length = LastChildEnd - Start;
