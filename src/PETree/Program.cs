@@ -956,9 +956,15 @@ public class ZeroTerminatedString : Node
                 Zero = new OneByte() { Start = offset - 1 };
                 Add(Zero);
                 int aligned = Align(chars.Count, offset);
+                if (aligned > offset)
+                {
+                    PaddingZeroes = new Node { Start = offset, Length = aligned - offset };
+                    Add(PaddingZeroes);
+                }
+
                 offset = aligned;
                 Length = offset - Start;
-                if (requiredLength > Length)
+                if (requiredLength > Length && PaddingZeroes == null)
                 {
                     PaddingZeroes = new Node { Start = offset, Length = requiredLength - Length };
                     Add(PaddingZeroes);
