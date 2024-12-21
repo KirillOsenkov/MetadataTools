@@ -44,8 +44,13 @@ public class PEFile : Node
 
     public override void Parse()
     {
-        PEHeaderPointer = new FourBytes { Start = 0x3C };
-        Add(PEHeaderPointer);
+        DOSHeader = new Node { Length = 0x3C };
+        Add(DOSHeader);
+
+        PEHeaderPointer = AddFourBytes();
+
+        DOSStub = new Node { Length = 0x40 };
+        Add(DOSStub);
 
         int peHeaderPointer = PEHeaderPointer.Value;
         if (peHeaderPointer == 0)
@@ -91,6 +96,8 @@ public class PEFile : Node
         }
     }
 
+    public Node DOSHeader { get; set; }
+    public Node DOSStub { get; set; }
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
