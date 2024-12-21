@@ -28,6 +28,7 @@ class Program
 
         var peFile = new PEFile(buffer);
         peFile.Parse();
+        peFile.Length = (int)length;
 
         var uncovered = new List<Span>();
         peFile.ComputeUncoveredSpans(s => uncovered.Add(s));
@@ -444,17 +445,50 @@ public class Metadata : Node
             int offset = stream.Offset.Value;
             int start = peFile != null ? peFile.ResolveMetadataOffset(offset) : offset;
             int length = stream.Size.Value;
+            string streamName = stream.Name.Text;
 
-            if (stream.Name.Text == "#~")
+            MetadataStream metadataStream = null;
+
+            if (streamName == "#~")
             {
-                CompressedMetadataStream = new CompressedMetadataTableStream { Start = start, Length = length };
+                metadataStream = CompressedMetadataTableStream = new CompressedMetadataTableStream();
+            }
+            else if (streamName == "#-")
+            {
+                metadataStream = UncompressedMetadataTableStream = new UncompressedMetadataTableStream();
+            }
+            else if (streamName == "#Strings")
+            {
+                metadataStream = StringsTableStream = new MetadataStream();
+            }
+            else if (streamName == "#Blob")
+            {
+                metadataStream = BlobTableStream = new MetadataStream();
+            }
+            else if (streamName == "#GUID")
+            {
+                metadataStream = GuidTableStream = new MetadataStream();
+            }
+            else if (streamName == "#US")
+            {
+                metadataStream = UserStringsTableStream = new MetadataStream();
+            }
+            else if (streamName == "#JTD" || streamName == "#Pdb")
+            {
+                metadataStream = new MetadataStream();
+            }
+
+            if (metadataStream != null)
+            {
+                metadataStream.Start = start;
+                metadataStream.Length = length;
                 if (peFile != null)
                 {
-                    peFile.Add(CompressedMetadataStream);
+                    peFile.Add(metadataStream);
                 }
                 else
                 {
-                    Add(CompressedMetadataStream);
+                    Add(metadataStream);
                 }
             }
         }
@@ -473,7 +507,12 @@ public class Metadata : Node
     public ZeroTerminatedStringLengthPrefix32 RuntimeVersion { get; set; }
     public IReadOnlyList<MetadataStreamHeader> Streams { get; set; }
 
-    public CompressedMetadataTableStream CompressedMetadataStream { get; set; }
+    public CompressedMetadataTableStream CompressedMetadataTableStream { get; set; }
+    public UncompressedMetadataTableStream UncompressedMetadataTableStream { get; set; }
+    public MetadataStream StringsTableStream { get; set; }
+    public MetadataStream GuidTableStream { get; set; }
+    public MetadataStream BlobTableStream { get; set; }
+    public MetadataStream UserStringsTableStream { get; set; }
 }
 
 public class MetadataStream : Node
@@ -482,10 +521,10 @@ public class MetadataStream : Node
 
 public class CompressedMetadataTableStream : MetadataStream
 {
-    public override void Parse()
-    {
-        base.Parse();
-    }
+}
+
+public class UncompressedMetadataTableStream : MetadataStream
+{
 }
 
 public class EmbeddedPdb : Node
@@ -911,12 +950,18 @@ public class ZeroTerminatedString : Node
             offset++;
             if (b == 0)
             {
+                String = new Utf8String { Start = Start, Length = chars.Count };
+                Add(String);
+
                 Zero = new OneByte() { Start = offset - 1 };
                 Add(Zero);
-                offset = Align(chars.Count, offset);
+                int aligned = Align(chars.Count, offset);
+                offset = aligned;
                 Length = offset - Start;
                 if (requiredLength > Length)
                 {
+                    PaddingZeroes = new Node { Start = offset, Length = requiredLength - Length };
+                    Add(PaddingZeroes);
                     Length = requiredLength;
                 }
 
@@ -935,7 +980,13 @@ public class ZeroTerminatedString : Node
     }
 
     public string Text { get; set; }
+    public Utf8String String { get; set; }
     public OneByte Zero { get; set; }
+    public Node PaddingZeroes { get; set; }
+}
+
+public class Utf8String : Node
+{
 }
 
 public class ZeroTerminatedAlignedString : ZeroTerminatedString
