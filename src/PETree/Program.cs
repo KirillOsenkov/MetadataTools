@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -27,6 +28,9 @@ class Program
 
         var peFile = new PEFile(buffer);
         peFile.Parse();
+
+        var uncovered = new List<Span>();
+        peFile.ComputeUncoveredSpans(s => uncovered.Add(s));
     }
 }
 
@@ -61,6 +65,7 @@ public class PEFile : Node
         CLIHeader = new CLIHeader { Start = cliHeader };
         Add(CLIHeader);
 
+        MetadataSection = GetSectionAtVirtualAddress(CLIHeader.Metadata.RVA.Value);
         int metadata = ResolveDataDirectory(CLIHeader.Metadata);
         Metadata = new Metadata { Start = metadata };
         Add(Metadata);
@@ -91,6 +96,7 @@ public class PEFile : Node
     public SectionTable SectionTable { get; set; }
     public CLIHeader CLIHeader { get; set; }
     public Metadata Metadata { get; set; }
+    public SectionHeader MetadataSection { get; set; }
     public DebugDirectories DebugDirectories { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
 
@@ -108,6 +114,12 @@ public class PEFile : Node
         }
 
         return ResolveVirtualAddressInSection(rva, section);
+    }
+
+    public int ResolveMetadataOffset(int offset)
+    {
+        var result = MetadataSection.PointerToRawData.Value + offset;
+        return result;
     }
 
     public int ResolveVirtualAddressInSection(int rva, SectionHeader section)
@@ -419,15 +431,38 @@ public class Metadata : Node
         Flags = AddTwoBytes();
         StreamCount = AddTwoBytes();
 
+        var peFile = PEFile;
+
         int count = StreamCount.Value;
-        var list = new MetadataStream[count];
+        var list = new MetadataStreamHeader[count];
+
         for (int i = 0; i < count; i++)
         {
-            list[i] = Add<MetadataStream>();
+            var stream = Add<MetadataStreamHeader>();
+            list[i] = stream;
+
+            int offset = stream.Offset.Value;
+            int start = peFile != null ? peFile.ResolveMetadataOffset(offset) : offset;
+            int length = stream.Size.Value;
+
+            if (stream.Name.Text == "#~")
+            {
+                CompressedMetadataStream = new CompressedMetadataTableStream { Start = start, Length = length };
+                if (peFile != null)
+                {
+                    peFile.Add(CompressedMetadataStream);
+                }
+                else
+                {
+                    Add(CompressedMetadataStream);
+                }
+            }
         }
 
         Streams = list;
     }
+
+    public PEFile PEFile => FindAncestor<PEFile>();
 
     public FourBytes BSJB { get; set; }
     public TwoBytes MajorVersion { get; set; }
@@ -436,7 +471,21 @@ public class Metadata : Node
     public TwoBytes Flags { get; set; }
     public TwoBytes StreamCount { get; set; }
     public ZeroTerminatedStringLengthPrefix32 RuntimeVersion { get; set; }
-    public IReadOnlyList<MetadataStream> Streams { get; set; }
+    public IReadOnlyList<MetadataStreamHeader> Streams { get; set; }
+
+    public CompressedMetadataTableStream CompressedMetadataStream { get; set; }
+}
+
+public class MetadataStream : Node
+{
+}
+
+public class CompressedMetadataTableStream : MetadataStream
+{
+    public override void Parse()
+    {
+        base.Parse();
+    }
 }
 
 public class EmbeddedPdb : Node
@@ -484,7 +533,7 @@ public class CompressedDeflateStream : Node
     public Metadata PdbMetadata { get; set; }
 }
 
-public class MetadataStream : Node
+public class MetadataStreamHeader : Node
 {
     public override void Parse()
     {
@@ -659,6 +708,8 @@ public class Node
     public int Length { get; set; }
     public int End => Start + Length;
 
+    public Node Parent { get; set; }
+
     public int LastChildEnd
     {
         get
@@ -675,7 +726,7 @@ public class Node
     }
 
     protected List<Node> children;
-    protected List<Node> Children => children ??= [];
+    public List<Node> Children => children ??= [];
 
     public bool HasChildren => children != null && children.Count > 0;
 
@@ -713,10 +764,13 @@ public class Node
         }
 
         node.Buffer = Buffer;
+        node.Parent = this;
 
         node.Parse();
         Length = LastChildEnd - Start;
     }
+
+    public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
 
     public OneByte AddOneByte() => Add<OneByte>();
     public TwoBytes AddTwoBytes() => Add<TwoBytes>();
@@ -937,4 +991,33 @@ internal static class Extensions
 
         return new string(buffer, 0, read);
     }
+
+    public static void ComputeUncoveredSpans(this Node node, Action<Span> collector)
+    {
+        if (!node.HasChildren)
+        {
+            return;
+        }
+
+        int index = node.Start;
+        for (int i = 0; i < node.Children.Count; i++)
+        {
+            var child = node.Children[i];
+            if (child.Start > index)
+            {
+                collector(new Span(index, child.Start - index));
+            }
+
+            ComputeUncoveredSpans(child, collector);
+
+            index = child.End;
+        }
+
+        if (index < node.End)
+        {
+            collector(new Span(index, node.End - index));
+        }
+    }
 }
+
+public record struct Span(int Start, int Length);
