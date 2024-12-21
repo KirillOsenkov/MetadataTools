@@ -528,6 +528,45 @@ public class MetadataStream : Node
 
 public class CompressedMetadataTableStream : MetadataStream
 {
+    public override void Parse()
+    {
+        ReservedZero = AddFourBytes();
+        MajorVersion = AddOneByte();
+        MinorVersion = AddOneByte();
+        HeapSizes = AddOneByte();
+        ReservedByte = AddOneByte();
+        Valid = AddEightBytes();
+        Sorted = AddEightBytes();
+
+        TableLengths = Add<Sequence>();
+
+        ulong valid = Valid.ReadUInt64();
+
+        for (int i = 0; i < 58; i++)
+        {
+            if ((valid & (1UL << i)) == 0)
+            {
+                continue;
+            }
+
+            var tableLength = AddFourBytes();
+            TableLengths.Add(tableLength);
+        }
+    }
+
+    public FourBytes ReservedZero { get; set; }
+    public OneByte MajorVersion { get; set; }
+    public OneByte MinorVersion { get; set; }
+    public OneByte HeapSizes { get; set; }
+    public OneByte ReservedByte { get; set; }
+    public EightBytes Valid { get; set; }
+    public EightBytes Sorted { get; set; }
+    public Sequence TableLengths { get; set; }
+}
+
+public class Sequence : Node
+{
+
 }
 
 public class UncompressedMetadataTableStream : MetadataStream
