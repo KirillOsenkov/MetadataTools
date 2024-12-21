@@ -56,12 +56,13 @@ public class PEFile : Node
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
         Add(SectionTable);
 
-        var cliRVA = OptionalHeader.DataDirectories.CLRRuntimeHeader.RVA.Value;
-        var textSection = GetSectionAtVirtualAddress(cliRVA);
-        int cliHeader = ResolveVirtualAddress(cliRVA);
-
+        int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
         CLIHeader = new CLIHeader { Start = cliHeader };
         Add(CLIHeader);
+
+        int metadata = ResolveDataDirectory(CLIHeader.Metadata);
+        Metadata = new Metadata { Start = metadata };
+        Add(Metadata);
     }
 
     public FourBytes PEHeaderPointer { get; set; }
@@ -69,6 +70,12 @@ public class PEFile : Node
     public OptionalHeader OptionalHeader { get; set; }
     public SectionTable SectionTable { get; set; }
     public CLIHeader CLIHeader { get; set; }
+    public Metadata Metadata { get; set; }
+
+    public int ResolveDataDirectory(DataDirectory dataDirectory)
+    {
+        return ResolveVirtualAddress(dataDirectory.RVA.Value);
+    }
 
     public int ResolveVirtualAddress(int rva)
     {
@@ -373,6 +380,52 @@ public class CLIHeader : Node
     public EightBytes ManagedNativeHeader { get; set; }
 }
 
+public class Metadata : Node
+{
+    public override void Parse()
+    {
+        BSJB = AddFourBytes();
+        MajorVersion = AddTwoBytes();
+        MinorVersion = AddTwoBytes();
+        Reserved = AddFourBytes();
+        RuntimeVersion = Add<ZeroTerminatedStringLengthPrefix32>();
+        Flags = AddTwoBytes();
+        StreamCount = AddTwoBytes();
+
+        int count = StreamCount.Value;
+        var list = new MetadataStream[count];
+        for (int i = 0; i < count; i++)
+        {
+            list[i] = Add<MetadataStream>();
+        }
+
+        Streams = list;
+    }
+
+    public FourBytes BSJB { get; set; }
+    public TwoBytes MajorVersion { get; set; }
+    public TwoBytes MinorVersion { get; set; }
+    public FourBytes Reserved { get; set; }
+    public TwoBytes Flags { get; set; }
+    public TwoBytes StreamCount { get; set; }
+    public ZeroTerminatedStringLengthPrefix32 RuntimeVersion { get; set; }
+    public IReadOnlyList<MetadataStream> Streams { get; set; }
+}
+
+public class MetadataStream : Node
+{
+    public override void Parse()
+    {
+        Offset = AddFourBytes();
+        Size = AddFourBytes();
+        Name = Add<ZeroTerminatedAlignedString>();
+    }
+
+    public FourBytes Offset { get; set; }
+    public FourBytes Size { get; set; }
+    public ZeroTerminatedString Name { get; set; }
+}
+
 public class DataDirectory : EightBytes
 {
     public DataDirectory() : base()
@@ -624,6 +677,70 @@ public class EightByteString : EightBytes
     }
 
     public string Text { get; set; }
+}
+
+public class ZeroTerminatedStringLengthPrefix32 : Node
+{
+    public override void Parse()
+    {
+        Length32 = AddFourBytes();
+        ZeroTerminatedString = new ZeroTerminatedString { Length = Length32.Value };
+        Add(ZeroTerminatedString);
+    }
+
+    public FourBytes Length32 { get; set; }
+    public ZeroTerminatedString ZeroTerminatedString { get; set; }
+}
+
+public class ZeroTerminatedString : Node
+{
+    public override void Parse()
+    {
+        List<char> chars = new();
+
+        int requiredLength = Length;
+
+        int offset = Start;
+        while (true)
+        {
+            byte b = Buffer.ReadByte(offset);
+            offset++;
+            if (b == 0)
+            {
+                Zero = new OneByte() { Start = offset - 1 };
+                Add(Zero);
+                offset = Align(chars.Count, offset);
+                Length = offset - Start;
+                if (requiredLength > Length)
+                {
+                    Length = requiredLength;
+                }
+
+                break;
+            }
+
+            chars.Add((char)b);
+        }
+
+        Text = new string(chars.ToArray());
+    }
+
+    protected virtual int Align(int length, int position)
+    {
+        return position;
+    }
+
+    public string Text { get; set; }
+    public OneByte Zero { get; set; }
+}
+
+public class ZeroTerminatedAlignedString : ZeroTerminatedString
+{
+    protected override int Align(int read, int position)
+    {
+        position += -1 + ((read + 4) & ~3) - read;
+        return position;
+    }
 }
 
 internal static class Extensions
