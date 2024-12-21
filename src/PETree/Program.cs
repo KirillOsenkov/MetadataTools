@@ -55,12 +55,47 @@ public class PEFile : Node
 
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
         Add(SectionTable);
+
+        var cliRVA = OptionalHeader.DataDirectories.CLRRuntimeHeader.RVA.Value;
+        var textSection = GetSectionAtVirtualAddress(cliRVA);
+        int cliHeader = ResolveVirtualAddress(cliRVA);
+
+        CLIHeader = new CLIHeader { Start = cliHeader };
+        Add(CLIHeader);
     }
 
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
     public SectionTable SectionTable { get; set; }
+    public CLIHeader CLIHeader { get; set; }
+
+    public int ResolveVirtualAddress(int rva)
+    {
+        var section = GetSectionAtVirtualAddress(rva);
+        return ResolveVirtualAddressInSection(rva, section);
+    }
+
+    public int ResolveVirtualAddressInSection(int rva, SectionHeader section)
+    {
+        return (int)(rva + section.PointerToRawData.Value - section.VirtualAddress.Value);
+    }
+
+    public SectionHeader GetSectionAtVirtualAddress(int rva)
+    {
+        var sections = SectionTable.Sections;
+        for (int i = 0; i < sections.Count; i++)
+        {
+            var section = sections[i];
+            var virtualAddress = section.VirtualAddress.Value;
+            if (rva >= virtualAddress && rva < virtualAddress + section.SizeOfRawData.Value)
+            {
+                return section;
+            }
+        }
+
+        return null;
+    }
 }
 
 public class PEHeader : Node
@@ -302,6 +337,40 @@ public class SectionHeader : Node
     public TwoBytes NumberOfRelocations { get; set; }
     public TwoBytes NumberOfLineNumbers { get; set; }
     public FourBytes Characteristics { get; set; }
+}
+
+public class CLIHeader : Node
+{
+    public override void Parse()
+    {
+        Cb = AddFourBytes();
+        MajorRuntimeVersion = AddTwoBytes();
+        MinorRuntimeVersion = AddTwoBytes();
+        Metadata = Add<DataDirectory>();
+        Flags = AddFourBytes();
+        ImageAttributes = AddFourBytes();
+        EntryPointToken = AddFourBytes();
+        Resources = Add<DataDirectory>();
+        StrongNameSignature = Add<DataDirectory>();
+        CodeManagerTable = AddEightBytes();
+        VTableFixups = AddEightBytes();
+        ExportAddressTableJumps = AddEightBytes();
+        ManagedNativeHeader = AddEightBytes();
+    }
+
+    public FourBytes Cb { get; set; }
+    public TwoBytes MajorRuntimeVersion { get; set; }
+    public TwoBytes MinorRuntimeVersion { get; set; }
+    public DataDirectory Metadata { get; set; }
+    public FourBytes Flags { get; set; }
+    public FourBytes ImageAttributes { get; set; }
+    public FourBytes EntryPointToken { get; set; }
+    public DataDirectory Resources { get; set; }
+    public DataDirectory StrongNameSignature { get; set; }
+    public EightBytes CodeManagerTable { get; set; }
+    public EightBytes VTableFixups { get; set; }
+    public EightBytes ExportAddressTableJumps { get; set; }
+    public EightBytes ManagedNativeHeader { get; set; }
 }
 
 public class DataDirectory : EightBytes
