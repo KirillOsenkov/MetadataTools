@@ -44,13 +44,16 @@ public class PEFile : Node
 
     public override void Parse()
     {
-        DOSHeader = new Node { Length = 0x3C };
-        Add(DOSHeader);
+        DOSExeHeader = new Node();
+        Add(DOSExeHeader);
 
-        PEHeaderPointer = AddFourBytes();
+        var DOSHeader = new Node { Length = 0x3C };
+        DOSExeHeader.Add(DOSHeader);
 
-        DOSStub = new Node { Length = 0x40 };
-        Add(DOSStub);
+        PEHeaderPointer = DOSExeHeader.AddFourBytes();
+
+        var DOSStub = new Node { Length = 0x40 };
+        DOSExeHeader.Add(DOSStub);
 
         int peHeaderPointer = PEHeaderPointer.Value;
         if (peHeaderPointer == 0)
@@ -73,7 +76,7 @@ public class PEFile : Node
 
         var metadataDirectory = CLIHeader.Metadata;
         MetadataRVA = metadataDirectory.RVA.Value;
-        MetadataSection = GetSectionAtVirtualAddress(MetadataRVA);
+        MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
         int metadata = ResolveDataDirectory(metadataDirectory);
         Metadata = new Metadata { Start = metadata };
         Add(Metadata);
@@ -96,20 +99,50 @@ public class PEFile : Node
                 }
             }
         }
+
+        var resourceSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".rsrc");
+        if (resourceSectionHeader != null)
+        {
+            RsrcSection = new Node { Start = resourceSectionHeader.PointerToRawData.Value, Length = resourceSectionHeader.SizeOfRawData.Value };
+            Add(RsrcSection);
+        }
+
+        var relocSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".reloc");
+        if (relocSectionHeader != null)
+        {
+            RelocSection = new Node { Start = relocSectionHeader.PointerToRawData.Value, Length = relocSectionHeader.SizeOfRawData.Value };
+            Add(RelocSection);
+        }
+
+        var resourceTableDirectory = OptionalHeader.DataDirectories.ResourceTable;
+        if (resourceTableDirectory.Length > 0)
+        {
+            ResourceTable = new Node { Start = ResolveVirtualAddress(resourceTableDirectory.RVA.Value), Length = resourceTableDirectory.Size.Value };
+            if (RsrcSection != null)
+            {
+                RsrcSection.Add(ResourceTable);
+            }
+            else
+            {
+                Add(ResourceTable);
+            }
+        }
     }
 
-    public Node DOSHeader { get; set; }
-    public Node DOSStub { get; set; }
+    public Node DOSExeHeader { get; set; }
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
     public SectionTable SectionTable { get; set; }
     public CLIHeader CLIHeader { get; set; }
     public Metadata Metadata { get; set; }
-    public SectionHeader MetadataSection { get; set; }
+    public SectionHeader MetadataSectionHeader { get; set; }
     public int MetadataRVA { get; set; }
     public DebugDirectories DebugDirectories { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
+    public Node ResourceTable { get; set; }
+    public Node RsrcSection { get; set; }
+    public Node RelocSection { get; set; }
 
     public int ResolveDataDirectory(DataDirectory dataDirectory)
     {
@@ -129,8 +162,8 @@ public class PEFile : Node
 
     public int ResolveMetadataOffset(int offset)
     {
-        var result = MetadataRVA - MetadataSection.VirtualAddress.Value + offset;
-        result = result + MetadataSection.PointerToRawData.Value;
+        var result = MetadataRVA - MetadataSectionHeader.VirtualAddress.Value + offset;
+        result = result + MetadataSectionHeader.PointerToRawData.Value;
         return result;
     }
 
@@ -141,7 +174,7 @@ public class PEFile : Node
 
     public SectionHeader GetSectionAtVirtualAddress(int rva)
     {
-        var sections = SectionTable.Sections;
+        var sections = SectionTable.SectionHeaders;
         for (int i = 0; i < sections.Count; i++)
         {
             var section = sections[i];
@@ -310,40 +343,40 @@ public class OptionalHeaderDataDirectories : Node
 
     public override void Parse()
     {
-        ExportTable = AddEightBytes();
-        ImportTable = AddEightBytes();
-        ResourceTable = AddEightBytes();
-        ExceptionTable = AddEightBytes();
-        CertificateTable = AddEightBytes();
-        BaseRelocationTable = AddEightBytes();
+        ExportTable = Add<DataDirectory>();
+        ImportTable = Add<DataDirectory>();
+        ResourceTable = Add<DataDirectory>();
+        ExceptionTable = Add<DataDirectory>();
+        CertificateTable = Add<DataDirectory>();
+        BaseRelocationTable = Add<DataDirectory>();
         Debug = Add<DataDirectory>();
-        Architecture = AddEightBytes();
-        GlobalPtr = AddEightBytes();
-        TLSTable = AddEightBytes();
-        LoadConfigTable = AddEightBytes();
-        BoundImport = AddEightBytes();
-        IAT = AddEightBytes();
-        DelayImportDescriptor = AddEightBytes();
+        Architecture = Add<DataDirectory>();
+        GlobalPtr = Add<DataDirectory>();
+        TLSTable = Add<DataDirectory>();
+        LoadConfigTable = Add<DataDirectory>();
+        BoundImport = Add<DataDirectory>();
+        IAT = Add<DataDirectory>();
+        DelayImportDescriptor = Add<DataDirectory>();
         CLRRuntimeHeader = Add<DataDirectory>();
-        ReservedZero = AddEightBytes();
+        ReservedZero = Add<DataDirectory>();
     }
 
-    public EightBytes ExportTable { get; set; }
-    public EightBytes ImportTable { get; set; }
-    public EightBytes ResourceTable { get; set; }
-    public EightBytes ExceptionTable { get; set; }
-    public EightBytes CertificateTable { get; set; }
-    public EightBytes BaseRelocationTable { get; set; }
+    public DataDirectory ExportTable { get; set; }
+    public DataDirectory ImportTable { get; set; }
+    public DataDirectory ResourceTable { get; set; }
+    public DataDirectory ExceptionTable { get; set; }
+    public DataDirectory CertificateTable { get; set; }
+    public DataDirectory BaseRelocationTable { get; set; }
     public DataDirectory Debug { get; set; }
-    public EightBytes Architecture { get; set; }
-    public EightBytes GlobalPtr { get; set; }
-    public EightBytes TLSTable { get; set; }
-    public EightBytes LoadConfigTable { get; set; }
-    public EightBytes BoundImport { get; set; }
-    public EightBytes IAT { get; set; }
-    public EightBytes DelayImportDescriptor { get; set; }
+    public DataDirectory Architecture { get; set; }
+    public DataDirectory GlobalPtr { get; set; }
+    public DataDirectory TLSTable { get; set; }
+    public DataDirectory LoadConfigTable { get; set; }
+    public DataDirectory BoundImport { get; set; }
+    public DataDirectory IAT { get; set; }
+    public DataDirectory DelayImportDescriptor { get; set; }
     public DataDirectory CLRRuntimeHeader { get; set; }
-    public EightBytes ReservedZero { get; set; }
+    public DataDirectory ReservedZero { get; set; }
 }
 
 public class SectionTable : Node
@@ -363,10 +396,10 @@ public class SectionTable : Node
             list.Add(Add<SectionHeader>());
         }
 
-        Sections = list;
+        SectionHeaders = list;
     }
 
-    public IReadOnlyList<SectionHeader> Sections { get; set; }
+    public IReadOnlyList<SectionHeader> SectionHeaders { get; set; }
 }
 
 public class SectionHeader : Node
