@@ -493,6 +493,7 @@ public class Metadata : Node
 
             if (metadataStream != null)
             {
+                metadataStream.Name = streamName;
                 metadataStream.Start = start;
                 metadataStream.Length = length;
                 if (peFile != null)
@@ -552,7 +553,8 @@ public class Metadata : Node
 
 public class MetadataStream : Node
 {
-    public int IndexSize { get; internal set; }
+    public int IndexSize { get; set; }
+    public string Name { get; set; }
 }
 
 public struct TableInfo
@@ -588,8 +590,7 @@ public class CompressedMetadataTableStream : MetadataStream
                 continue;
             }
 
-            var tableLength = AddFourBytes();
-            TableLengths.Add(tableLength);
+            var tableLength = TableLengths.AddFourBytes();
 
             TableInfos[i].RowCount = tableLength.Value;
         }
@@ -899,6 +900,7 @@ public class CompressedMetadataTableStream : MetadataStream
             TableInfos[i].RowSize = size;
 
             var table = Add<MetadataTable>();
+            table.Name = (Table)i;
             for (int row = 0; row < TableInfos[i].RowCount; row++)
             {
                 var tableRow = new TableRow { Length = size };
@@ -922,6 +924,7 @@ public class TableRow : Node
 
 public class MetadataTable : Sequence
 {
+    public Table Name { get; set; }
 }
 
 public enum Table : byte
