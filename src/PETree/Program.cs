@@ -448,6 +448,8 @@ public class Metadata : Node
         int count = StreamCount.Value;
         var list = new MetadataStreamHeader[count];
 
+        var embeddedPdbStreams = new List<MetadataStream>();
+
         for (int i = 0; i < count; i++)
         {
             var stream = Add<MetadataStreamHeader>();
@@ -499,12 +501,17 @@ public class Metadata : Node
                 }
                 else
                 {
-                    Add(metadataStream);
+                    embeddedPdbStreams.Add(metadataStream);
                 }
             }
         }
 
-        Streams = list;
+        for (int i = 0; i < embeddedPdbStreams.Count; i++)
+        {
+            Add(embeddedPdbStreams[i]);
+        }
+
+        StreamHeaders = list;
 
         int heapsizes = CompressedMetadataTableStream.HeapSizes.Value;
         if (StringsTableStream != null)
@@ -532,7 +539,7 @@ public class Metadata : Node
     public TwoBytes Flags { get; set; }
     public TwoBytes StreamCount { get; set; }
     public ZeroTerminatedStringLengthPrefix32 RuntimeVersion { get; set; }
-    public IReadOnlyList<MetadataStreamHeader> Streams { get; set; }
+    public IReadOnlyList<MetadataStreamHeader> StreamHeaders { get; set; }
 
     public CompressedMetadataTableStream CompressedMetadataTableStream { get; set; }
     public UncompressedMetadataTableStream UncompressedMetadataTableStream { get; set; }
@@ -540,6 +547,7 @@ public class Metadata : Node
     public MetadataStream GuidTableStream { get; set; }
     public MetadataStream BlobTableStream { get; set; }
     public MetadataStream UserStringsTableStream { get; set; }
+    public EmbeddedPdb EmbeddedPdb { get; set; }
 }
 
 public class MetadataStream : Node
@@ -600,7 +608,7 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public IReadOnlyList<MetadataTable> Tables { get; set; }
 
-    public Metadata Metadata => ((PEFile)Parent).Metadata;
+    public Metadata Metadata => Parent switch { Metadata m => m, PEFile peFile => peFile.Metadata, _ => null };
 
     int GetTableIndexSize(Table table) => TableInfos[(int)table].RowCount < 65536 ? 2 : 4;
 
@@ -1033,6 +1041,7 @@ public class CompressedDeflateStream : Node
             Buffer = metadataBuffer,
             Start = 0,
             Length = (int)decompressedStream.Length,
+            EmbeddedPdb = (EmbeddedPdb)Parent
         };
         PdbMetadata.Parse();
     }
