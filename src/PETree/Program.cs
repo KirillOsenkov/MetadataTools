@@ -70,34 +70,11 @@ public class PEFile : Node
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
         Add(SectionTable);
 
-        int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
-        CLIHeader = new CLIHeader { Start = cliHeader };
-        Add(CLIHeader);
-
-        var metadataDirectory = CLIHeader.Metadata;
-        MetadataRVA = metadataDirectory.RVA.Value;
-        MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
-        int metadata = ResolveDataDirectory(metadataDirectory);
-        Metadata = new Metadata { Start = metadata };
-        Add(Metadata);
-
-        var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
-        if (debugDirectoryAddress.RVA.Value != 0)
+        var textSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".text");
+        if (textSectionHeader != null)
         {
-            int offset = ResolveDataDirectory(debugDirectoryAddress);
-            DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
-            Add(DebugDirectories);
-
-            if (DebugDirectories.Directories.FirstOrDefault(d => d.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb) is { } embeddedPdbDirectory)
-            {
-                var address = embeddedPdbDirectory.AddressOfRawData.Value;
-                var start = ResolveVirtualAddress(address);
-                if (start > 0)
-                {
-                    EmbeddedPdb = new EmbeddedPdb { Start = start, Length = embeddedPdbDirectory.SizeOfData.Value };
-                    Add(EmbeddedPdb);
-                }
-            }
+            TextSection = new Node { Start = textSectionHeader.PointerToRawData.Value, Length = textSectionHeader.SizeOfRawData.Value };
+            Add(TextSection);
         }
 
         var resourceSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".rsrc");
@@ -112,6 +89,36 @@ public class PEFile : Node
         {
             RelocSection = new Node { Start = relocSectionHeader.PointerToRawData.Value, Length = relocSectionHeader.SizeOfRawData.Value };
             Add(RelocSection);
+        }
+
+        int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
+        CLIHeader = new CLIHeader { Start = cliHeader };
+        TextSection.Add(CLIHeader);
+
+        var metadataDirectory = CLIHeader.Metadata;
+        MetadataRVA = metadataDirectory.RVA.Value;
+        MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
+        int metadata = ResolveDataDirectory(metadataDirectory);
+        Metadata = new Metadata { Start = metadata };
+        TextSection.Add(Metadata);
+
+        var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
+        if (debugDirectoryAddress.RVA.Value != 0)
+        {
+            int offset = ResolveDataDirectory(debugDirectoryAddress);
+            DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
+            TextSection.Add(DebugDirectories);
+
+            if (DebugDirectories.Directories.FirstOrDefault(d => d.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb) is { } embeddedPdbDirectory)
+            {
+                var address = embeddedPdbDirectory.AddressOfRawData.Value;
+                var start = ResolveVirtualAddress(address);
+                if (start > 0)
+                {
+                    EmbeddedPdb = new EmbeddedPdb { Start = start, Length = embeddedPdbDirectory.SizeOfData.Value };
+                    TextSection.Add(EmbeddedPdb);
+                }
+            }
         }
 
         var resourceTableDirectory = OptionalHeader.DataDirectories.ResourceTable;
@@ -141,6 +148,7 @@ public class PEFile : Node
     public DebugDirectories DebugDirectories { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
     public Node ResourceTable { get; set; }
+    public Node TextSection { get; set; }
     public Node RsrcSection { get; set; }
     public Node RelocSection { get; set; }
 
@@ -531,7 +539,7 @@ public class Metadata : Node
                 metadataStream.Length = length;
                 if (peFile != null)
                 {
-                    peFile.Add(metadataStream);
+                    peFile.TextSection.Add(metadataStream);
                 }
                 else
                 {
@@ -642,7 +650,13 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public IReadOnlyList<MetadataTable> Tables { get; set; }
 
-    public Metadata Metadata => Parent switch { Metadata m => m, PEFile peFile => peFile.Metadata, _ => null };
+    public Metadata Metadata => Parent switch
+    {
+        Metadata m => m,
+        PEFile peFile => peFile.Metadata,
+        Node textSection => ((PEFile)textSection.Parent).Metadata,
+        _ => null
+    };
 
     int GetTableIndexSize(Table table) => TableInfos[(int)table].RowCount < 65536 ? 2 : 4;
 
