@@ -104,19 +104,39 @@ public class PEFile : Node
             }
         }
 
-        var resourceTableDirectory = OptionalHeader.DataDirectories.ResourceTable;
-        if (resourceTableDirectory.Length > 0)
+        ResourceTable = AddTable(OptionalHeader.DataDirectories.ResourceTable);
+
+        AddTable(OptionalHeader.DataDirectories.BaseRelocationTable);
+        AddTable(OptionalHeader.DataDirectories.BoundImport);
+        AddTable(OptionalHeader.DataDirectories.CertificateTable);
+        AddTable(OptionalHeader.DataDirectories.ExceptionTable);
+        AddTable(OptionalHeader.DataDirectories.ExportTable);
+        AddTable(OptionalHeader.DataDirectories.ImportTable);
+        AddTable(OptionalHeader.DataDirectories.LoadConfigTable);
+        AddTable(OptionalHeader.DataDirectories.TLSTable);
+    }
+
+    private Node AddTable(DataDirectory dataDirectory)
+    {
+        if (dataDirectory.Size.Value > 0)
         {
-            ResourceTable = new Node { Start = ResolveVirtualAddress(resourceTableDirectory.RVA.Value), Length = resourceTableDirectory.Size.Value };
-            if (RsrcSection != null)
+            var offset = dataDirectory.RVA.Value;
+            var resolved = ResolveVirtualAddress(offset);
+            if (resolved == 0)
             {
-                RsrcSection.Add(ResourceTable);
+                resolved = offset;
             }
-            else
+
+            var node = new Node
             {
-                Add(ResourceTable);
-            }
+                Start = resolved,
+                Length = dataDirectory.Size.Value
+            };
+            Add(node);
+            return node;
         }
+
+        return null;
     }
 
     private Section AddSection(string name)
@@ -1320,6 +1340,11 @@ public class Node
                     Children.Insert(i, node);
                     inserted = true;
                     break;
+                }
+                else if (node.Start >= child.Start && node.Start < child.End)
+                {
+                    child.Add(node);
+                    return;
                 }
             }
         }
