@@ -71,8 +71,10 @@ public class PEFile : Node
         CLIHeader = new CLIHeader { Start = cliHeader };
         Add(CLIHeader);
 
-        MetadataSection = GetSectionAtVirtualAddress(CLIHeader.Metadata.RVA.Value);
-        int metadata = ResolveDataDirectory(CLIHeader.Metadata);
+        var metadataDirectory = CLIHeader.Metadata;
+        MetadataRVA = metadataDirectory.RVA.Value;
+        MetadataSection = GetSectionAtVirtualAddress(MetadataRVA);
+        int metadata = ResolveDataDirectory(metadataDirectory);
         Metadata = new Metadata { Start = metadata };
         Add(Metadata);
 
@@ -105,6 +107,7 @@ public class PEFile : Node
     public CLIHeader CLIHeader { get; set; }
     public Metadata Metadata { get; set; }
     public SectionHeader MetadataSection { get; set; }
+    public int MetadataRVA { get; set; }
     public DebugDirectories DebugDirectories { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
 
@@ -126,7 +129,8 @@ public class PEFile : Node
 
     public int ResolveMetadataOffset(int offset)
     {
-        var result = MetadataSection.PointerToRawData.Value + offset;
+        var result = MetadataRVA - MetadataSection.VirtualAddress.Value + offset;
+        result = result + MetadataSection.PointerToRawData.Value;
         return result;
     }
 
@@ -501,6 +505,22 @@ public class Metadata : Node
         }
 
         Streams = list;
+
+        int heapsizes = CompressedMetadataTableStream.HeapSizes.Value;
+        if (StringsTableStream != null)
+        {
+            StringsTableStream.IndexSize = (heapsizes & 1) == 1 ? 4 : 2;
+        }
+
+        if (GuidTableStream != null)
+        {
+            GuidTableStream.IndexSize = (heapsizes & 2) == 1 ? 4 : 2;
+        }
+
+        if (BlobTableStream != null)
+        {
+            BlobTableStream.IndexSize = (heapsizes & 4) == 1 ? 4 : 2;
+        }
     }
 
     public PEFile PEFile => FindAncestor<PEFile>();
@@ -524,10 +544,21 @@ public class Metadata : Node
 
 public class MetadataStream : Node
 {
+    public int IndexSize { get; internal set; }
+}
+
+public struct TableInfo
+{
+    public int RowSize;
+    public int RowCount;
 }
 
 public class CompressedMetadataTableStream : MetadataStream
 {
+    public const int MaxTables = 58;
+
+    public TableInfo[] TableInfos = new TableInfo[MaxTables];
+
     public override void Parse()
     {
         ReservedZero = AddFourBytes();
@@ -542,7 +573,7 @@ public class CompressedMetadataTableStream : MetadataStream
 
         ulong valid = Valid.ReadUInt64();
 
-        for (int i = 0; i < 58; i++)
+        for (int i = 0; i < MaxTables; i++)
         {
             if ((valid & (1UL << i)) == 0)
             {
@@ -551,7 +582,11 @@ public class CompressedMetadataTableStream : MetadataStream
 
             var tableLength = AddFourBytes();
             TableLengths.Add(tableLength);
+
+            TableInfos[i].RowCount = tableLength.Value;
         }
+
+        ComputeTableInformations();
     }
 
     public FourBytes ReservedZero { get; set; }
@@ -562,11 +597,399 @@ public class CompressedMetadataTableStream : MetadataStream
     public EightBytes Valid { get; set; }
     public EightBytes Sorted { get; set; }
     public Sequence TableLengths { get; set; }
+
+    public IReadOnlyList<MetadataTable> Tables { get; set; }
+
+    public Metadata Metadata => ((PEFile)Parent).Metadata;
+
+    int GetTableIndexSize(Table table) => TableInfos[(int)table].RowCount < 65536 ? 2 : 4;
+
+    readonly int[] coded_index_sizes = new int[14];
+
+    int GetCodedIndexSize(CodedIndex codedIndex)
+    {
+        var index = (int)codedIndex;
+        var size = coded_index_sizes[index];
+        if (size != 0)
+        {
+            return size;
+        }
+
+        return coded_index_sizes[index] = codedIndex.GetSize(t => TableInfos[(int)t].RowCount);
+    }
+
+    void ComputeTableInformations()
+    {
+        int heapsizes = HeapSizes.Value;
+        int stridx_size = 2;
+        int guididx_size = 2;
+        int blobidx_size = 2;
+
+        if (Metadata.StringsTableStream != null && (heapsizes & 1) == 1)
+        {
+            stridx_size = 4;
+        }
+
+        if (Metadata.GuidTableStream != null && (heapsizes & 2) == 1)
+        {
+            guididx_size = 4;
+        }
+
+        if (Metadata.BlobTableStream != null && (heapsizes & 4) == 1)
+        {
+            blobidx_size = 4;
+        }
+
+        ulong valid = Valid.ReadUInt64();
+
+        var tables = new List<MetadataTable>();
+
+        for (int i = 0; i < MaxTables; i++)
+        {
+            if ((valid & (1UL << i)) == 0)
+            {
+                continue;
+            }
+
+            int size;
+            switch ((Table)i)
+            {
+                case Table.Module:
+                    size = 2    // Generation
+                        + stridx_size   // Name
+                        + (guididx_size * 3);   // Mvid, EncId, EncBaseId
+                    break;
+                case Table.TypeRef:
+                    size = GetCodedIndexSize(CodedIndex.ResolutionScope)    // ResolutionScope
+                        + (stridx_size * 2);    // Name, Namespace
+                    break;
+                case Table.TypeDef:
+                    size = 4    // Flags
+                        + (stridx_size * 2) // Name, Namespace
+                        + GetCodedIndexSize(CodedIndex.TypeDefOrRef)    // BaseType
+                        + GetTableIndexSize(Table.Field)    // FieldList
+                        + GetTableIndexSize(Table.Method);  // MethodList
+                    break;
+                case Table.FieldPtr:
+                    size = GetTableIndexSize(Table.Field);  // Field
+                    break;
+                case Table.Field:
+                    size = 2    // Flags
+                        + stridx_size   // Name
+                        + blobidx_size; // Signature
+                    break;
+                case Table.MethodPtr:
+                    size = GetTableIndexSize(Table.Method); // Method
+                    break;
+                case Table.Method:
+                    size = 8    // Rva 4, ImplFlags 2, Flags 2
+                        + stridx_size   // Name
+                        + blobidx_size  // Signature
+                        + GetTableIndexSize(Table.Param); // ParamList
+                    break;
+                case Table.ParamPtr:
+                    size = GetTableIndexSize(Table.Param); // Param
+                    break;
+                case Table.Param:
+                    size = 4    // Flags 2, Sequence 2
+                        + stridx_size;  // Name
+                    break;
+                case Table.InterfaceImpl:
+                    size = GetTableIndexSize(Table.TypeDef) // Class
+                        + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // Interface
+                    break;
+                case Table.MemberRef:
+                    size = GetCodedIndexSize(CodedIndex.MemberRefParent)    // Class
+                        + stridx_size   // Name
+                        + blobidx_size; // Signature
+                    break;
+                case Table.Constant:
+                    size = 2    // Type
+                        + GetCodedIndexSize(CodedIndex.HasConstant) // Parent
+                        + blobidx_size; // Value
+                    break;
+                case Table.CustomAttribute:
+                    size = GetCodedIndexSize(CodedIndex.HasCustomAttribute) // Parent
+                        + GetCodedIndexSize(CodedIndex.CustomAttributeType) // Type
+                        + blobidx_size; // Value
+                    break;
+                case Table.FieldMarshal:
+                    size = GetCodedIndexSize(CodedIndex.HasFieldMarshal)    // Parent
+                        + blobidx_size; // NativeType
+                    break;
+                case Table.DeclSecurity:
+                    size = 2    // Action
+                        + GetCodedIndexSize(CodedIndex.HasDeclSecurity) // Parent
+                        + blobidx_size; // PermissionSet
+                    break;
+                case Table.ClassLayout:
+                    size = 6    // PackingSize 2, ClassSize 4
+                        + GetTableIndexSize(Table.TypeDef); // Parent
+                    break;
+                case Table.FieldLayout:
+                    size = 4    // Offset
+                        + GetTableIndexSize(Table.Field);   // Field
+                    break;
+                case Table.StandAloneSig:
+                    size = blobidx_size;    // Signature
+                    break;
+                case Table.EventMap:
+                    size = GetTableIndexSize(Table.TypeDef) // Parent
+                        + GetTableIndexSize(Table.Event);   // EventList
+                    break;
+                case Table.EventPtr:
+                    size = GetTableIndexSize(Table.Event);  // Event
+                    break;
+                case Table.Event:
+                    size = 2    // Flags
+                        + stridx_size // Name
+                        + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // EventType
+                    break;
+                case Table.PropertyMap:
+                    size = GetTableIndexSize(Table.TypeDef) // Parent
+                        + GetTableIndexSize(Table.Property);    // PropertyList
+                    break;
+                case Table.PropertyPtr:
+                    size = GetTableIndexSize(Table.Property);   // Property
+                    break;
+                case Table.Property:
+                    size = 2    // Flags
+                        + stridx_size   // Name
+                        + blobidx_size; // Type
+                    break;
+                case Table.MethodSemantics:
+                    size = 2    // Semantics
+                        + GetTableIndexSize(Table.Method)   // Method
+                        + GetCodedIndexSize(CodedIndex.HasSemantics);   // Association
+                    break;
+                case Table.MethodImpl:
+                    size = GetTableIndexSize(Table.TypeDef) // Class
+                        + GetCodedIndexSize(CodedIndex.MethodDefOrRef)  // MethodBody
+                        + GetCodedIndexSize(CodedIndex.MethodDefOrRef); // MethodDeclaration
+                    break;
+                case Table.ModuleRef:
+                    size = stridx_size; // Name
+                    break;
+                case Table.TypeSpec:
+                    size = blobidx_size;    // Signature
+                    break;
+                case Table.ImplMap:
+                    size = 2    // MappingFlags
+                        + GetCodedIndexSize(CodedIndex.MemberForwarded) // MemberForwarded
+                        + stridx_size   // ImportName
+                        + GetTableIndexSize(Table.ModuleRef);   // ImportScope
+                    break;
+                case Table.FieldRVA:
+                    size = 4    // RVA
+                        + GetTableIndexSize(Table.Field);   // Field
+                    break;
+                case Table.EncLog:
+                    size = 8;
+                    break;
+                case Table.EncMap:
+                    size = 4;
+                    break;
+                case Table.Assembly:
+                    size = 16 // HashAlgId 4, Version 4 * 2, Flags 4
+                        + blobidx_size  // PublicKey
+                        + (stridx_size * 2);    // Name, Culture
+                    break;
+                case Table.AssemblyProcessor:
+                    size = 4;   // Processor
+                    break;
+                case Table.AssemblyOS:
+                    size = 12;  // Platform 4, Version 2 * 4
+                    break;
+                case Table.AssemblyRef:
+                    size = 12   // Version 2 * 4 + Flags 4
+                        + (blobidx_size * 2)    // PublicKeyOrToken, HashValue
+                        + (stridx_size * 2);    // Name, Culture
+                    break;
+                case Table.AssemblyRefProcessor:
+                    size = 4    // Processor
+                        + GetTableIndexSize(Table.AssemblyRef); // AssemblyRef
+                    break;
+                case Table.AssemblyRefOS:
+                    size = 12   // Platform 4, Version 2 * 4
+                        + GetTableIndexSize(Table.AssemblyRef); // AssemblyRef
+                    break;
+                case Table.File:
+                    size = 4    // Flags
+                        + stridx_size   // Name
+                        + blobidx_size; // HashValue
+                    break;
+                case Table.ExportedType:
+                    size = 8    // Flags 4, TypeDefId 4
+                        + (stridx_size * 2) // Name, Namespace
+                        + GetCodedIndexSize(CodedIndex.Implementation); // Implementation
+                    break;
+                case Table.ManifestResource:
+                    size = 8    // Offset, Flags
+                        + stridx_size   // Name
+                        + GetCodedIndexSize(CodedIndex.Implementation); // Implementation
+                    break;
+                case Table.NestedClass:
+                    size = GetTableIndexSize(Table.TypeDef) // NestedClass
+                        + GetTableIndexSize(Table.TypeDef); // EnclosingClass
+                    break;
+                case Table.GenericParam:
+                    size = 4    // Number, Flags
+                        + GetCodedIndexSize(CodedIndex.TypeOrMethodDef) // Owner
+                        + stridx_size;  // Name
+                    break;
+                case Table.MethodSpec:
+                    size = GetCodedIndexSize(CodedIndex.MethodDefOrRef) // Method
+                        + blobidx_size; // Instantiation
+                    break;
+                case Table.GenericParamConstraint:
+                    size = GetTableIndexSize(Table.GenericParam)    // Owner
+                        + GetCodedIndexSize(CodedIndex.TypeDefOrRef);   // Constraint
+                    break;
+                case Table.Document:
+                    size = blobidx_size // Name
+                        + guididx_size  // HashAlgorithm
+                        + blobidx_size  // Hash
+                        + guididx_size; // Language
+                    break;
+                case Table.MethodDebugInformation:
+                    size = GetTableIndexSize(Table.Document)  // Document
+                        + blobidx_size; // SequencePoints
+                    break;
+                case Table.LocalScope:
+                    size = GetTableIndexSize(Table.Method)  // Method
+                        + GetTableIndexSize(Table.ImportScope)  // ImportScope
+                        + GetTableIndexSize(Table.LocalVariable)    // VariableList
+                        + GetTableIndexSize(Table.LocalConstant)    // ConstantList
+                        + 4 * 2;    // StartOffset, Length
+                    break;
+                case Table.LocalVariable:
+                    size = 2    // Attributes
+                        + 2     // Index
+                        + stridx_size;  // Name
+                    break;
+                case Table.LocalConstant:
+                    size = stridx_size  // Name
+                        + blobidx_size; // Signature
+                    break;
+                case Table.ImportScope:
+                    size = GetTableIndexSize(Table.ImportScope) // Parent
+                        + blobidx_size;
+                    break;
+                case Table.StateMachineMethod:
+                    size = GetTableIndexSize(Table.Method) // MoveNextMethod
+                        + GetTableIndexSize(Table.Method);  // KickOffMethod
+                    break;
+                case Table.CustomDebugInformation:
+                    size = GetCodedIndexSize(CodedIndex.HasCustomDebugInformation) // Parent
+                        + guididx_size  // Kind
+                        + blobidx_size; // Value
+                    break;
+                default:
+                    throw new NotSupportedException();
+            }
+
+            TableInfos[i].RowSize = size;
+
+            var table = Add<MetadataTable>();
+            for (int row = 0; row < TableInfos[i].RowCount; row++)
+            {
+                var tableRow = new TableRow { Length = size };
+                table.Add(tableRow);
+            }
+
+            tables.Add(table);
+        }
+
+        Tables = tables;
+    }
 }
 
 public class Sequence : Node
 {
+}
 
+public class TableRow : Node
+{
+}
+
+public class MetadataTable : Sequence
+{
+}
+
+public enum Table : byte
+{
+    Module = 0x00,
+    TypeRef = 0x01,
+    TypeDef = 0x02,
+    FieldPtr = 0x03,
+    Field = 0x04,
+    MethodPtr = 0x05,
+    Method = 0x06,
+    ParamPtr = 0x07,
+    Param = 0x08,
+    InterfaceImpl = 0x09,
+    MemberRef = 0x0a,
+    Constant = 0x0b,
+    CustomAttribute = 0x0c,
+    FieldMarshal = 0x0d,
+    DeclSecurity = 0x0e,
+    ClassLayout = 0x0f,
+    FieldLayout = 0x10,
+    StandAloneSig = 0x11,
+    EventMap = 0x12,
+    EventPtr = 0x13,
+    Event = 0x14,
+    PropertyMap = 0x15,
+    PropertyPtr = 0x16,
+    Property = 0x17,
+    MethodSemantics = 0x18,
+    MethodImpl = 0x19,
+    ModuleRef = 0x1a,
+    TypeSpec = 0x1b,
+    ImplMap = 0x1c,
+    FieldRVA = 0x1d,
+    EncLog = 0x1e,
+    EncMap = 0x1f,
+    Assembly = 0x20,
+    AssemblyProcessor = 0x21,
+    AssemblyOS = 0x22,
+    AssemblyRef = 0x23,
+    AssemblyRefProcessor = 0x24,
+    AssemblyRefOS = 0x25,
+    File = 0x26,
+    ExportedType = 0x27,
+    ManifestResource = 0x28,
+    NestedClass = 0x29,
+    GenericParam = 0x2a,
+    MethodSpec = 0x2b,
+    GenericParamConstraint = 0x2c,
+
+    Document = 0x30,
+    MethodDebugInformation = 0x31,
+    LocalScope = 0x32,
+    LocalVariable = 0x33,
+    LocalConstant = 0x34,
+    ImportScope = 0x35,
+    StateMachineMethod = 0x36,
+    CustomDebugInformation = 0x37,
+}
+
+enum CodedIndex
+{
+    TypeDefOrRef,
+    HasConstant,
+    HasCustomAttribute,
+    HasFieldMarshal,
+    HasDeclSecurity,
+    MemberRefParent,
+    HasSemantics,
+    MethodDefOrRef,
+    MemberForwarded,
+    Implementation,
+    CustomAttributeType,
+    ResolutionScope,
+    TypeOrMethodDef,
+    HasCustomDebugInformation,
 }
 
 public class UncompressedMetadataTableStream : MetadataStream
@@ -919,6 +1342,8 @@ public class OneByte : BytesNode
     }
 
     public byte ReadByte() => Buffer.ReadByte(Start);
+
+    public byte Value => ReadByte();
 }
 
 public class TwoBytes : BytesNode
@@ -1120,6 +1545,94 @@ internal static class Extensions
         {
             collector(new Span(index, node.End - index));
         }
+    }
+
+    public static int GetSize(this CodedIndex self, Func<Table, int> counter)
+    {
+        int bits;
+        Table[] tables;
+
+        switch (self)
+        {
+            case CodedIndex.TypeDefOrRef:
+                bits = 2;
+                tables = new[] { Table.TypeDef, Table.TypeRef, Table.TypeSpec };
+                break;
+            case CodedIndex.HasConstant:
+                bits = 2;
+                tables = new[] { Table.Field, Table.Param, Table.Property };
+                break;
+            case CodedIndex.HasCustomAttribute:
+                bits = 5;
+                tables = new[] {
+                    Table.Method, Table.Field, Table.TypeRef, Table.TypeDef, Table.Param, Table.InterfaceImpl, Table.MemberRef,
+                    Table.Module, Table.DeclSecurity, Table.Property, Table.Event, Table.StandAloneSig, Table.ModuleRef,
+                    Table.TypeSpec, Table.Assembly, Table.AssemblyRef, Table.File, Table.ExportedType,
+                    Table.ManifestResource, Table.GenericParam, Table.GenericParamConstraint, Table.MethodSpec,
+                };
+                break;
+            case CodedIndex.HasFieldMarshal:
+                bits = 1;
+                tables = new[] { Table.Field, Table.Param };
+                break;
+            case CodedIndex.HasDeclSecurity:
+                bits = 2;
+                tables = new[] { Table.TypeDef, Table.Method, Table.Assembly };
+                break;
+            case CodedIndex.MemberRefParent:
+                bits = 3;
+                tables = new[] { Table.TypeDef, Table.TypeRef, Table.ModuleRef, Table.Method, Table.TypeSpec };
+                break;
+            case CodedIndex.HasSemantics:
+                bits = 1;
+                tables = new[] { Table.Event, Table.Property };
+                break;
+            case CodedIndex.MethodDefOrRef:
+                bits = 1;
+                tables = new[] { Table.Method, Table.MemberRef };
+                break;
+            case CodedIndex.MemberForwarded:
+                bits = 1;
+                tables = new[] { Table.Field, Table.Method };
+                break;
+            case CodedIndex.Implementation:
+                bits = 2;
+                tables = new[] { Table.File, Table.AssemblyRef, Table.ExportedType };
+                break;
+            case CodedIndex.CustomAttributeType:
+                bits = 3;
+                tables = new[] { Table.Method, Table.MemberRef };
+                break;
+            case CodedIndex.ResolutionScope:
+                bits = 2;
+                tables = new[] { Table.Module, Table.ModuleRef, Table.AssemblyRef, Table.TypeRef };
+                break;
+            case CodedIndex.TypeOrMethodDef:
+                bits = 1;
+                tables = new[] { Table.TypeDef, Table.Method };
+                break;
+            case CodedIndex.HasCustomDebugInformation:
+                bits = 5;
+                tables = new[] {
+                    Table.Method, Table.Field, Table.TypeRef, Table.TypeDef, Table.Param, Table.InterfaceImpl, Table.MemberRef,
+                    Table.Module, Table.DeclSecurity, Table.Property, Table.Event, Table.StandAloneSig, Table.ModuleRef,
+                    Table.TypeSpec, Table.Assembly, Table.AssemblyRef, Table.File, Table.ExportedType,
+                    Table.ManifestResource, Table.GenericParam, Table.GenericParamConstraint, Table.MethodSpec,
+                    Table.Document, Table.LocalScope, Table.LocalVariable, Table.LocalConstant, Table.ImportScope,
+                };
+                break;
+            default:
+                throw new ArgumentException();
+        }
+
+        int max = 0;
+
+        for (int i = 0; i < tables.Length; i++)
+        {
+            max = System.Math.Max(counter(tables[i]), max);
+        }
+
+        return max < (1 << (16 - bits)) ? 2 : 4;
     }
 }
 
