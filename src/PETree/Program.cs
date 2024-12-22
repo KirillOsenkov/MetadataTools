@@ -70,26 +70,9 @@ public class PEFile : Node
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
         Add(SectionTable);
 
-        var textSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".text");
-        if (textSectionHeader != null)
-        {
-            TextSection = new Node { Start = textSectionHeader.PointerToRawData.Value, Length = textSectionHeader.SizeOfRawData.Value };
-            Add(TextSection);
-        }
-
-        var resourceSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".rsrc");
-        if (resourceSectionHeader != null)
-        {
-            RsrcSection = new Node { Start = resourceSectionHeader.PointerToRawData.Value, Length = resourceSectionHeader.SizeOfRawData.Value };
-            Add(RsrcSection);
-        }
-
-        var relocSectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == ".reloc");
-        if (relocSectionHeader != null)
-        {
-            RelocSection = new Node { Start = relocSectionHeader.PointerToRawData.Value, Length = relocSectionHeader.SizeOfRawData.Value };
-            Add(RelocSection);
-        }
+        TextSection = AddSection(".text");
+        RsrcSection = AddSection(".rsrc");
+        RelocSection = AddSection(".reloc");
 
         int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
         CLIHeader = new CLIHeader { Start = cliHeader };
@@ -134,6 +117,24 @@ public class PEFile : Node
                 Add(ResourceTable);
             }
         }
+    }
+
+    private Section AddSection(string name)
+    {
+        var sectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.Name.Text == name);
+        if (sectionHeader != null)
+        {
+            var section = new Section
+            {
+                Start = sectionHeader.PointerToRawData.Value,
+                Length = sectionHeader.SizeOfRawData.Value,
+                Name = name
+            };
+            Add(section);
+            return section;
+        }
+
+        return null;
     }
 
     public Node DOSExeHeader { get; set; }
@@ -385,6 +386,11 @@ public class OptionalHeaderDataDirectories : Node
     public DataDirectory DelayImportDescriptor { get; set; }
     public DataDirectory CLRRuntimeHeader { get; set; }
     public DataDirectory ReservedZero { get; set; }
+}
+
+public class Section : Node
+{
+    public string Name { get; set; }
 }
 
 public class SectionTable : Node
