@@ -89,6 +89,19 @@ public class PEFile : Node
         Metadata = new Metadata { Start = metadata };
         TextSection.Add(Metadata);
 
+        il.ComputeUncoveredSpans(span =>
+        {
+            if (Buffer.IsZeroFilled(span))
+            {
+                var padding = new Padding
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                };
+                il.Add(padding);
+            }
+        });
+
         var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
         if (debugDirectoryAddress.RVA.Value != 0)
         {
@@ -1066,6 +1079,52 @@ public class FatMethod : Node
         LocalVarSignatureToken = AddFourBytes();
         ILCode = new Node { Length = CodeSize.Value };
         Add(ILCode);
+
+        if ((Header.Value & 8) != 0)
+        {
+            AddSection();
+        }
+    }
+
+    private void AddSection()
+    {
+        AddPadding(4);
+
+        const byte fat_format = 0x40;
+        const byte more_sects = 0x80;
+
+        var flags = AddOneByte();
+        if ((flags.Value & fat_format) == 0)
+        {
+            AddSmallSection();
+        }
+        else
+        {
+            AddFatSection(flags.Value);
+        }
+
+        if ((flags.Value & more_sects) != 0)
+        {
+            AddSection();
+        }
+    }
+
+    private void AddFatSection(byte first)
+    {
+        var second = AddOneByte();
+        var third = AddOneByte();
+        var fourth = AddOneByte();
+        var integer = (fourth.Value << 24) + (third.Value << 16) + (second.Value << 8) + first;
+        int count = (integer >> 8) / 24;
+
+        AddBytes(count * (4 * 3 + 4 * 2));
+    }
+
+    private void AddSmallSection()
+    {
+        var count = AddOneByte().Value / 12;
+        AddTwoBytes();
+        AddBytes(count * (2 * 3 + 1 * 2));
     }
 
     public TwoBytes Header { get; set; }
@@ -1496,12 +1555,38 @@ public class Node
         }
     }
 
+    public Node AddPadding(int alignment)
+    {
+        int lastChildEnd = LastChildEnd;
+        int bytesNeeded = alignment - (lastChildEnd % alignment);
+        if (bytesNeeded == 0)
+        {
+            return null;
+        }
+
+        var newNode = new Node { Length = bytesNeeded };
+        Add(newNode);
+        return newNode;
+    }
+
     public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
 
     public OneByte AddOneByte() => Add<OneByte>();
     public TwoBytes AddTwoBytes() => Add<TwoBytes>();
     public FourBytes AddFourBytes() => Add<FourBytes>();
     public EightBytes AddEightBytes() => Add<EightBytes>();
+
+    public Node AddBytes(int bytes)
+    {
+        if (bytes == 0)
+        {
+            return null;
+        }
+
+        var node = new Node { Length = bytes };
+        Add(node);
+        return node;
+    }
 
     public byte[] ReadBytes(int offset, int length) => Buffer.ReadBytes(offset, length);
 
@@ -1550,6 +1635,10 @@ public class BytesNode : Node
         var bytes = Buffer.ReadBytes(Start, Length);
         return $"{bytes.ToHexString()}";
     }
+}
+
+public class Padding : Node
+{
 }
 
 public class OneByte : BytesNode
@@ -1852,6 +1941,22 @@ internal static class Extensions
 
         return max < (1 << (16 - bits)) ? 2 : 4;
     }
+
+    public static bool IsZeroFilled(this ByteBuffer buffer, Span span)
+    {
+        for (int i = span.Start; i < span.End; i++)
+        {
+            if (buffer.ReadByte(i) != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
-public record struct Span(int Start, int Length);
+public record struct Span(int Start, int Length)
+{
+    public readonly int End => Start + Length;
+}
