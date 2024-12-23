@@ -30,8 +30,8 @@ class Program
         peFile.Parse();
         peFile.Length = (int)length;
 
-        var uncovered = new List<Span>();
-        peFile.ComputeUncoveredSpans(s => uncovered.Add(s));
+        var uncovered = new List<(Span, string)>();
+        peFile.ComputeUncoveredSpans(s => uncovered.Add((s, buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
     }
 }
 
@@ -1794,7 +1794,7 @@ internal static class Extensions
         const int multiplier = 3;
         int digits = bytes.Length * multiplier;
 
-        char[] c = new char[digits];
+        char[] c = new char[digits - 1];
         byte b;
         for (int i = 0; i < digits / multiplier; i++)
         {
@@ -1802,7 +1802,11 @@ internal static class Extensions
             c[i * multiplier] = (char)(b > 9 ? b + 55 : b + 0x30);
             b = ((byte)(bytes[i] & 0xF));
             c[i * multiplier + 1] = (char)(b > 9 ? b + 55 : b + 0x30);
-            c[i * 3 + 2] = separator;
+            int index = i * 3 + 2;
+            if (index < digits - 1)
+            {
+                c[i * 3 + 2] = separator;
+            }
         }
 
         return new string(c);
