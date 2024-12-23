@@ -150,11 +150,8 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable);
         AddTable<Node>(OptionalHeader.DataDirectories.IAT);
 
-        var relocGap = new Span(RelocSection.LastChildEnd, RelocSection.End - RelocSection.LastChildEnd);
-        if (relocGap.Length > 0 && Buffer.IsZeroFilled(relocGap))
-        {
-            RelocSection.AddPadding(relocGap.Length);
-        }
+        RsrcSection.AddRemainingPadding();
+        RelocSection.AddRemainingPadding();
     }
 
     private Node AddCertificateTable(DataDirectory dataDirectory)
