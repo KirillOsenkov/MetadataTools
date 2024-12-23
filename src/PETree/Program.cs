@@ -32,6 +32,8 @@ class Program
 
         var uncovered = new List<(Span, string)>();
         peFile.ComputeUncoveredSpans(s => uncovered.Add((s, buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
+
+        var node = peFile.Find(uncovered[0].Item1.Start - 1);
     }
 }
 
@@ -92,7 +94,11 @@ public class PEFile : Node
         MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
         int metadata = ResolveDataDirectory(metadataDirectory);
 
-        var il = new Node { Start = CLIHeader.End, Length = metadata - CLIHeader.End };
+        var il = new IL
+        {
+            Start = CLIHeader.End,
+            Length = metadata - CLIHeader.End
+        };
         TextSection.Add(il);
 
         Metadata = new Metadata { Start = metadata };
@@ -1078,6 +1084,10 @@ public class CompressedMetadataTableStream : MetadataStream
     }
 }
 
+public class IL : Node
+{
+}
+
 public class FatMethod : Node
 {
     public override void Parse()
@@ -1515,6 +1525,36 @@ public class Node
 
     public virtual void Parse()
     {
+    }
+
+    public Node Find(int offset)
+    {
+        if (offset < Start || offset >= End)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < Children.Count; i++)
+        {
+            var child = Children[i];
+            if (offset < child.Start)
+            {
+                return null;
+            }
+
+            if (offset >= child.End)
+            {
+                continue;
+            }
+
+            var found = child.Find(offset);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return this;
     }
 
     public virtual void Add(Node node)
