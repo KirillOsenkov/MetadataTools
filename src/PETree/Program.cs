@@ -1027,16 +1027,21 @@ public class CompressedMetadataTableStream : MetadataStream
         byte twoBits = (byte)(headerByte & 3);
         if (twoBits == 2)
         {
-            ReadTinyMethod(headerByte, offset + 1);
+            ReadTinyMethod(headerByte, offset);
         }
         else
         {
-            ReadFatMethod(headerByte, offset + 1);
+            ReadFatMethod(headerByte, offset);
         }
     }
 
     private void ReadFatMethod(byte header, int offset)
     {
+        var fatMethod = new FatMethod
+        {
+            Start = offset,
+        };
+        PEFile.Add(fatMethod);
     }
 
     private void ReadTinyMethod(byte header, int offset)
@@ -1044,11 +1049,30 @@ public class CompressedMetadataTableStream : MetadataStream
         int codeSize = header >> 2;
         var tinyMethod = new TinyMethod
         {
-            Start = offset - 1,
+            Start = offset,
             CodeSize = codeSize
         };
         PEFile.Add(tinyMethod);
     }
+}
+
+public class FatMethod : Node
+{
+    public override void Parse()
+    {
+        Header = AddTwoBytes();
+        MaxStack = AddTwoBytes();
+        CodeSize = AddFourBytes();
+        LocalVarSignatureToken = AddFourBytes();
+        ILCode = new Node { Length = CodeSize.Value };
+        Add(ILCode);
+    }
+
+    public TwoBytes Header { get; set; }
+    public TwoBytes MaxStack { get; set; }
+    public FourBytes CodeSize { get; set; }
+    public FourBytes LocalVarSignatureToken { get; set; }
+    public Node ILCode { get; set; }
 }
 
 public class TinyMethod : Node
