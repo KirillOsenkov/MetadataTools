@@ -44,16 +44,16 @@ public class PEFile : Node
 
     public override void Parse()
     {
-        DOSExeHeader = new Node();
-        Add(DOSExeHeader);
+        DOSHeaderAndStub = new Node();
+        Add(DOSHeaderAndStub);
 
         var DOSHeader = new Node { Length = 0x3C };
-        DOSExeHeader.Add(DOSHeader);
+        DOSHeaderAndStub.Add(DOSHeader);
 
-        PEHeaderPointer = DOSExeHeader.AddFourBytes();
+        PEHeaderPointer = DOSHeaderAndStub.AddFourBytes();
 
         var DOSStub = new Node { Length = 0x40 };
-        DOSExeHeader.Add(DOSStub);
+        DOSHeaderAndStub.Add(DOSStub);
 
         int peHeaderPointer = PEHeaderPointer.Value;
         if (peHeaderPointer == 0)
@@ -108,20 +108,21 @@ public class PEFile : Node
 
         AddTable(OptionalHeader.DataDirectories.BaseRelocationTable);
         AddTable(OptionalHeader.DataDirectories.BoundImport);
-        AddTable(OptionalHeader.DataDirectories.CertificateTable);
+        AddTable(OptionalHeader.DataDirectories.CertificateTable, isRVA: false);
         AddTable(OptionalHeader.DataDirectories.ExceptionTable);
         AddTable(OptionalHeader.DataDirectories.ExportTable);
         AddTable(OptionalHeader.DataDirectories.ImportTable);
         AddTable(OptionalHeader.DataDirectories.LoadConfigTable);
         AddTable(OptionalHeader.DataDirectories.TLSTable);
+        AddTable(OptionalHeader.DataDirectories.IAT);
     }
 
-    private Node AddTable(DataDirectory dataDirectory)
+    private Node AddTable(DataDirectory dataDirectory, bool isRVA = true)
     {
         if (dataDirectory.Size.Value > 0)
         {
             var offset = dataDirectory.RVA.Value;
-            var resolved = ResolveVirtualAddress(offset);
+            var resolved = isRVA ? ResolveVirtualAddress(offset) : offset;
             if (resolved == 0)
             {
                 resolved = offset;
@@ -157,7 +158,7 @@ public class PEFile : Node
         return null;
     }
 
-    public Node DOSExeHeader { get; set; }
+    public Node DOSHeaderAndStub { get; set; }
     public FourBytes PEHeaderPointer { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
