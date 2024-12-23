@@ -995,12 +995,30 @@ public class CompressedMetadataTableStream : MetadataStream
                 }
 
                 table.Add(tableRow);
+                if (tableRow is MethodTableRow methodTableRow)
+                {
+                    FindMethod(methodTableRow.RVA.Value);
+                }
             }
 
             tables.Add(table);
         }
 
         Tables = tables;
+    }
+
+    private void FindMethod(int rva)
+    {
+        if (rva == 0)
+        {
+            return;
+        }
+
+        var peFile = FindAncestor<PEFile>();
+        var textSection = FindAncestor<Section>();
+        var offset = peFile.ResolveVirtualAddress(rva);
+        byte headerByte = peFile.Buffer.ReadByte(offset);
+        byte twoBits = (byte)(headerByte & 3);
     }
 }
 
@@ -1507,7 +1525,7 @@ public class EightBytes : BytesNode
 
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
     public int ReadInt32() => Buffer.ReadInt32(Start);
-    public ulong ReadUInt64() => Buffer.ReadUInt32(Start);
+    public ulong ReadUInt64() => Buffer.ReadUInt64(Start);
 }
 
 public class EightByteString : EightBytes
