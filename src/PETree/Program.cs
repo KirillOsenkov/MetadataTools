@@ -474,7 +474,6 @@ public class CLIHeader : Node
         MinorRuntimeVersion = AddTwoBytes();
         Metadata = Add<DataDirectory>();
         Flags = AddFourBytes();
-        ImageAttributes = AddFourBytes();
         EntryPointToken = AddFourBytes();
         Resources = Add<DataDirectory>();
         StrongNameSignature = Add<DataDirectory>();
@@ -489,7 +488,6 @@ public class CLIHeader : Node
     public TwoBytes MinorRuntimeVersion { get; set; }
     public DataDirectory Metadata { get; set; }
     public FourBytes Flags { get; set; }
-    public FourBytes ImageAttributes { get; set; }
     public FourBytes EntryPointToken { get; set; }
     public DataDirectory Resources { get; set; }
     public DataDirectory StrongNameSignature { get; set; }
@@ -663,6 +661,8 @@ public class CompressedMetadataTableStream : MetadataStream
             TableInfos[i].RowCount = tableLength.Value;
         }
 
+        PEFile = FindAncestor<PEFile>();
+
         ComputeTableInformations();
     }
 
@@ -684,6 +684,8 @@ public class CompressedMetadataTableStream : MetadataStream
         Node textSection => ((PEFile)textSection.Parent).Metadata,
         _ => null
     };
+
+    public PEFile PEFile { get; set; }
 
     int GetTableIndexSize(Table table) => TableInfos[(int)table].RowCount < 65536 ? 2 : 4;
 
@@ -1019,7 +1021,44 @@ public class CompressedMetadataTableStream : MetadataStream
         var offset = peFile.ResolveVirtualAddress(rva);
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
+        if (twoBits == 2)
+        {
+            ReadTinyMethod(headerByte, offset + 1);
+        }
+        else
+        {
+            ReadFatMethod(headerByte, offset + 1);
+        }
     }
+
+    private void ReadFatMethod(byte header, int offset)
+    {
+    }
+
+    private void ReadTinyMethod(byte header, int offset)
+    {
+        int codeSize = header >> 2;
+        var tinyMethod = new TinyMethod
+        {
+            Start = offset - 1,
+            CodeSize = codeSize
+        };
+        PEFile.Add(tinyMethod);
+    }
+}
+
+public class TinyMethod : Node
+{
+    public override void Parse()
+    {
+        Header = AddOneByte();
+        IL = new Node { Length = CodeSize };
+        Add(IL);
+    }
+
+    public int CodeSize { get; set; }
+    public OneByte Header { get; set; }
+    public Node IL { get; set; }
 }
 
 public class Sequence : Node
@@ -1420,7 +1459,13 @@ public class Node
         node.Parent = this;
 
         node.Parse();
-        Length = LastChildEnd - Start;
+
+        // if Length has been preset previously, keep the old value
+        int newLength = LastChildEnd - Start;
+        if (newLength > Length)
+        {
+            Length = newLength;
+        }
     }
 
     public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
