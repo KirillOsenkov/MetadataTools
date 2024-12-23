@@ -1051,6 +1051,7 @@ public class CompressedMetadataTableStream : MetadataStream
         var peFile = FindAncestor<PEFile>();
         var textSection = FindAncestor<Section>();
         var offset = peFile.ResolveVirtualAddress(rva);
+
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
         if (twoBits == 2)
@@ -1119,7 +1120,7 @@ public class FatMethod : Node
         }
         else
         {
-            AddFatSection(flags.Value);
+            AddFatSection();
         }
 
         if ((flags.Value & more_sects) != 0)
@@ -1128,22 +1129,21 @@ public class FatMethod : Node
         }
     }
 
-    private void AddFatSection(byte first)
+    private void AddFatSection()
     {
+        var first = AddOneByte();
         var second = AddOneByte();
         var third = AddOneByte();
-        var fourth = AddOneByte();
-        var integer = (fourth.Value << 24) + (third.Value << 16) + (second.Value << 8) + first;
-        int count = (integer >> 8) / 24;
+        var integer = (third.Value << 16) + (second.Value << 8) + first.Value;
 
-        AddBytes(count * (4 * 3 + 4 * 2));
+        AddBytes(integer - 4);
     }
 
     private void AddSmallSection()
     {
-        var count = AddOneByte().Value / 12;
+        var count = AddOneByte().Value;
         AddTwoBytes();
-        AddBytes(count * (2 * 3 + 1 * 2));
+        AddBytes(count - 4);
     }
 
     public TwoBytes Header { get; set; }
