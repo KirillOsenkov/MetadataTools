@@ -74,6 +74,15 @@ public class PEFile : Node
         RsrcSection = AddSection(".rsrc");
         RelocSection = AddSection(".reloc");
 
+        var sectionGap = new Span(SectionTable.End, TextSection.Start - SectionTable.End);
+        if (sectionGap.Length > 0)
+        {
+            if (Buffer.IsZeroFilled(sectionGap))
+            {
+                SectionTable.AddPadding(sectionGap.Length);
+            }
+        }
+
         int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
         CLIHeader = new CLIHeader { Start = cliHeader };
         TextSection.Add(CLIHeader);
@@ -1088,7 +1097,7 @@ public class FatMethod : Node
 
     private void AddSection()
     {
-        AddPadding(4);
+        AddAlignedPadding(4);
 
         const byte fat_format = 0x40;
         const byte more_sects = 0x80;
@@ -1555,7 +1564,14 @@ public class Node
         }
     }
 
-    public Node AddPadding(int alignment)
+    public Padding AddPadding(int length)
+    {
+        var node = new Padding { Length = length };
+        Add(node);
+        return node;
+    }
+
+    public Padding AddAlignedPadding(int alignment)
     {
         int lastChildEnd = LastChildEnd;
         int bytesNeeded = alignment - (lastChildEnd % alignment);
@@ -1564,9 +1580,7 @@ public class Node
             return null;
         }
 
-        var newNode = new Node { Length = bytesNeeded };
-        Add(newNode);
-        return newNode;
+        return AddPadding(bytesNeeded);
     }
 
     public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
