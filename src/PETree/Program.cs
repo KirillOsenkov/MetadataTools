@@ -642,21 +642,7 @@ public class Metadata : Node
 
         StreamHeaders = list;
 
-        int heapsizes = CompressedMetadataTableStream.HeapSizes.Value;
-        if (StringsTableStream != null)
-        {
-            StringsTableStream.IndexSize = (heapsizes & 1) == 1 ? 4 : 2;
-        }
-
-        if (GuidTableStream != null)
-        {
-            GuidTableStream.IndexSize = (heapsizes & 2) == 1 ? 4 : 2;
-        }
-
-        if (BlobTableStream != null)
-        {
-            BlobTableStream.IndexSize = (heapsizes & 4) == 1 ? 4 : 2;
-        }
+        CompressedMetadataTableStream?.AddRemainingPadding();
     }
 
     public PEFile PEFile => FindAncestor<PEFile>();
@@ -681,7 +667,6 @@ public class Metadata : Node
 
 public class MetadataStream : Node
 {
-    public int IndexSize { get; set; }
     public string Name { get; set; }
 }
 
@@ -1655,6 +1640,18 @@ public class Node
         }
 
         return AddPadding(bytesNeeded);
+    }
+
+    public Padding AddRemainingPadding()
+    {
+        int lastChildEnd = LastChildEnd;
+        var span = new Span(lastChildEnd, End - lastChildEnd);
+        if (span.Length > 0 && Buffer.IsZeroFilled(span))
+        {
+            return AddPadding(span.Length);
+        }
+
+        return null;
     }
 
     public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
