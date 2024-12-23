@@ -126,14 +126,32 @@ public class PEFile : Node
             DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
             TextSection.Add(DebugDirectories);
 
-            if (DebugDirectories.Directories.FirstOrDefault(d => d.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb) is { } embeddedPdbDirectory)
+            foreach (var debugDirectory in DebugDirectories.Directories)
             {
-                var address = embeddedPdbDirectory.AddressOfRawData.Value;
+                var address = debugDirectory.AddressOfRawData.Value;
                 var start = ResolveVirtualAddress(address);
                 if (start > 0)
                 {
-                    EmbeddedPdb = new EmbeddedPdb { Start = start, Length = embeddedPdbDirectory.SizeOfData.Value };
-                    TextSection.Add(EmbeddedPdb);
+                    Node entry = null;
+                    if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb)
+                    {
+                        EmbeddedPdb = new EmbeddedPdb
+                        {
+                            Start = start,
+                            Length = debugDirectory.SizeOfData.Value
+                        };
+                        entry = EmbeddedPdb;
+                    }
+                    else
+                    {
+                        entry = new DebugDirectoryEntry
+                        {
+                            Start = start,
+                            Length = debugDirectory.SizeOfData.Value
+                        };
+                    }
+                    
+                    TextSection.Add(entry);
                 }
             }
         }
@@ -1413,6 +1431,10 @@ public class DebugDirectory : Node
         EmbeddedPortablePdb = 17,
         PdbChecksum = 19,
     }
+}
+
+public class DebugDirectoryEntry : Node
+{
 }
 
 public class StrongNameSignature : Node
