@@ -136,20 +136,50 @@ public class PEFile : Node
             }
         }
 
-        ResourceTable = AddTable(OptionalHeader.DataDirectories.ResourceTable);
+        ResourceTable = AddTable<Node>(OptionalHeader.DataDirectories.ResourceTable);
 
-        AddTable(OptionalHeader.DataDirectories.BaseRelocationTable);
-        AddTable(OptionalHeader.DataDirectories.BoundImport);
-        AddTable(OptionalHeader.DataDirectories.CertificateTable, isRVA: false);
-        AddTable(OptionalHeader.DataDirectories.ExceptionTable);
-        AddTable(OptionalHeader.DataDirectories.ExportTable);
-        AddTable(OptionalHeader.DataDirectories.ImportTable);
-        AddTable(OptionalHeader.DataDirectories.LoadConfigTable);
-        AddTable(OptionalHeader.DataDirectories.TLSTable);
-        AddTable(OptionalHeader.DataDirectories.IAT);
+        AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.BoundImport);
+        AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.ExceptionTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.ExportTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.ImportTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.TLSTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.IAT);
+
+        var relocGap = new Span(RelocSection.LastChildEnd, RelocSection.End - RelocSection.LastChildEnd);
+        if (relocGap.Length > 0 && Buffer.IsZeroFilled(relocGap))
+        {
+            RelocSection.AddPadding(relocGap.Length);
+        }
     }
 
-    private Node AddTable(DataDirectory dataDirectory, bool isRVA = true)
+    private Node AddCertificateTable(DataDirectory dataDirectory)
+    {
+        if (dataDirectory.Size.Value > 0)
+        {
+            var offset = dataDirectory.RVA.Value;
+            var resolved = offset;
+            if (resolved == 0)
+            {
+                resolved = offset;
+            }
+
+            var node = new CertificateTable
+            {
+                Start = resolved,
+                Length = dataDirectory.Size.Value
+            };
+
+            Add(node);
+            return node;
+        }
+
+        return null;
+    }
+
+    private Node AddTable<T>(DataDirectory dataDirectory, bool isRVA = true) where T : Node, new()
     {
         if (dataDirectory.Size.Value > 0)
         {
@@ -160,7 +190,7 @@ public class PEFile : Node
                 resolved = offset;
             }
 
-            var node = new Node
+            var node = new T
             {
                 Start = resolved,
                 Length = dataDirectory.Size.Value
@@ -1399,6 +1429,10 @@ public class DebugDirectory : Node
         EmbeddedPortablePdb = 17,
         PdbChecksum = 19,
     }
+}
+
+public class CertificateTable : Node
+{
 }
 
 public class DataDirectory : EightBytes
