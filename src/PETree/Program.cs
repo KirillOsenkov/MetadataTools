@@ -82,6 +82,10 @@ public class PEFile : Node
         MetadataRVA = metadataDirectory.RVA.Value;
         MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
         int metadata = ResolveDataDirectory(metadataDirectory);
+
+        var il = new Node { Start = CLIHeader.End, Length = metadata - CLIHeader.End };
+        TextSection.Add(il);
+
         Metadata = new Metadata { Start = metadata };
         TextSection.Add(Metadata);
 
