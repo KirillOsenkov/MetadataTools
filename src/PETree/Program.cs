@@ -735,7 +735,8 @@ public class CompressedMetadataTableStream : MetadataStream
             }
 
             int size;
-            switch ((Table)i)
+            Table tableKind = (Table)i;
+            switch (tableKind)
             {
                 case Table.Module:
                     size = 2    // Generation
@@ -974,10 +975,25 @@ public class CompressedMetadataTableStream : MetadataStream
             TableInfos[i].RowSize = size;
 
             var table = Add<MetadataTable>();
-            table.Name = (Table)i;
+            table.Name = tableKind;
             for (int row = 0; row < TableInfos[i].RowCount; row++)
             {
-                var tableRow = new TableRow { Length = size };
+                TableRow tableRow = null;
+                if (tableKind == Table.Method)
+                {
+                    tableRow = new MethodTableRow
+                    {
+                        Length = size,
+                        Name = new Node { Length = stridx_size },
+                        Signature = new Node { Length = blobidx_size },
+                        ParamList = new Node { Length = GetTableIndexSize(Table.Param) }
+                    };
+                }
+                else
+                {
+                    tableRow = new TableRow { Length = size };
+                }
+
                 table.Add(tableRow);
             }
 
@@ -994,6 +1010,26 @@ public class Sequence : Node
 
 public class TableRow : Node
 {
+}
+
+public class MethodTableRow : TableRow
+{
+    public override void Parse()
+    {
+        RVA = AddFourBytes();
+        ImplFlags = AddTwoBytes();
+        Flags = AddTwoBytes();
+        Add(Name);
+        Add(Signature);
+        Add(ParamList);
+    }
+
+    public FourBytes RVA { get; set; }
+    public TwoBytes ImplFlags { get; set; }
+    public TwoBytes Flags { get; set; }
+    public Node Name { get; set; }
+    public Node Signature { get; set; }
+    public Node ParamList { get; set; }
 }
 
 public class MetadataTable : Sequence
