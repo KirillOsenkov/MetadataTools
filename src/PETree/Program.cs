@@ -117,6 +117,8 @@ public class PEFile : Node
             }
         });
 
+        AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
+
         var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
         if (debugDirectoryAddress.RVA.Value != 0)
         {
@@ -1414,6 +1416,10 @@ public class DebugDirectory : Node
         EmbeddedPortablePdb = 17,
         PdbChecksum = 19,
     }
+}
+
+public class StrongNameSignature : Node
+{
 }
 
 public class CertificateTable : Node
