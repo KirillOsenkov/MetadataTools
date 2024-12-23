@@ -1615,7 +1615,7 @@ public class Node
     {
         int lastChildEnd = LastChildEnd;
         int bytesNeeded = alignment - (lastChildEnd % alignment);
-        if (bytesNeeded == 0)
+        if (bytesNeeded == alignment)
         {
             return null;
         }
