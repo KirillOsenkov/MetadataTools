@@ -32,8 +32,6 @@ class Program
 
         var uncovered = new List<(Span, string)>();
         peFile.ComputeUncoveredSpans(s => uncovered.Add((s, buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
-
-        var node = peFile.Find(uncovered[0].Item1.Start - 1);
     }
 }
 
@@ -194,6 +192,7 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable);
         AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
 
+        TextSection.AddRemainingPadding();
         RsrcSection.AddRemainingPadding();
         RelocSection.AddRemainingPadding();
     }
@@ -1082,6 +1081,14 @@ public class CompressedMetadataTableStream : MetadataStream
                         ParamList = new Node { Length = GetTableIndexSize(Table.Param) }
                     };
                 }
+                else if (tableKind == Table.FieldRVA)
+                {
+                    tableRow = new FieldRVATableRow
+                    {
+                        Length = size,
+                        FieldIndex = new Node { Length = GetTableIndexSize(Table.Field) }
+                    };
+                }
                 else
                 {
                     tableRow = new TableRow { Length = size };
@@ -1091,6 +1098,10 @@ public class CompressedMetadataTableStream : MetadataStream
                 if (tableRow is MethodTableRow methodTableRow)
                 {
                     FindMethod(methodTableRow.RVA.Value);
+                }
+                else if (tableRow is FieldRVATableRow fieldRVATableRow)
+                {
+                    FindField(fieldRVATableRow.RVA.Value);
                 }
             }
 
@@ -1107,8 +1118,7 @@ public class CompressedMetadataTableStream : MetadataStream
             return;
         }
 
-        var peFile = FindAncestor<PEFile>();
-        var textSection = FindAncestor<Section>();
+        var peFile = PEFile;
         var offset = peFile.ResolveVirtualAddress(rva);
 
         byte headerByte = peFile.Buffer.ReadByte(offset);
@@ -1141,6 +1151,24 @@ public class CompressedMetadataTableStream : MetadataStream
             CodeSize = codeSize
         };
         PEFile.Add(tinyMethod);
+    }
+
+    private void FindField(int rva)
+    {
+        if (rva == 0)
+        {
+            return;
+        }
+
+        var peFile = PEFile;
+        var offset = peFile.ResolveVirtualAddress(rva);
+
+        var mappedFieldData = new MappedFieldData
+        {
+            Start = offset,
+            Length = 8
+        };
+        PEFile.Add(mappedFieldData);
     }
 }
 
@@ -1226,6 +1254,10 @@ public class TinyMethod : Node
     public Node IL { get; set; }
 }
 
+public class MappedFieldData : Node
+{
+}
+
 public class Sequence : Node
 {
 }
@@ -1252,6 +1284,18 @@ public class MethodTableRow : TableRow
     public Node Name { get; set; }
     public Node Signature { get; set; }
     public Node ParamList { get; set; }
+}
+
+public class FieldRVATableRow : TableRow
+{
+    public override void Parse()
+    {
+        RVA = AddFourBytes();
+        Add(FieldIndex);
+    }
+
+    public FourBytes RVA { get; set; }
+    public Node FieldIndex { get; set; }
 }
 
 public class MetadataTable : Sequence
