@@ -150,7 +150,7 @@ public class PEFile : Node
                             Length = debugDirectory.SizeOfData.Value
                         };
                     }
-                    
+
                     TextSection.Add(entry);
                 }
             }
@@ -158,15 +158,41 @@ public class PEFile : Node
 
         ResourceTable = AddTable<Node>(OptionalHeader.DataDirectories.ResourceTable);
 
+        ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable);
+
+        if (OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
+            entrypointBytes.Value is int entrypointRVA &&
+            entrypointRVA != 0)
+        {
+            int entryPointOffset = ResolveVirtualAddress(entrypointRVA);
+            RuntimeStartupStub runtimeStartupStub = null;
+            if (OptionalHeader.StandardFields.IsPE32Plus)
+            {
+                entryPointOffset -= 6;
+                runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 16 };
+            }
+            else
+            {
+                entryPointOffset -= 2;
+                runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 8 };
+            }
+
+            Add(runtimeStartupStub);
+            var gap = new Span(ImportTable.End, runtimeStartupStub.Start - ImportTable.End);
+            if (gap.Length > 0 && Buffer.IsZeroFilled(gap))
+            {
+                Add(new Padding { Start = gap.Start, Length = gap.Length });
+            }
+        }
+
         AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.BoundImport);
+        AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport);
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
         AddTable<Node>(OptionalHeader.DataDirectories.ExceptionTable);
         AddTable<Node>(OptionalHeader.DataDirectories.ExportTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.ImportTable);
         AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable);
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.IAT);
+        AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
 
         RsrcSection.AddRemainingPadding();
         RelocSection.AddRemainingPadding();
@@ -196,7 +222,7 @@ public class PEFile : Node
         return null;
     }
 
-    private Node AddTable<T>(DataDirectory dataDirectory, bool isRVA = true) where T : Node, new()
+    private T AddTable<T>(DataDirectory dataDirectory, bool isRVA = true) where T : Node, new()
     {
         if (dataDirectory.Size.Value > 0)
         {
@@ -252,6 +278,7 @@ public class PEFile : Node
     public Node TextSection { get; set; }
     public Node RsrcSection { get; set; }
     public Node RelocSection { get; set; }
+    public ImportTable ImportTable { get; set; }
 
     public int ResolveDataDirectory(DataDirectory dataDirectory)
     {
@@ -1442,6 +1469,22 @@ public class StrongNameSignature : Node
 }
 
 public class CertificateTable : Node
+{
+}
+
+public class BoundImport : Node
+{
+}
+
+public class ImportTable : Node
+{
+}
+
+public class IAT : Node
+{
+}
+
+public class RuntimeStartupStub : Node
 {
 }
 
