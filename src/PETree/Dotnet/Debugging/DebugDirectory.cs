@@ -4,22 +4,28 @@ namespace GuiLabs.PEFile;
 
 public class DebugDirectoryEntry : Node
 {
+    public DebugDirectoryEntry()
+    {
+        Text = "Debug directory entry";
+    }
 }
 
 public class DebugDirectory : Node
 {
     public override void Parse()
     {
-        Characteristics = AddFourBytes();
-        Timestamp = AddFourBytes();
-        MajorVersion = AddTwoBytes();
-        MinorVersion = AddTwoBytes();
-        Type = AddFourBytes();
-        SizeOfData = AddFourBytes();
-        AddressOfRawData = AddFourBytes();
-        PointerToRawData = AddFourBytes();
+        Characteristics = AddFourBytes("Characteristics");
+        Timestamp = AddFourBytes("Timestamp");
+        MajorVersion = AddTwoBytes("Major version");
+        MinorVersion = AddTwoBytes("Minor version");
+        Type = AddFourBytes("Type");
+        SizeOfData = AddFourBytes("Size of data");
+        AddressOfRawData = AddFourBytes("Address of raw data");
+        PointerToRawData = AddFourBytes("Pointer to raw data");
 
         DirectoryType = (ImageDebugType)Type.Value;
+
+        Text = $"{DirectoryType}";
     }
 
     public FourBytes Characteristics { get; set; }

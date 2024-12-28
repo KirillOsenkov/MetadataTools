@@ -4,12 +4,17 @@ namespace GuiLabs.PEFile;
 
 public class EmbeddedPdb : Node
 {
+    public EmbeddedPdb()
+    {
+        Text = "Embedded PDB";
+    }
+
     public override void Parse()
     {
         var length = Length;
 
-        MPDB = AddFourBytes();
-        DecompressedSize = AddFourBytes();
+        MPDB = AddFourBytes("MPDB header signature");
+        DecompressedSize = AddFourBytes("Decompressed size");
         CompressedStream = new CompressedDeflateStream
         {
             Length = length - 8,

@@ -4,13 +4,18 @@ namespace GuiLabs.PEFile;
 
 public class FatMethod : Node
 {
+    public FatMethod()
+    {
+        Text = "Fat method";
+    }
+
     public override void Parse()
     {
-        Header = AddTwoBytes();
-        MaxStack = AddTwoBytes();
-        CodeSize = AddFourBytes();
-        LocalVarSignatureToken = AddFourBytes();
-        ILCode = new Node { Length = CodeSize.Value };
+        Header = AddTwoBytes("Header");
+        MaxStack = AddTwoBytes("Max stack");
+        CodeSize = AddFourBytes("Code size");
+        LocalVarSignatureToken = AddFourBytes("Local variable signature token");
+        ILCode = new Node { Length = CodeSize.Value, Text = "IL instructions" };
         Add(ILCode);
 
         if ((Header.Value & 8) != 0)
@@ -26,7 +31,7 @@ public class FatMethod : Node
         const byte fat_format = 0x40;
         const byte more_sects = 0x80;
 
-        var flags = AddOneByte();
+        var flags = AddOneByte("Flags");
         if ((flags.Value & fat_format) == 0)
         {
             AddSmallSection();
@@ -44,19 +49,15 @@ public class FatMethod : Node
 
     private void AddFatSection()
     {
-        var first = AddOneByte();
-        var second = AddOneByte();
-        var third = AddOneByte();
-        var integer = (third.Value << 16) + (second.Value << 8) + first.Value;
-
-        AddBytes(integer - 4);
+        var integer = AddThreeBytes("Size");
+        AddBytes(integer.Value - 4, "Fat section");
     }
 
     private void AddSmallSection()
     {
-        var count = AddOneByte().Value;
-        AddTwoBytes();
-        AddBytes(count - 4);
+        var count = AddOneByte("Count").Value;
+        AddTwoBytes("Ignored");
+        AddBytes(count - 4, "Small section");
     }
 
     public TwoBytes Header { get; set; }

@@ -4,10 +4,15 @@ namespace GuiLabs.PEFile;
 
 public class TinyMethod : Node
 {
+    public TinyMethod()
+    {
+        Text = "Tiny method";
+    }
+
     public override void Parse()
     {
-        Header = AddOneByte();
-        IL = new Node { Length = CodeSize };
+        Header = AddOneByte("Header");
+        IL = new Node { Length = CodeSize, Text = "IL instructions" };
         Add(IL);
     }
 

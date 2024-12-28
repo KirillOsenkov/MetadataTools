@@ -5,7 +5,6 @@ namespace GuiLabs.PEFile;
 
 public class Section : Node
 {
-    public string Name { get; set; }
 }
 
 public class SectionTable : Node
@@ -13,6 +12,7 @@ public class SectionTable : Node
     public SectionTable(short count)
     {
         Count = count;
+        Text = "Section Table";
     }
 
     public short Count { get; }
@@ -33,18 +33,25 @@ public class SectionTable : Node
 
 public class SectionHeader : Node
 {
+    public SectionHeader()
+    {
+        Text = "Section header";
+    }
+
     public override void Parse()
     {
-        Name = Add<EightByteString>();
-        VirtualSize = AddFourBytes();
-        VirtualAddress = AddFourBytes();
-        SizeOfRawData = AddFourBytes();
-        PointerToRawData = AddFourBytes();
-        PointerToRelocations = AddFourBytes();
-        PointerToLineNumbers = AddFourBytes();
-        NumberOfRelocations = AddTwoBytes();
-        NumberOfLineNumbers = AddTwoBytes();
-        Characteristics = AddFourBytes();
+        Name = Add<EightByteString>("Name");
+        VirtualSize = AddFourBytes("Virtual size");
+        VirtualAddress = AddFourBytes("Virtual address");
+        SizeOfRawData = AddFourBytes("Size of raw data");
+        PointerToRawData = AddFourBytes("Pointer to raw data");
+        PointerToRelocations = AddFourBytes("Pointer to relocations");
+        PointerToLineNumbers = AddFourBytes("Pointer to line numbers");
+        NumberOfRelocations = AddTwoBytes("Number of relocations");
+        NumberOfLineNumbers = AddTwoBytes("Number of line numbers");
+        Characteristics = AddFourBytes("Characteristics");
+
+        Text = $"{Name.Text} section header";
     }
 
     public EightByteString Name { get; set; }

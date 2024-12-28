@@ -23,6 +23,10 @@ public class BytesNode : Node
 
 public class Padding : Node
 {
+    public Padding()
+    {
+        Text = "Padding";
+    }
 }
 
 public class OneByte : BytesNode
@@ -47,6 +51,26 @@ public class TwoBytes : BytesNode
     public short ReadInt16() => Buffer.ReadInt16(Start);
 
     public short Value => ReadInt16();
+}
+
+public class ThreeBytes : BytesNode
+{
+    public ThreeBytes()
+    {
+        Length = 3;
+    }
+
+    public int Value
+    {
+        get
+        {
+            byte first = Buffer.ReadByte(Start);
+            byte second = Buffer.ReadByte(Start + 1);
+            byte third = Buffer.ReadByte(Start + 2);
+            var integer = (third << 16) + (second << 8) + first;
+            return integer;
+        }
+    }
 }
 
 public class FourBytes : BytesNode
@@ -80,15 +104,13 @@ public class EightByteString : EightBytes
     {
         Text = ReadBytes(Start, 8).ReadZeroTerminatedString();
     }
-
-    public string Text { get; set; }
 }
 
 public class ZeroTerminatedStringLengthPrefix32 : Node
 {
     public override void Parse()
     {
-        Length32 = AddFourBytes();
+        Length32 = AddFourBytes("Length");
         ZeroTerminatedString = new ZeroTerminatedString { Length = Length32.Value };
         Add(ZeroTerminatedString);
     }
@@ -115,12 +137,12 @@ public class ZeroTerminatedString : Node
                 String = new Utf8String { Start = Start, Length = chars.Count };
                 Add(String);
 
-                Zero = new OneByte() { Start = offset - 1 };
+                Zero = new OneByte() { Start = offset - 1, Text = "Zero" };
                 Add(Zero);
                 int aligned = Align(chars.Count, offset);
                 if (aligned > offset)
                 {
-                    PaddingZeroes = new Node { Start = offset, Length = aligned - offset };
+                    PaddingZeroes = new Padding { Start = offset, Length = aligned - offset };
                     Add(PaddingZeroes);
                 }
 
@@ -128,7 +150,7 @@ public class ZeroTerminatedString : Node
                 Length = offset - Start;
                 if (requiredLength > Length && PaddingZeroes == null)
                 {
-                    PaddingZeroes = new Node { Start = offset, Length = requiredLength - Length };
+                    PaddingZeroes = new Padding { Start = offset, Length = requiredLength - Length };
                     Add(PaddingZeroes);
                     Length = requiredLength;
                 }
@@ -147,7 +169,6 @@ public class ZeroTerminatedString : Node
         return position;
     }
 
-    public string Text { get; set; }
     public Utf8String String { get; set; }
     public OneByte Zero { get; set; }
     public Node PaddingZeroes { get; set; }
@@ -155,6 +176,10 @@ public class ZeroTerminatedString : Node
 
 public class Utf8String : Node
 {
+    public Utf8String()
+    {
+        Text = "UTF-8 string";
+    }
 }
 
 public class ZeroTerminatedAlignedString : ZeroTerminatedString

@@ -22,6 +22,8 @@ public class Node
 
     public Node Parent { get; set; }
 
+    public string Text { get; set; }
+
     public int LastChildEnd
     {
         get
@@ -156,12 +158,13 @@ public class Node
 
     public T FindAncestor<T>() where T : Node => Parent == null ? null : Parent is T t ? t : Parent.FindAncestor<T>();
 
-    public OneByte AddOneByte() => Add<OneByte>();
-    public TwoBytes AddTwoBytes() => Add<TwoBytes>();
-    public FourBytes AddFourBytes() => Add<FourBytes>();
-    public EightBytes AddEightBytes() => Add<EightBytes>();
+    public OneByte AddOneByte(string text = null) => Add<OneByte>(text);
+    public TwoBytes AddTwoBytes(string text = null) => Add<TwoBytes>(text);
+    public ThreeBytes AddThreeBytes(string text = null) => Add<ThreeBytes>(text);
+    public FourBytes AddFourBytes(string text = null) => Add<FourBytes>(text);
+    public EightBytes AddEightBytes(string text = null) => Add<EightBytes>(text);
 
-    public Node AddBytes(int bytes)
+    public Node AddBytes(int bytes, string text = null)
     {
         if (bytes == 0)
         {
@@ -169,18 +172,28 @@ public class Node
         }
 
         var node = new Node { Length = bytes };
+        if (text != null)
+        {
+            node.Text = text;
+        }
+
         Add(node);
         return node;
     }
 
     public byte[] ReadBytes(int offset, int length) => Buffer.ReadBytes(offset, length);
 
-    public T Add<T>() where T : Node, new()
+    public T Add<T>(string text = null) where T : Node, new()
     {
         int start = LastChildEnd;
         var result = new T();
         result.Buffer = Buffer;
         result.Start = start;
+        if (text != null)
+        {
+            result.Text = text;
+        }
+
         Add(result);
         return result;
     }

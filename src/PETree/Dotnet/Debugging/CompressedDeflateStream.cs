@@ -6,6 +6,11 @@ namespace GuiLabs.PEFile;
 
 public class CompressedDeflateStream : Node
 {
+    public CompressedDeflateStream()
+    {
+        Text = "Compressed deflate stream";
+    }
+
     public override void Parse()
     {
         var bytes = Buffer.ReadBytes(Start, Length);

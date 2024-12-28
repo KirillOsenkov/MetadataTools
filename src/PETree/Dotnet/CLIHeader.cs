@@ -4,20 +4,25 @@ namespace GuiLabs.PEFile;
 
 public class CLIHeader : Node
 {
+    public CLIHeader()
+    {
+        Text = ".NET CLI Header";
+    }
+
     public override void Parse()
     {
-        Cb = AddFourBytes();
-        MajorRuntimeVersion = AddTwoBytes();
-        MinorRuntimeVersion = AddTwoBytes();
-        Metadata = Add<DataDirectory>();
-        Flags = AddFourBytes();
-        EntryPointToken = AddFourBytes();
-        Resources = Add<DataDirectory>();
-        StrongNameSignature = Add<DataDirectory>();
-        CodeManagerTable = AddEightBytes();
-        VTableFixups = AddEightBytes();
-        ExportAddressTableJumps = AddEightBytes();
-        ManagedNativeHeader = AddEightBytes();
+        Cb = AddFourBytes("Cb");
+        MajorRuntimeVersion = AddTwoBytes("Major runtime version");
+        MinorRuntimeVersion = AddTwoBytes("Minor runtime version");
+        Metadata = Add<DataDirectory>("Metadata");
+        Flags = AddFourBytes("Flags");
+        EntryPointToken = AddFourBytes("Entrypoint token");
+        Resources = Add<DataDirectory>("Resources");
+        StrongNameSignature = Add<DataDirectory>("Strong name signature");
+        CodeManagerTable = AddEightBytes("Code manager table");
+        VTableFixups = AddEightBytes("VTable fixups");
+        ExportAddressTableJumps = AddEightBytes("Export address table jumps");
+        ManagedNativeHeader = AddEightBytes("Managed native header");
     }
 
     public FourBytes Cb { get; set; }

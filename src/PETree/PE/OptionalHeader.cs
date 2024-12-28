@@ -6,6 +6,7 @@ public class OptionalHeader : Node
 {
     public OptionalHeader(short sizeOfOptionalHeader)
     {
+        Text = "Optional Header";
         SizeOfOptionalHeader = sizeOfOptionalHeader;
     }
 
@@ -21,6 +22,8 @@ public class OptionalHeader : Node
 
         DataDirectories = new OptionalHeaderDataDirectories(Buffer, WindowsFields.End, isPE32Plus);
         Add(DataDirectories);
+
+        Text = $"Optional header ({(isPE32Plus ? "64-bit" : "32-bit")})";
     }
 
     public short SizeOfOptionalHeader { get; }
@@ -33,24 +36,25 @@ public class OptionalHeaderStandardFields : Node
 {
     public OptionalHeaderStandardFields(ByteBuffer buffer, int start) : base(buffer, start)
     {
+        Text = "Standard fields";
     }
 
     public override void Parse()
     {
-        Magic = AddTwoBytes();
+        Magic = AddTwoBytes("Magic");
         IsPE32Plus = Magic.ReadInt16() == 0x20B;
 
-        MajorLinkerVersion = AddOneByte();
-        MinorLinkerVersion = AddOneByte();
-        SizeOfCode = AddFourBytes();
-        SizeOfInitializedData = AddFourBytes();
-        SizeOfUninitializedData = AddFourBytes();
-        AddressOfEntryPoint = AddFourBytes();
-        BaseOfCode = AddFourBytes();
+        MajorLinkerVersion = AddOneByte("Major linker version");
+        MinorLinkerVersion = AddOneByte("Minor linker version");
+        SizeOfCode = AddFourBytes("Size of code");
+        SizeOfInitializedData = AddFourBytes("Size of initialized data");
+        SizeOfUninitializedData = AddFourBytes("Size of uninitialized data");
+        AddressOfEntryPoint = AddFourBytes("Address of entrypoint");
+        BaseOfCode = AddFourBytes("Base of code");
 
         if (!IsPE32Plus)
         {
-            BaseOfData = AddFourBytes();
+            BaseOfData = AddFourBytes("Base of data");
         }
     }
 
@@ -71,6 +75,7 @@ public class OptionalHeaderWindowsFields : Node
     public OptionalHeaderWindowsFields(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
     {
         IsPE32Plus = isPE32Plus;
+        Text = "Windows fields";
     }
 
     public bool IsPE32Plus { get; }
@@ -78,26 +83,31 @@ public class OptionalHeaderWindowsFields : Node
     public override void Parse()
     {
         ImageBase = AddFourOrEightBytes(IsPE32Plus);
-        SectionAlignment = AddFourBytes();
-        FileAlignment = AddFourBytes();
-        MajorOperationSystemVersion = AddTwoBytes();
-        MinorOperatingSystemVersion = AddTwoBytes();
-        MajorImageVersion = AddTwoBytes();
-        MinorImageVersion = AddTwoBytes();
-        MajorSubsystemVersion = AddTwoBytes();
-        MinorSubsystemVersion = AddTwoBytes();
-        Win32VersionValue = AddFourBytes();
-        SizeOfImage = AddFourBytes();
-        SizeOfHeaders = AddFourBytes();
-        Checksum = AddFourBytes();
-        Subsystem = AddTwoBytes();
-        DllCharacteristics = AddTwoBytes();
+        ImageBase.Text = "Image base";
+        SectionAlignment = AddFourBytes("Section alignment");
+        FileAlignment = AddFourBytes("File alignment");
+        MajorOperationSystemVersion = AddTwoBytes("Major OS version");
+        MinorOperatingSystemVersion = AddTwoBytes("Minor OS version");
+        MajorImageVersion = AddTwoBytes("Major image version");
+        MinorImageVersion = AddTwoBytes("Minor image version");
+        MajorSubsystemVersion = AddTwoBytes("Major subsystem version");
+        MinorSubsystemVersion = AddTwoBytes("Minor subsystem version");
+        Win32VersionValue = AddFourBytes("Win32 version value");
+        SizeOfImage = AddFourBytes("Size of image");
+        SizeOfHeaders = AddFourBytes("Size of headers");
+        Checksum = AddFourBytes("Checksum");
+        Subsystem = AddTwoBytes("Subsystem");
+        DllCharacteristics = AddTwoBytes("Dll characteristics");
         SizeOfStackReserve = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfStackReserve.Text = "Size of stack reserve";
         SizeOfStackCommit = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfStackCommit.Text = "Size of stack commit";
         SizeOfHeapReserve = AddFourOrEightBytes(IsPE32Plus);
+        SizeOfHeapReserve.Text = "Size of heap reserve";
         SizeOfHeapCommit = AddFourOrEightBytes(IsPE32Plus);
-        LoaderFlags = AddFourBytes();
-        NumberOfRvaAndSizes = AddFourBytes();
+        SizeOfHeapCommit.Text = "Size of heap commit";
+        LoaderFlags = AddFourBytes("Loader flags");
+        NumberOfRvaAndSizes = AddFourBytes("Number of RVA and sizes");
     }
 
     public BytesNode ImageBase { get; set; }
@@ -127,26 +137,27 @@ public class OptionalHeaderDataDirectories : Node
 {
     public OptionalHeaderDataDirectories(ByteBuffer buffer, int start, bool isPE32Plus) : base(buffer, start)
     {
+        Text = "Data directories";
     }
 
     public override void Parse()
     {
-        ExportTable = Add<DataDirectory>();
-        ImportTable = Add<DataDirectory>();
-        ResourceTable = Add<DataDirectory>();
-        ExceptionTable = Add<DataDirectory>();
-        CertificateTable = Add<DataDirectory>();
-        BaseRelocationTable = Add<DataDirectory>();
-        Debug = Add<DataDirectory>();
-        Architecture = Add<DataDirectory>();
-        GlobalPtr = Add<DataDirectory>();
-        TLSTable = Add<DataDirectory>();
-        LoadConfigTable = Add<DataDirectory>();
-        BoundImport = Add<DataDirectory>();
-        IAT = Add<DataDirectory>();
-        DelayImportDescriptor = Add<DataDirectory>();
-        CLRRuntimeHeader = Add<DataDirectory>();
-        ReservedZero = Add<DataDirectory>();
+        ExportTable = Add<DataDirectory>("Export table");
+        ImportTable = Add<DataDirectory>("Import table");
+        ResourceTable = Add<DataDirectory>("Resource table");
+        ExceptionTable = Add<DataDirectory>("Exception table");
+        CertificateTable = Add<DataDirectory>("Certificate table");
+        BaseRelocationTable = Add<DataDirectory>("Base relocation table");
+        Debug = Add<DataDirectory>("Debug");
+        Architecture = Add<DataDirectory>("Architecture");
+        GlobalPtr = Add<DataDirectory>("Global Ptr");
+        TLSTable = Add<DataDirectory>("Thread Local Storage table");
+        LoadConfigTable = Add<DataDirectory>("Load config table");
+        BoundImport = Add<DataDirectory>("Bound import");
+        IAT = Add<DataDirectory>("Import Address table");
+        DelayImportDescriptor = Add<DataDirectory>("Delay Import Descriptor");
+        CLRRuntimeHeader = Add<DataDirectory>(".NET CLR runtime header");
+        ReservedZero = Add<DataDirectory>("Reserved zero");
     }
 
     public DataDirectory ExportTable { get; set; }

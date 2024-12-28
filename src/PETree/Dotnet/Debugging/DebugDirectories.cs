@@ -5,6 +5,11 @@ namespace GuiLabs.PEFile;
 
 public class DebugDirectories : Node
 {
+    public DebugDirectories()
+    {
+        Text = "Debug directories";
+    }
+
     public override void Parse()
     {
         int count = Length / 28;

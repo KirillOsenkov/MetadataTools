@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Portions of this file taken from https://github.com/jbevain/cecil
+// Copyright (C) Jb Evain
+
+using System;
 using System.Collections.Generic;
 using GuiLabs.FileFormat;
 
@@ -6,15 +9,21 @@ namespace GuiLabs.PEFile;
 
 public class Metadata : Node
 {
+    public Metadata()
+    {
+        Text = "Metadata";
+    }
+
     public override void Parse()
     {
-        BSJB = AddFourBytes();
-        MajorVersion = AddTwoBytes();
-        MinorVersion = AddTwoBytes();
-        Reserved = AddFourBytes();
+        BSJB = AddFourBytes("BSJB signature");
+        MajorVersion = AddTwoBytes("Major version");
+        MinorVersion = AddTwoBytes("Minor version");
+        Reserved = AddFourBytes("Reserved");
         RuntimeVersion = Add<ZeroTerminatedStringLengthPrefix32>();
-        Flags = AddTwoBytes();
-        StreamCount = AddTwoBytes();
+        RuntimeVersion.Text = "Runtime version";
+        Flags = AddTwoBytes("Flags");
+        StreamCount = AddTwoBytes("Stream count");
 
         var peFile = PEFile;
 
@@ -67,6 +76,7 @@ public class Metadata : Node
             if (metadataStream != null)
             {
                 metadataStream.Name = streamName;
+                metadataStream.Text = $"{streamName} stream";
                 metadataStream.Start = start;
                 metadataStream.Length = length;
                 if (peFile != null)
@@ -129,15 +139,16 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public override void Parse()
     {
-        ReservedZero = AddFourBytes();
-        MajorVersion = AddOneByte();
-        MinorVersion = AddOneByte();
-        HeapSizes = AddOneByte();
-        ReservedByte = AddOneByte();
-        Valid = AddEightBytes();
-        Sorted = AddEightBytes();
+        ReservedZero = AddFourBytes("Reserved zero");
+        MajorVersion = AddOneByte("Major version");
+        MinorVersion = AddOneByte("Minor version");
+        HeapSizes = AddOneByte("Heap sizes bit vector");
+        ReservedByte = AddOneByte("Reserved byte");
+        Valid = AddEightBytes("Valid bit vector");
+        Sorted = AddEightBytes("Sorted bit vector");
 
         TableLengths = Add<Sequence>();
+        TableLengths.Text = "Table lengths";
 
         ulong valid = Valid.ReadUInt64();
 
@@ -148,7 +159,7 @@ public class CompressedMetadataTableStream : MetadataStream
                 continue;
             }
 
-            var tableLength = TableLengths.AddFourBytes();
+            var tableLength = TableLengths.AddFourBytes("Table length");
 
             TableInfos[i].RowCount = tableLength.Value;
         }
@@ -470,6 +481,7 @@ public class CompressedMetadataTableStream : MetadataStream
 
             var table = Add<MetadataTable>();
             table.Name = tableKind;
+            table.Text = $"{tableKind} table";
             for (int row = 0; row < TableInfos[i].RowCount; row++)
             {
                 TableRow tableRow = null;
@@ -478,9 +490,21 @@ public class CompressedMetadataTableStream : MetadataStream
                     tableRow = new MethodTableRow
                     {
                         Length = size,
-                        Name = new Node { Length = stridx_size },
-                        Signature = new Node { Length = blobidx_size },
-                        ParamList = new Node { Length = GetTableIndexSize(Table.Param) }
+                        Name = new Node
+                        {
+                            Length = stridx_size,
+                            Text = "Name"
+                        },
+                        Signature = new Node
+                        {
+                            Length = blobidx_size,
+                            Text = "Signature"
+                        },
+                        ParamList = new Node
+                        {
+                            Length = GetTableIndexSize(Table.Param),
+                            Text = "ParamList"
+                        }
                     };
                 }
                 else if (tableKind == Table.FieldRVA)
@@ -488,12 +512,19 @@ public class CompressedMetadataTableStream : MetadataStream
                     tableRow = new FieldRVATableRow
                     {
                         Length = size,
-                        FieldIndex = new Node { Length = GetTableIndexSize(Table.Field) }
+                        FieldIndex = new Node
+                        {
+                            Length = GetTableIndexSize(Table.Field),
+                            Text = "Field index"
+                        }
                     };
                 }
                 else
                 {
-                    tableRow = new TableRow { Length = size };
+                    tableRow = new TableRow
+                    {
+                        Length = size
+                    };
                 }
 
                 table.Add(tableRow);
@@ -584,11 +615,16 @@ public class TableRow : Node
 
 public class MethodTableRow : TableRow
 {
+    public MethodTableRow()
+    {
+        Text = "Method table row";
+    }
+
     public override void Parse()
     {
-        RVA = AddFourBytes();
-        ImplFlags = AddTwoBytes();
-        Flags = AddTwoBytes();
+        RVA = AddFourBytes("RVA");
+        ImplFlags = AddTwoBytes("Impl flags");
+        Flags = AddTwoBytes("Flags");
         Add(Name);
         Add(Signature);
         Add(ParamList);
@@ -604,9 +640,14 @@ public class MethodTableRow : TableRow
 
 public class FieldRVATableRow : TableRow
 {
+    public FieldRVATableRow()
+    {
+        Text = "Field RVA table row";
+    }
+
     public override void Parse()
     {
-        RVA = AddFourBytes();
+        RVA = AddFourBytes("RVA");
         Add(FieldIndex);
     }
 
@@ -621,8 +662,16 @@ public class MetadataTable : Sequence
 
 public class StrongNameSignature : Node
 {
+    public StrongNameSignature()
+    {
+        Text = "Strong name signature";
+    }
 }
 
 public class RuntimeStartupStub : Node
 {
+    public RuntimeStartupStub()
+    {
+        Text = "Runtime startup stub";
+    }
 }

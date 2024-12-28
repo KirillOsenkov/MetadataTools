@@ -13,15 +13,15 @@ public class PEFile : Node
 
     public override void Parse()
     {
-        DOSHeaderAndStub = new Node();
+        DOSHeaderAndStub = new Node() { Text = "DOS Header and Stub" };
         Add(DOSHeaderAndStub);
 
-        var DOSHeader = new Node { Length = 0x3C };
+        var DOSHeader = new Node { Length = 0x3C, Text = "DOS Header" };
         DOSHeaderAndStub.Add(DOSHeader);
 
-        PEHeaderPointer = DOSHeaderAndStub.AddFourBytes();
+        PEHeaderPointer = DOSHeaderAndStub.AddFourBytes("PE Header Pointer");
 
-        var DOSStub = new Node { Length = 0x40 };
+        var DOSStub = new Node { Length = 0x40, Text = "DOS Stub" };
         DOSHeaderAndStub.Add(DOSStub);
 
         int peHeaderPointer = PEHeaderPointer.Value;
@@ -30,7 +30,7 @@ public class PEFile : Node
             peHeaderPointer = 0x80;
         }
 
-        PEHeader = new PEHeader { Start = peHeaderPointer };
+        PEHeader = new PEHeader { Start = peHeaderPointer, Text = "PE Header" };
         Add(PEHeader);
 
         OptionalHeader = new OptionalHeader(PEHeader.SizeOfOptionalHeader.Value);
@@ -114,7 +114,8 @@ public class PEFile : Node
                         entry = new DebugDirectoryEntry
                         {
                             Start = start,
-                            Length = debugDirectory.SizeOfData.Value
+                            Length = debugDirectory.SizeOfData.Value,
+                            Text = $"{debugDirectory.DirectoryType}"
                         };
                     }
 
@@ -123,9 +124,9 @@ public class PEFile : Node
             }
         }
 
-        ResourceTable = AddTable<Node>(OptionalHeader.DataDirectories.ResourceTable);
+        ResourceTable = AddTable<Node>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
 
-        ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable);
+        ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable, text: "Import table");
 
         if (OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
             entrypointBytes.Value is int entrypointRVA &&
@@ -152,18 +153,20 @@ public class PEFile : Node
             }
         }
 
-        AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable);
-        AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport);
+        AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable, text: "Base reloc table");
+        AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport, text: "Bound import");
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.ExceptionTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.ExportTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.TLSTable);
+        AddTable<Node>(OptionalHeader.DataDirectories.ExceptionTable, text: "Exception table");
+        AddTable<Node>(OptionalHeader.DataDirectories.ExportTable, text: "Export table");
+        AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable, text: "Load config table");
+        AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
         AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
 
         TextSection.AddRemainingPadding();
         RsrcSection.AddRemainingPadding();
         RelocSection.AddRemainingPadding();
+
+        Text = $"PE File ({Length:N0} bytes)";
     }
 
     private Node AddCertificateTable(DataDirectory dataDirectory)
@@ -190,7 +193,7 @@ public class PEFile : Node
         return null;
     }
 
-    private T AddTable<T>(DataDirectory dataDirectory, bool isRVA = true) where T : Node, new()
+    private T AddTable<T>(DataDirectory dataDirectory, bool isRVA = true, string text = null) where T : Node, new()
     {
         if (dataDirectory.Size.Value > 0)
         {
@@ -206,6 +209,11 @@ public class PEFile : Node
                 Start = resolved,
                 Length = dataDirectory.Size.Value
             };
+            if (text != null)
+            {
+                node.Text = text;
+            }
+
             Add(node);
             return node;
         }
@@ -222,7 +230,7 @@ public class PEFile : Node
             {
                 Start = sectionHeader.PointerToRawData.Value,
                 Length = sectionHeader.SizeOfRawData.Value,
-                Name = name
+                Text = name
             };
             Add(section);
             return section;
