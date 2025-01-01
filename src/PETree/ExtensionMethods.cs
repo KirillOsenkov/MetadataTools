@@ -4,6 +4,15 @@ namespace GuiLabs.Utilities;
 
 internal static class ExtensionMethods
 {
+    public static (char upper, char lower) ToHexChars(this byte b)
+    {
+        var upper = b >> 4;
+        var lower = b & 0xF;
+        return (
+            (char)(upper > 9 ? upper + 55 : upper + 48),
+            (char)(lower > 9 ? lower + 55 : lower + 48));
+    }
+
     public static string ToHexString(this byte[] bytes, char separator = ' ')
     {
         if (bytes == null || bytes.Length == 0)

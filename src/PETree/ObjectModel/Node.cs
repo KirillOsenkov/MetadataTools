@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text;
 using GuiLabs.Utilities;
 
 namespace GuiLabs.FileFormat;
@@ -20,9 +21,26 @@ public class Node
     public int Length { get; set; }
     public int End => Start + Length;
 
+    public int OffsetRelativeToParent
+    {
+        get
+        {
+            if (Parent == null)
+            {
+                return Start;
+            }
+
+            return Start - Parent.Start;
+        }
+    }
+
     public Node Parent { get; set; }
 
-    public string Text { get; set; }
+    public string Text
+    {
+        get => field ?? ToString();
+        set => field = value;
+    }
 
     public int LastChildEnd
     {
@@ -182,6 +200,44 @@ public class Node
     }
 
     public byte[] ReadBytes(int offset, int length) => Buffer.ReadBytes(offset, length);
+
+    public string GetHexText(int columns = 4, int columnSize = 8, int byteSpacing = 1, int columnSpacing = 2)
+    {
+        var sb = new StringBuilder();
+
+        var charsPerLine = columns * columnSize;
+
+        for (int i = Start; i < End; i++)
+        {
+            var b = Buffer.ReadByte(i);
+            var chars = b.ToHexChars();
+            sb.Append(chars.upper);
+            sb.Append(chars.lower);
+            int index = (i - Start) % charsPerLine;
+            if (index == charsPerLine - 1)
+            {
+                sb.AppendLine();
+                continue;
+            }
+
+            int spaces = 0;
+            if (index % columnSize == columnSize - 1)
+            {
+                spaces = columnSpacing;
+            }
+            else
+            {
+                spaces = byteSpacing;
+            }
+
+            for (int j = 0; j < spaces; j++)
+            {
+                sb.Append(' ');
+            }
+        }
+
+        return sb.ToString();
+    }
 
     public T Add<T>(string text = null) where T : Node, new()
     {
