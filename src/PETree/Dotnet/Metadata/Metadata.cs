@@ -32,6 +32,8 @@ public class Metadata : Node
 
         var embeddedPdbStreams = new List<MetadataStream>();
 
+        var metadataStreams = new List<MetadataStream>();
+
         for (int i = 0; i < count; i++)
         {
             var stream = Add<MetadataStreamHeader>();
@@ -81,13 +83,19 @@ public class Metadata : Node
                 metadataStream.Length = length;
                 if (peFile != null)
                 {
-                    peFile.TextSection.Add(metadataStream);
+                    metadataStreams.Add(metadataStream);
                 }
                 else
                 {
                     embeddedPdbStreams.Add(metadataStream);
                 }
             }
+        }
+
+        metadataStreams.Reverse();
+        foreach (var metadataStream in metadataStreams)
+        {
+            peFile.TextSection.Add(metadataStream);
         }
 
         for (int i = 0; i < embeddedPdbStreams.Count; i++)
@@ -146,6 +154,14 @@ public class StringsMetadataStream : MetadataStream
 
             Add<ZeroTerminatedString>();
         }
+    }
+
+    public string FindString(int nameOffset)
+    {
+        var start = Start + nameOffset;
+        var str = new ZeroTerminatedString { Start = start, Buffer = Buffer };
+        str.Parse();
+        return str.Text;
     }
 }
 
@@ -505,14 +521,12 @@ public class CompressedMetadataTableStream : MetadataStream
                 TableRow tableRow = null;
                 if (tableKind == Table.Method)
                 {
+                    BytesNode nameNode = stridx_size == 2 ? new TwoBytes() : new FourBytes();
+                    nameNode.Text = "Name";
                     tableRow = new MethodTableRow
                     {
                         Length = size,
-                        Name = new Node
-                        {
-                            Length = stridx_size,
-                            Text = "Name"
-                        },
+                        Name = nameNode,
                         Signature = new Node
                         {
                             Length = blobidx_size,
@@ -548,7 +562,10 @@ public class CompressedMetadataTableStream : MetadataStream
                 table.Add(tableRow);
                 if (tableRow is MethodTableRow methodTableRow)
                 {
-                    FindMethod(methodTableRow.RVA.Value);
+                    var nameBytes = methodTableRow.Name;
+                    int nameOffset = nameBytes.ReadInt16OrInt32();
+                    var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
+                    FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
                 }
                 else if (tableRow is FieldRVATableRow fieldRVATableRow)
                 {
@@ -562,7 +579,7 @@ public class CompressedMetadataTableStream : MetadataStream
         Tables = tables;
     }
 
-    private void FindMethod(int rva)
+    private void FindMethod(int rva, string text)
     {
         if (rva == 0)
         {
@@ -574,26 +591,31 @@ public class CompressedMetadataTableStream : MetadataStream
 
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
+
+        Node method;
         if (twoBits == 2)
         {
-            ReadTinyMethod(headerByte, offset);
+            method = ReadTinyMethod(headerByte, offset);
         }
         else
         {
-            ReadFatMethod(headerByte, offset);
+            method = ReadFatMethod(headerByte, offset);
         }
+
+        method.Text = $"{method.Text}: {text}";
     }
 
-    private void ReadFatMethod(byte header, int offset)
+    private FatMethod ReadFatMethod(byte header, int offset)
     {
         var fatMethod = new FatMethod
         {
             Start = offset,
         };
         PEFile.Add(fatMethod);
+        return fatMethod;
     }
 
-    private void ReadTinyMethod(byte header, int offset)
+    private TinyMethod ReadTinyMethod(byte header, int offset)
     {
         int codeSize = header >> 2;
         var tinyMethod = new TinyMethod
@@ -602,6 +624,7 @@ public class CompressedMetadataTableStream : MetadataStream
             CodeSize = codeSize
         };
         PEFile.Add(tinyMethod);
+        return tinyMethod;
     }
 
     private void FindField(int rva)
@@ -651,7 +674,7 @@ public class MethodTableRow : TableRow
     public FourBytes RVA { get; set; }
     public TwoBytes ImplFlags { get; set; }
     public TwoBytes Flags { get; set; }
-    public Node Name { get; set; }
+    public BytesNode Name { get; set; }
     public Node Signature { get; set; }
     public Node ParamList { get; set; }
 }

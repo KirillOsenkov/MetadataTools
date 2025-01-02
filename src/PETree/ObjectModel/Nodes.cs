@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using GuiLabs.Utilities;
 
 namespace GuiLabs.FileFormat;
@@ -12,6 +13,8 @@ public class BytesNode : Node
     public BytesNode()
     {
     }
+
+    public virtual int ReadInt16OrInt32() => Buffer.ReadInt32(Start);
 
     public override string ToString()
     {
@@ -48,6 +51,8 @@ public class TwoBytes : BytesNode
     }
 
     public short ReadInt16() => Buffer.ReadInt16(Start);
+
+    public override int ReadInt16OrInt32() => ReadInt16();
 
     public short Value => ReadInt16();
 }
@@ -122,7 +127,7 @@ public class ZeroTerminatedString : Node
 {
     public override void Parse()
     {
-        List<char> chars = new();
+        List<byte> bytes = new();
 
         int requiredLength = Length;
 
@@ -133,15 +138,15 @@ public class ZeroTerminatedString : Node
             offset++;
             if (b == 0)
             {
-                if (chars.Count > 0)
+                if (bytes.Count > 0)
                 {
-                    String = new Utf8String { Start = Start, Length = chars.Count };
+                    String = new Utf8String { Start = Start, Length = bytes.Count };
                     Add(String);
                 }
 
                 Zero = new OneByte() { Start = offset - 1, Text = "Zero" };
                 Add(Zero);
-                int aligned = Align(chars.Count, offset);
+                int aligned = Align(bytes.Count, offset);
                 if (aligned > offset)
                 {
                     PaddingZeroes = new Padding { Start = offset, Length = aligned - offset };
@@ -160,10 +165,10 @@ public class ZeroTerminatedString : Node
                 break;
             }
 
-            chars.Add((char)b);
+            bytes.Add(b);
         }
 
-        Text = new string(chars.ToArray());
+        Text = Encoding.UTF8.GetString(bytes.ToArray());
     }
 
     protected virtual int Align(int length, int position)
