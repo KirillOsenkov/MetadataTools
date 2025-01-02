@@ -53,38 +53,10 @@ public class PEFile : Node
         }
 
         int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
-        CLIHeader = new CLIHeader { Start = cliHeader };
-        TextSection.Add(CLIHeader);
-
-        var metadataDirectory = CLIHeader.Metadata;
-        MetadataRVA = metadataDirectory.RVA.Value;
-        MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
-        int metadata = ResolveDataDirectory(metadataDirectory);
-
-        var il = new IL
+        if (cliHeader > 0)
         {
-            Start = CLIHeader.End,
-            Length = metadata - CLIHeader.End
-        };
-        TextSection.Add(il);
-
-        Metadata = new Metadata { Start = metadata };
-        TextSection.Add(Metadata);
-
-        il.ComputeUncoveredSpans(span =>
-        {
-            if (Buffer.IsZeroFilled(span))
-            {
-                var padding = new Padding
-                {
-                    Start = span.Start,
-                    Length = span.Length
-                };
-                il.Add(padding);
-            }
-        });
-
-        AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
+            ReadDotnetMetadata(cliHeader);
+        }
 
         var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
         if (debugDirectoryAddress.RVA.Value != 0)
@@ -167,6 +139,45 @@ public class PEFile : Node
         RelocSection.AddRemainingPadding();
 
         Text = $"PE File ({Length:N0} bytes)";
+    }
+
+    private void ReadDotnetMetadata(int cliHeader)
+    {
+        CLIHeader = new CLIHeader { Start = cliHeader };
+        TextSection.Add(CLIHeader);
+
+        var metadataDirectory = CLIHeader.Metadata;
+        MetadataRVA = metadataDirectory.RVA.Value;
+        MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
+        int metadata = ResolveDataDirectory(metadataDirectory);
+
+        if (metadata > 0)
+        {
+            var il = new IL
+            {
+                Start = CLIHeader.End,
+                Length = metadata - CLIHeader.End
+            };
+            TextSection.Add(il);
+
+            Metadata = new Metadata { Start = metadata };
+            TextSection.Add(Metadata);
+
+            il.ComputeUncoveredSpans(span =>
+            {
+                if (Buffer.IsZeroFilled(span))
+                {
+                    var padding = new Padding
+                    {
+                        Start = span.Start,
+                        Length = span.Length
+                    };
+                    il.Add(padding);
+                }
+            });
+        }
+
+        AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
     }
 
     private Node AddCertificateTable(DataDirectory dataDirectory)

@@ -602,7 +602,13 @@ public class CompressedMetadataTableStream : MetadataStream
             method = ReadFatMethod(headerByte, offset);
         }
 
-        method.Text = $"{method.Text}: {text}";
+        var codeSize = method switch
+        {
+            FatMethod f => f.CodeSize.Value,
+            TinyMethod t => t.CodeSize,
+            _ => 0
+        };
+        method.Text = $"{method.Text}: {text} ({codeSize} bytes)";
     }
 
     private FatMethod ReadFatMethod(byte header, int offset)
