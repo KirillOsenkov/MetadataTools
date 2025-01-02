@@ -1,6 +1,4 @@
-﻿using GuiLabs.FileFormat;
-
-namespace GuiLabs.PEFile;
+﻿namespace GuiLabs.FileFormat.PE.Dotnet;
 
 public class FatMethod : Node
 {

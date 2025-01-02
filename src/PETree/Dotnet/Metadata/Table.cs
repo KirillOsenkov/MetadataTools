@@ -1,4 +1,4 @@
-﻿namespace GuiLabs.PEFile;
+﻿namespace GuiLabs.FileFormat.PE.Dotnet;
 
 public enum Table : byte
 {

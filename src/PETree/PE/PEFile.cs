@@ -1,8 +1,8 @@
 ﻿using System.Linq;
-using GuiLabs.FileFormat;
+using GuiLabs.FileFormat.PE.Dotnet;
 using GuiLabs.Utilities;
 
-namespace GuiLabs.PEFile;
+namespace GuiLabs.FileFormat.PE;
 
 public class PEFile : Node
 {

@@ -36,10 +36,11 @@ public class Node
 
     public Node Parent { get; set; }
 
+    private string text;
     public string Text
     {
-        get => field ?? ToString();
-        set => field = value;
+        get => text ?? ToString();
+        set => text = value;
     }
 
     public int LastChildEnd

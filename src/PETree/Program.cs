@@ -2,9 +2,8 @@
 using System.IO;
 using System.Linq;
 using GuiLabs.FileFormat;
+using GuiLabs.FileFormat.PE;
 using GuiLabs.Utilities;
-
-namespace GuiLabs.PEFile;
 
 class Program
 {

@@ -1,8 +1,7 @@
 ﻿using System.IO;
 using System.IO.Compression;
-using GuiLabs.FileFormat;
 
-namespace GuiLabs.PEFile;
+namespace GuiLabs.FileFormat.PE.Dotnet;
 
 public class CompressedDeflateStream : Node
 {

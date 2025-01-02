@@ -1,6 +1,4 @@
-﻿using GuiLabs.FileFormat;
-
-namespace GuiLabs.PEFile;
+﻿namespace GuiLabs.FileFormat.PE;
 
 public class OptionalHeader : Node
 {

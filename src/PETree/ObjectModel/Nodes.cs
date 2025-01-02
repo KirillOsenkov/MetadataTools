@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using GuiLabs.PEFile;
 using GuiLabs.Utilities;
 
 namespace GuiLabs.FileFormat;
@@ -134,8 +133,11 @@ public class ZeroTerminatedString : Node
             offset++;
             if (b == 0)
             {
-                String = new Utf8String { Start = Start, Length = chars.Count };
-                Add(String);
+                if (chars.Count > 0)
+                {
+                    String = new Utf8String { Start = Start, Length = chars.Count };
+                    Add(String);
+                }
 
                 Zero = new OneByte() { Start = offset - 1, Text = "Zero" };
                 Add(Zero);

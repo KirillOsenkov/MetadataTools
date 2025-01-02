@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
-using GuiLabs.FileFormat;
 
-namespace GuiLabs.PEFile;
+namespace GuiLabs.FileFormat.PE.Dotnet;
 
 public class DebugDirectories : Node
 {

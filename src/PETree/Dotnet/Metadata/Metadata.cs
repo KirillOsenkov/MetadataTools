@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
-using GuiLabs.FileFormat;
+using GuiLabs.Utilities;
 
-namespace GuiLabs.PEFile;
+namespace GuiLabs.FileFormat.PE.Dotnet;
 
 public class Metadata : Node
 {
@@ -54,7 +54,7 @@ public class Metadata : Node
             }
             else if (streamName == "#Strings")
             {
-                metadataStream = StringsTableStream = new MetadataStream();
+                metadataStream = StringsTableStream = new StringsMetadataStream();
             }
             else if (streamName == "#Blob")
             {
@@ -113,7 +113,7 @@ public class Metadata : Node
 
     public CompressedMetadataTableStream CompressedMetadataTableStream { get; set; }
     public UncompressedMetadataTableStream UncompressedMetadataTableStream { get; set; }
-    public MetadataStream StringsTableStream { get; set; }
+    public StringsMetadataStream StringsTableStream { get; set; }
     public MetadataStream GuidTableStream { get; set; }
     public MetadataStream BlobTableStream { get; set; }
     public MetadataStream UserStringsTableStream { get; set; }
@@ -129,6 +129,24 @@ public struct TableInfo
 {
     public int RowSize;
     public int RowCount;
+}
+
+public class StringsMetadataStream : MetadataStream
+{
+    public override void Parse()
+    {
+        while (LastChildEnd < End)
+        {
+            var remainingSpan = new Span(LastChildEnd, End - LastChildEnd);
+            if (Buffer.IsZeroFilled(remainingSpan))
+            {
+                AddRemainingPadding();
+                break;
+            }
+
+            Add<ZeroTerminatedString>();
+        }
+    }
 }
 
 public class CompressedMetadataTableStream : MetadataStream
