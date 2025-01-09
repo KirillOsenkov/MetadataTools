@@ -77,6 +77,7 @@ public partial class Checker
     public class CustomAssemblyResolver : BaseAssemblyResolver
     {
         private readonly Checker checker;
+        private readonly Dictionary<string, AssemblyDefinition> resolutionCache = new();
 
         public CustomAssemblyResolver(Checker checker)
         {
@@ -86,8 +87,16 @@ public partial class Checker
         public override AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
         {
             RuntimeHelpers.EnsureSufficientExecutionStack(); // see https://github.com/KirillOsenkov/MetadataTools/issues/4
-            var resolved = checker.Resolve(name);
+
+            if (resolutionCache.TryGetValue(name.FullName, out var resolved))
+            {
+                return resolved;
+            }
+
+            resolved = checker.Resolve(name);
             resolved = resolved ?? base.Resolve(name, parameters);
+            resolutionCache[name.FullName] = resolved;
+
             return resolved;
         }
     }
