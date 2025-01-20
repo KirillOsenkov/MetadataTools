@@ -6,6 +6,8 @@ namespace GuiLabs.FileFormat.PE;
 
 public class PEFile : Node
 {
+    public string FilePath { get; set; }
+
     public PEFile(ByteBuffer buffer)
     {
         Buffer = buffer;
