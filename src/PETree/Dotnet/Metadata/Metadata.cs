@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using GuiLabs.Utilities;
 
 namespace GuiLabs.FileFormat.PE.Dotnet;
@@ -68,9 +69,13 @@ public class Metadata : Node
             }
             else if (streamName == "#US")
             {
-                metadataStream = UserStringsTableStream = new MetadataStream();
+                metadataStream = UserStringsTableStream = new UserStringsMetadataStream();
             }
-            else if (streamName == "#JTD" || streamName == "#Pdb")
+            else if (streamName == "#Pdb")
+            {
+                metadataStream = PdbStream = new PdbStream();
+            }
+            else if (streamName == "#JTD")
             {
                 metadataStream = new MetadataStream();
             }
@@ -124,7 +129,8 @@ public class Metadata : Node
     public StringsMetadataStream StringsTableStream { get; set; }
     public MetadataStream GuidTableStream { get; set; }
     public MetadataStream BlobTableStream { get; set; }
-    public MetadataStream UserStringsTableStream { get; set; }
+    public UserStringsMetadataStream UserStringsTableStream { get; set; }
+    public PdbStream PdbStream { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
 }
 
@@ -165,6 +171,75 @@ public class StringsMetadataStream : MetadataStream
     }
 }
 
+public class UserStringsMetadataStream : MetadataStream
+{
+    public override void Parse()
+    {
+        Zero = AddOneByte("Zero byte");
+        while (LastChildEnd < End)
+        {
+            Padding = AddRemainingPadding();
+            if (Padding != null)
+            {
+                break;
+            }
+
+            Add<UserString>();
+        }
+    }
+
+    public OneByte Zero { get; set; }
+    public Padding Padding { get; set; }
+}
+
+public class UserString : Node
+{
+    public override void Parse()
+    {
+        byte b = Buffer.ReadByte(Start);
+        int length = 0;
+        if ((b & 0x80) == 0)
+        {
+            length = b;
+            CompressedByteLength = AddOneByte($"Byte length: {b}");
+        }
+        else
+        {
+            if ((b & 0x40) == 0)
+            {
+                var b2 = Buffer.ReadByte(Start + 1);
+                length = (b & ~0x80) << 8 | b2;
+                CompressedByteLength = AddTwoBytes($"Byte length: {length}");
+            }
+            else
+            {
+                var b1 = b;
+                var b2 = Buffer.ReadByte(Start + 1);
+                var b3 = Buffer.ReadByte(Start + 2);
+                var b4 = Buffer.ReadByte(Start + 3);
+                length = (b & ~0xc0) << 24 | b2 << 16 | b3 << 8 | b4;
+                CompressedByteLength = AddFourBytes($"Byte length: {length}");
+            }
+        }
+
+        if (length > 0)
+        {
+            length -= 1;
+            var bytes = Buffer.ReadBytes(CompressedByteLength.End, length);
+            
+            var str = Encoding.Unicode.GetString(bytes);
+            Text = str;
+            Utf16Chars = AddBytes(length, "Utf-16 chars");
+
+            Add<OneByte>("Final byte");
+        }
+    }
+
+    public BytesNode CompressedByteLength { get; set; }
+    public Node Utf16Chars { get; set; }
+    public OneByte FinalByte { get; set; }
+}
+
 public class CompressedMetadataTableStream : MetadataStream
 {
     public const int MaxTables = 58;
@@ -181,8 +256,7 @@ public class CompressedMetadataTableStream : MetadataStream
         Valid = AddEightBytes("Valid bit vector");
         Sorted = AddEightBytes("Sorted bit vector");
 
-        TableLengths = Add<Sequence>();
-        TableLengths.Text = "Table lengths";
+        TableLengths = Add<Sequence>("Table lengths");
 
         ulong valid = Valid.ReadUInt64();
 
@@ -193,9 +267,9 @@ public class CompressedMetadataTableStream : MetadataStream
                 continue;
             }
 
-            var tableLength = TableLengths.AddFourBytes("Table length");
-
+            var tableLength = TableLengths.AddFourBytes();
             TableInfos[i].RowCount = tableLength.Value;
+            tableLength.Text = $"{(Table)i} table length: {tableLength.Value}";
         }
 
         PEFile = FindAncestor<PEFile>();

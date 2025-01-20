@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using GuiLabs.Utilities;
@@ -100,6 +101,16 @@ public class EightBytes : BytesNode
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
     public int ReadInt32() => Buffer.ReadInt32(Start);
     public ulong ReadUInt64() => Buffer.ReadUInt64(Start);
+}
+
+public class SixteenBytes : BytesNode
+{
+    public SixteenBytes()
+    {
+        Length = 16;
+    }
+
+    public Guid ReadGuid() => new Guid(Buffer.ReadBytes(Start, 16));
 }
 
 public class EightByteString : EightBytes
