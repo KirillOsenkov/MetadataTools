@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using GuiLabs.Utilities;
 
@@ -61,11 +62,11 @@ public class Metadata : Node
             }
             else if (streamName == "#Blob")
             {
-                metadataStream = BlobTableStream = new MetadataStream();
+                metadataStream = BlobTableStream = new BlobMetadataStream();
             }
             else if (streamName == "#GUID")
             {
-                metadataStream = GuidTableStream = new MetadataStream();
+                metadataStream = GuidTableStream = new GuidMetadataStream();
             }
             else if (streamName == "#US")
             {
@@ -111,6 +112,33 @@ public class Metadata : Node
         StreamHeaders = list;
 
         CompressedMetadataTableStream?.AddRemainingPadding();
+
+        if (CompressedMetadataTableStream != null)
+        {
+            var guidStream = GuidTableStream;
+            var blobStream = BlobTableStream;
+
+            var customDebugInfoTable = CompressedMetadataTableStream.Tables.FirstOrDefault(t => t.Name == Table.CustomDebugInformation);
+            if (customDebugInfoTable != null && guidStream != null && blobStream != null)
+            {
+                foreach (var row in customDebugInfoTable.Children.OfType<CustomDebugInformationTableRow>())
+                {
+                    int guidHandle = row.GuidHandle.ReadInt16OrInt32();
+                    int blobHandle = row.BlobHandle.ReadInt16OrInt32();
+                    var customText = guidStream.GetCustomText(guidHandle);
+                    if (customText.Contains("CompilationOptions"))
+                    {
+                        var blob = (Blob)blobStream.Children.Where(b => b.Start - blobStream.Start == blobHandle).FirstOrDefault();
+                        var bytes = blob.Bytes;
+                        int start = bytes.Start;
+                        int length = bytes.Length;
+                        blob.Children.Remove(bytes);
+                        blob.Bytes = blob.Add(new CompilationOptions { Length = length });
+                        blob.Text = customText;
+                    }
+                }
+            }
+        }
     }
 
     public PEFile PEFile => FindAncestor<PEFile>();
@@ -127,11 +155,35 @@ public class Metadata : Node
     public CompressedMetadataTableStream CompressedMetadataTableStream { get; set; }
     public UncompressedMetadataTableStream UncompressedMetadataTableStream { get; set; }
     public StringsMetadataStream StringsTableStream { get; set; }
-    public MetadataStream GuidTableStream { get; set; }
-    public MetadataStream BlobTableStream { get; set; }
+    public GuidMetadataStream GuidTableStream { get; set; }
+    public BlobMetadataStream BlobTableStream { get; set; }
     public UserStringsMetadataStream UserStringsTableStream { get; set; }
     public PdbStream PdbStream { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
+}
+
+public class CompilationOptions : Node
+{
+    public override void Parse()
+    {
+        while (LastChildEnd < End)
+        {
+            var keyValue = Add<Utf8KeyValue>();
+            keyValue.Text = $"{keyValue.Key.Text} = {keyValue.Value.Text}";
+        }
+    }
+}
+
+public class Utf8KeyValue : Node
+{
+    public override void Parse()
+    {
+        Key = Add<ZeroTerminatedString>("Key");
+        Value = Add<ZeroTerminatedString>("Value");
+    }
+
+    public ZeroTerminatedString Key { get; set; }
+    public ZeroTerminatedString Value { get; set; }
 }
 
 public class MetadataStream : Node
@@ -196,32 +248,8 @@ public class UserString : Node
 {
     public override void Parse()
     {
-        byte b = Buffer.ReadByte(Start);
-        int length = 0;
-        if ((b & 0x80) == 0)
-        {
-            length = b;
-            CompressedByteLength = AddOneByte($"Byte length: {b}");
-        }
-        else
-        {
-            if ((b & 0x40) == 0)
-            {
-                var b2 = Buffer.ReadByte(Start + 1);
-                length = (b & ~0x80) << 8 | b2;
-                CompressedByteLength = AddTwoBytes($"Byte length: {length}");
-            }
-            else
-            {
-                var b1 = b;
-                var b2 = Buffer.ReadByte(Start + 1);
-                var b3 = Buffer.ReadByte(Start + 2);
-                var b4 = Buffer.ReadByte(Start + 3);
-                length = (b & ~0xc0) << 24 | b2 << 16 | b3 << 8 | b4;
-                CompressedByteLength = AddFourBytes($"Byte length: {length}");
-            }
-        }
-
+        CompressedByteLength = Add<CompressedInteger>("Byte length");
+        int length = CompressedByteLength.Value;
         if (length > 0)
         {
             length -= 1;
@@ -235,9 +263,136 @@ public class UserString : Node
         }
     }
 
-    public BytesNode CompressedByteLength { get; set; }
+    public CompressedInteger CompressedByteLength { get; set; }
     public Node Utf16Chars { get; set; }
     public OneByte FinalByte { get; set; }
+}
+
+public class CompressedInteger : BytesNode
+{
+    public override void Parse()
+    {
+        byte b = Buffer.ReadByte(Start);
+        int value = 0;
+        if ((b & 0x80) == 0)
+        {
+            value = b;
+            CompressedByteLength = AddOneByte($"{b}");
+        }
+        else
+        {
+            if ((b & 0x40) == 0)
+            {
+                var b2 = Buffer.ReadByte(Start + 1);
+                value = (b & ~0x80) << 8 | b2;
+                CompressedByteLength = AddTwoBytes($"{value}");
+            }
+            else
+            {
+                var b1 = b;
+                var b2 = Buffer.ReadByte(Start + 1);
+                var b3 = Buffer.ReadByte(Start + 2);
+                var b4 = Buffer.ReadByte(Start + 3);
+                value = (b & ~0xc0) << 24 | b2 << 16 | b3 << 8 | b4;
+                CompressedByteLength = AddFourBytes($"{value}");
+            }
+        }
+
+        Value = value;
+    }
+
+    public BytesNode CompressedByteLength { get; set; }
+    public int Value { get; set; }
+
+    public override int ReadInt16OrInt32()
+    {
+        return Value;
+    }
+}
+
+public class GuidMetadataStream : MetadataStream
+{
+    public List<string> guidText = new();
+
+    public override void Parse()
+    {
+        int index = 1;
+        while (LastChildEnd < End)
+        {
+            var node = Add<SixteenBytes>();
+            int offset = node.Start - Start;
+            var guid = node.ReadGuid();
+            string customText = null;
+            node.Text = guid.ToString("D").ToUpperInvariant();
+            if (KnownGuids.TryGetValue(guid, out var text))
+            {
+                customText = $"{text} ({guid.ToString("D").ToUpperInvariant()})";
+                node.Text = customText;
+            }
+
+            guidText.Add(customText);
+
+            index++;
+        }
+    }
+
+    public string GetCustomText(int indexOneBased)
+    {
+        return guidText[indexOneBased - 1];
+    }
+
+    public static Dictionary<Guid, string> KnownGuids = new()
+    {
+        [Guid.Parse("54fd2ac5-e925-401a-9c2a-f94f171072f8")] = "AsyncMethodSteppingInformationBlob",
+        [Guid.Parse("7e4d4708-096e-4c5c-aeda-cb10ba6a740d")] = "CompilationMetadataReferences",
+        [Guid.Parse("b5feec05-8cd0-4a83-96da-466284bb4bd8")] = "CompilationOptions",
+        [Guid.Parse("58b2eab6-209f-4e4e-a22c-b2d0f910c782")] = "DefaultNamespace",
+        [Guid.Parse("83c563c4-b4f3-47d5-b824-ba5441477ea8")] = "DynamicLocalVariables",
+        [Guid.Parse("0e8a571b-6926-466e-b4ad-8ab04611f5fe")] = "EmbeddedSource",
+        [Guid.Parse("a643004c-0240-496f-a783-30d64f4979de")] = "EncLambdaAndClosureMap",
+        [Guid.Parse("755f52a8-91c5-45be-b4b8-209571e552bd")] = "EncLocalSlotMap",
+        [Guid.Parse("8b78cd68-2ede-420b-980b-e15884b8aaa3")] = "EncStateMachineStateMap",
+        [Guid.Parse("9d40ace1-c703-4d0e-bf41-7243060a8fb5")] = "PrimaryConstructorInformationBlob",
+        [Guid.Parse("cc110556-a091-4d38-9fec-25ab9a351a6a")] = "SourceLink",
+        [Guid.Parse("6da9a61e-f8c7-4874-be62-68bc5630df71")] = "StateMachineHoistedLocalScopes",
+        [Guid.Parse("ed9fdf71-8879-4747-8ed3-fe5ede3ce710")] = "TupleElementNames",
+        [Guid.Parse("932e74bc-dba9-4478-8d46-0f32a7bab3d3")] = "TypeDefinitionDocuments"
+    };
+}
+
+public class BlobMetadataStream : MetadataStream
+{
+    public override void Parse()
+    {
+        while (LastChildEnd < End)
+        {
+            Padding = AddRemainingPadding();
+            if (Padding != null)
+            {
+                break;
+            }
+
+            Add<Blob>();
+        }
+    }
+
+    public Padding Padding { get; set; }
+}
+
+public class Blob : BytesNode
+{
+    public override void Parse()
+    {
+        CompressedByteLength = Add<CompressedInteger>("Length");
+        int length = CompressedByteLength.Value;
+        if (length > 0)
+        {
+            Bytes = AddBytes(length, "Bytes");
+        }
+    }
+
+    public CompressedInteger CompressedByteLength { get; set; }
+    public Node Bytes { get; set; }
 }
 
 public class CompressedMetadataTableStream : MetadataStream
@@ -625,6 +780,28 @@ public class CompressedMetadataTableStream : MetadataStream
                         }
                     };
                 }
+                else if (tableKind == Table.CustomDebugInformation)
+                {
+                    tableRow = new CustomDebugInformationTableRow
+                    {
+                        Length = size,
+                        ParentHandle = new Node
+                        {
+                            Length = GetCodedIndexSize(CodedIndex.HasCustomDebugInformation),
+                            Text = "Parent handle"
+                        },
+                        GuidHandle = new BytesNode
+                        {
+                            Length = guididx_size,
+                            Text = "Guid handle"
+                        },
+                        BlobHandle = new BytesNode
+                        {
+                            Length = blobidx_size,
+                            Text = "Blob handle"
+                        }
+                    };
+                }
                 else
                 {
                     tableRow = new TableRow
@@ -774,6 +951,25 @@ public class FieldRVATableRow : TableRow
 
     public FourBytes RVA { get; set; }
     public Node FieldIndex { get; set; }
+}
+
+public class CustomDebugInformationTableRow : TableRow
+{
+    public CustomDebugInformationTableRow()
+    {
+        Text = "Custom Debug Information table row";
+    }
+
+    public override void Parse()
+    {
+        Add(ParentHandle);
+        Add(GuidHandle);
+        Add(BlobHandle);
+    }
+
+    public Node ParentHandle { get; set; }
+    public BytesNode GuidHandle { get; set; }
+    public BytesNode BlobHandle { get; set; }
 }
 
 public class MetadataTable : Sequence

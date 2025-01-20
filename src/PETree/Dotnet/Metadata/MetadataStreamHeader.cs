@@ -12,7 +12,7 @@ public class MetadataStreamHeader : Node
         Offset = AddFourBytes("Offset");
         Size = AddFourBytes("Size");
         Name = Add<ZeroTerminatedAlignedString>();
-        Text = $"{Name.Text} metadata stream";
+        Text = $"{Name.Text} stream header";
     }
 
     public FourBytes Offset { get; set; }

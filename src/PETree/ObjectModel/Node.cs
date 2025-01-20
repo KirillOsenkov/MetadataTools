@@ -97,7 +97,7 @@ public class Node
         return this;
     }
 
-    public virtual void Add(Node node)
+    public virtual Node Add(Node node)
     {
         bool inserted = false;
         if (node.Start != 0)
@@ -113,8 +113,8 @@ public class Node
                 }
                 else if (node.Start >= child.Start && node.Start < child.End)
                 {
-                    child.Add(node);
-                    return;
+                    var result = child.Add(node);
+                    return result;
                 }
             }
         }
@@ -142,6 +142,8 @@ public class Node
         {
             Length = newLength;
         }
+
+        return node;
     }
 
     public Padding AddPadding(int length)

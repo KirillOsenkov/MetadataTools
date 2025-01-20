@@ -15,7 +15,7 @@ public class BytesNode : Node
     {
     }
 
-    public virtual int ReadInt16OrInt32() => Buffer.ReadInt32(Start);
+    public virtual int ReadInt16OrInt32() => Length == 2 ? Buffer.ReadInt16(Start) : Buffer.ReadInt32(Start);
 
     public override string ToString()
     {
