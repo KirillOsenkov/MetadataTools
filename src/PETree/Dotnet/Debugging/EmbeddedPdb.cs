@@ -26,15 +26,15 @@ public class EmbeddedPdb : Node
         var bytes = Buffer.ReadBytes(CompressedStream.Start, CompressedStream.Length);
         var compressedMemoryStream = new MemoryStream(bytes);
         var deflateStream = new DeflateStream(compressedMemoryStream, CompressionMode.Decompress, leaveOpen: true);
-        var decompressedStream = new MemoryStream(decompressedSize);
-        deflateStream.CopyTo(decompressedStream);
+        DecompressedStream = new MemoryStream(decompressedSize);
+        deflateStream.CopyTo(DecompressedStream);
 
-        var metadataBuffer = new StreamBuffer(decompressedStream);
+        var metadataBuffer = new StreamBuffer(DecompressedStream);
         Metadata = new Metadata
         {
             Buffer = metadataBuffer,
             Start = 0,
-            Length = (int)decompressedStream.Length,
+            Length = (int)DecompressedStream.Length,
             EmbeddedPdb = this
         };
         Metadata.Parse();
@@ -43,5 +43,6 @@ public class EmbeddedPdb : Node
     public FourBytes MPDB { get; set; }
     public FourBytes DecompressedSize { get; set; }
     public CompressedDeflateStream CompressedStream { get; set; }
+    public MemoryStream DecompressedStream { get; set; }
     public Metadata Metadata { get; set; }
 }
