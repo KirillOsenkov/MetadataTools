@@ -8,6 +8,27 @@ public class DebugDirectoryEntry : Node
     }
 }
 
+public class RSDS : DebugDirectoryEntry
+{
+    public RSDS()
+    {
+        Text = "CodeView RSDS";
+    }
+
+    public override void Parse()
+    {
+        RSDSSignature = AddFourBytes("RSDS Signature");
+        Guid = Add<SixteenBytes>("Guid");
+        Age = AddFourBytes("Age");
+        Path = Add<ZeroTerminatedString>("Path");
+    }
+
+    public FourBytes RSDSSignature { get; set; }
+    public SixteenBytes Guid { get; set; }
+    public FourBytes Age { get; set; }
+    public ZeroTerminatedString Path { get; set; }
+}
+
 public class DebugDirectory : Node
 {
     public override void Parse()

@@ -15,18 +15,12 @@ public class PEFile : Node
 
     public override void Parse()
     {
-        DOSHeaderAndStub = new Node() { Text = "DOS Header and Stub" };
-        Add(DOSHeaderAndStub);
-
-        var DOSHeader = new Node { Length = 0x3C, Text = "DOS Header" };
-        DOSHeaderAndStub.Add(DOSHeader);
-
-        PEHeaderPointer = DOSHeaderAndStub.AddFourBytes("PE Header Pointer");
+        DOSHeader = Add<DOSHeader>("DOS Header");
 
         var DOSStub = new Node { Length = 0x40, Text = "DOS Stub" };
-        DOSHeaderAndStub.Add(DOSStub);
+        Add(DOSStub);
 
-        int peHeaderPointer = PEHeaderPointer.Value;
+        int peHeaderPointer = DOSHeader.CoffHeaderPointer.Value;
         if (peHeaderPointer == 0)
         {
             peHeaderPointer = 0x80;
@@ -83,6 +77,10 @@ public class PEFile : Node
                         };
                         entry = EmbeddedPdb;
                     }
+                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.CodeView && Buffer.ReadUInt32(start) == 0x53445352)
+                    {
+                        entry = RSDS = new RSDS() { Start = start };
+                    }
                     else
                     {
                         entry = new DebugDirectoryEntry
@@ -98,7 +96,7 @@ public class PEFile : Node
             }
         }
 
-        ResourceTable = AddTable<Node>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
+        ResourceTable = AddTable<ResourceTable>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
 
         ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable, text: "Import table");
 
@@ -252,8 +250,7 @@ public class PEFile : Node
         return null;
     }
 
-    public Node DOSHeaderAndStub { get; set; }
-    public FourBytes PEHeaderPointer { get; set; }
+    public DOSHeader DOSHeader { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
     public SectionTable SectionTable { get; set; }
@@ -263,6 +260,7 @@ public class PEFile : Node
     public int MetadataRVA { get; set; }
     public DebugDirectories DebugDirectories { get; set; }
     public EmbeddedPdb EmbeddedPdb { get; set; }
+    public RSDS RSDS { get; set; }
     public Node ResourceTable { get; set; }
     public Node TextSection { get; set; }
     public Node RsrcSection { get; set; }
@@ -312,4 +310,50 @@ public class PEFile : Node
 
         return null;
     }
+}
+
+public class DOSHeader : Node
+{
+    public override void Parse()
+    {
+        MZSignature = AddTwoBytes("MZ Signature");
+        ExtraPageSize = AddTwoBytes("Extra page size");
+        NumberOfPages = AddTwoBytes("Number of pages");
+        Relocations = AddTwoBytes("Relocations");
+        HeaderSizeInParagraphs = AddTwoBytes("Header size in paragraphs");
+        MinimumAllocatedParagraphs = AddTwoBytes("Minimum allocated paragraphs");
+        MaximumAllocatedParagraphs = AddTwoBytes("Maximum allocated paragraphs");
+        InitialSSValue = AddTwoBytes("Initial SS value");
+        InitialRelativeSPValue = AddTwoBytes("Initial relative SP value");
+        Checksum = AddTwoBytes("Checksum");
+        InitialRelativeIPValue = AddTwoBytes("Initial relative IP value");
+        InitialCSValue = AddTwoBytes("Initial CS value");
+        RelocationTablePointer = AddTwoBytes("Relocation table pointer");
+        OverlayNumber = AddTwoBytes("Overlay number");
+        ReservedWords = AddEightBytes("Reserved words");
+        OEMIdentifier = AddTwoBytes("OEM Identifier");
+        OEMInformation = AddTwoBytes("OEM Information");
+        OtherReservedWords = AddBytes(20, "Other reserved words");
+        CoffHeaderPointer = AddFourBytes("COFF Header pointer");
+    }
+
+    public TwoBytes MZSignature { get; set; }
+    public TwoBytes ExtraPageSize { get; set; }
+    public TwoBytes NumberOfPages { get; set; }
+    public TwoBytes Relocations { get; set; }
+    public TwoBytes HeaderSizeInParagraphs { get; set; }
+    public TwoBytes MinimumAllocatedParagraphs { get; set; }
+    public TwoBytes MaximumAllocatedParagraphs { get; set; }
+    public TwoBytes InitialSSValue { get; set; }
+    public TwoBytes InitialRelativeSPValue { get; set; }
+    public TwoBytes Checksum { get; set; }
+    public TwoBytes InitialRelativeIPValue { get; set; }
+    public TwoBytes InitialCSValue { get; set; }
+    public TwoBytes RelocationTablePointer { get; set; }
+    public TwoBytes OverlayNumber { get; set; }
+    public EightBytes ReservedWords { get; set; }
+    public TwoBytes OEMIdentifier { get; set; }
+    public TwoBytes OEMInformation { get; set; }
+    public Node OtherReservedWords { get; set; }
+    public FourBytes CoffHeaderPointer { get; set; }
 }

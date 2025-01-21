@@ -69,6 +69,31 @@ public class ImportTable : Node
     {
         Text = "Import table";
     }
+
+    public override void Parse()
+    {
+        ImportsDirectory = Add<ImportsDirectory>("Imports directory");
+    }
+
+    public ImportsDirectory ImportsDirectory { get; set; }
+}
+
+public class ImportsDirectory : Node
+{
+    public override void Parse()
+    {
+        LookupTableRVA = AddFourBytes("Lookup table RVA");
+        TimeDateStamp = AddFourBytes("TimeDate stamp");
+        ForwarderChain = AddFourBytes("Forwarder chain");
+        DllNameRVA = AddFourBytes("Dll name RVA");
+        AddressTableRVA = AddFourBytes("Address table RVA");
+    }
+
+    public FourBytes LookupTableRVA { get; set; }
+    public FourBytes TimeDateStamp { get; set; }
+    public FourBytes ForwarderChain { get; set; }
+    public FourBytes DllNameRVA { get; set; }
+    public FourBytes AddressTableRVA { get; set; }
 }
 
 public class IAT : Node
