@@ -53,8 +53,8 @@ public partial class Checker
 
     private void OutputDiff(IEnumerable<string> baseline, IEnumerable<string> reportLines)
     {
-        var removed = baseline.Except(reportLines);
-        var added = reportLines.Except(baseline);
+        var removed = baseline.Except(reportLines, StringComparer.OrdinalIgnoreCase);
+        var added = reportLines.Except(baseline, StringComparer.OrdinalIgnoreCase);
 
         if (removed.Any())
         {

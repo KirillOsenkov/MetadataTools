@@ -272,7 +272,7 @@ namespace BinaryCompatChecker
                 if (File.Exists(baselineFile))
                 {
                     var baseline = File.ReadAllLines(baselineFile);
-                    if (!Enumerable.SequenceEqual(baseline, reportLines))
+                    if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
                     {
                         if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                         {
