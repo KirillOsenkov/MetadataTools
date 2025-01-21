@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 
 namespace GuiLabs.FileFormat.PE;
@@ -7,16 +8,21 @@ public class ResourceTable : Node
     public override void Parse()
     {
         var directory = Add<ResourceDirectory>("Root directory");
-        Process(directory);
+        Process(directory, isRoot: true);
     }
 
-    private void Process(ResourceDirectory directory)
+    private void Process(ResourceDirectory directory, bool isRoot = false)
     {
         foreach (var idEntry in directory.Children.OfType<IdDirectoryEntry>())
         {
             var offset = idEntry.Offset.ReadUint32();
             if ((offset & 0x80000000) != 0)
             {
+                if (isRoot && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out var text))
+                {
+                    idEntry.Text = text;
+                }
+
                 var directoryOffset = offset & ~0x80000000;
                 var subdirectory = new ResourceDirectory { Start = Start + (int)directoryOffset };
                 Add(subdirectory);
@@ -94,6 +100,22 @@ public class ResourceDirectoryTable : Node
 
 public class IdDirectoryEntry : Node
 {
+    public static Dictionary<int, string> ResourceTypes = new()
+    {
+        [1] = "Cursor",
+        [2] = "Bitmap",
+        [3] = "Icon",
+        [4] = "Menu",
+        [5] = "Dialog",
+        [6] = "String",
+        [9] = "Accelerator",
+        [10] = "StringData",
+        [12] = "GroupCursor",
+        [14] = "GroupIcon",
+        [16] = "Version",
+        [24] = "Manifest"
+    };
+
     public override void Parse()
     {
         Id = AddFourBytes("Id");
