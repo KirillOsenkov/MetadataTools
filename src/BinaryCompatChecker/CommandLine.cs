@@ -2,8 +2,42 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace BinaryCompatChecker;
+
+public class Configuration
+{
+    public IReadOnlyList<Invocation> FoldersToCheck { get; set; }
+
+    public static Configuration Read(string configFile)
+    {
+        var text = File.ReadAllText(configFile);
+        var configuration = JsonSerializer.Deserialize<Configuration>(
+            text,
+            new JsonSerializerOptions()
+            {
+                ReadCommentHandling = JsonCommentHandling.Skip
+            });
+        return configuration;
+    }
+}
+
+public class Invocation
+{
+    public string Name { get; set; }
+    public string Directory { get; set; }
+    public string CommandLineArguments { get; set; }
+    public string BaselinePath { get; set; }
+    public IReadOnlyList<string> IgnoreVersionMismatch { get; set; }
+
+    public CommandLine GetCommandLine()
+    {
+        var commandLine = new CommandLine();
+
+        return commandLine;
+    }
+}
 
 public class CommandLine
 {
@@ -36,6 +70,8 @@ public class CommandLine
     public string BaselineFile { get; set; }
     public string ReportFile { get; set; } = "BinaryCompatReport.txt";
     public bool ListAssemblies { get; set; }
+
+    public string ConfigFile { get; set; }
 
     public bool Recursive { get; set; }
 
@@ -142,6 +178,19 @@ public class CommandLine
 
         foreach (var arg in arguments.ToArray())
         {
+            if (arg.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                ConfigFile = Path.GetFullPath(arg);
+                if (!File.Exists(ConfigFile))
+                {
+                    Checker.WriteError($"Specified config file not found: {ConfigFile}");
+                    return false;
+                }
+
+                arguments.Remove(arg);
+                continue;
+            }
+
             if (arg.StartsWith("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase) ||
                 arg.StartsWith("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
             {

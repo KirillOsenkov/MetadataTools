@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
@@ -21,15 +22,40 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> files;
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
 
-        private static CommandLine commandLine;
+        private CommandLine commandLine;
 
         [STAThread]
         static int Main(string[] args)
         {
-            commandLine = CommandLine.Parse(args);
+            var commandLine = CommandLine.Parse(args);
             if (commandLine == null)
             {
                 return -1;
+            }
+
+            bool success = true;
+
+            if (commandLine.ConfigFile != null)
+            {
+                var configuration = Configuration.Read(commandLine.ConfigFile);
+                var tasks = new List<Task>();
+                foreach (var invocation in configuration.FoldersToCheck)
+                {
+                    var line = invocation.GetCommandLine();
+                    var task = Task.Run(() =>
+                    {
+                        bool result = new Checker(line).Check();
+                        if (!result)
+                        {
+                            success = false;
+                        }
+                    });
+                    task.Wait();
+                    tasks.Add(task);
+                }
+
+                Task.WaitAll(tasks.ToArray());
+                return success ? 0 : 1;
             }
 
             if (commandLine.ReplicateBindingRedirects)
@@ -38,14 +64,15 @@ namespace BinaryCompatChecker
                 return 0;
             }
 
-            bool success = new Checker().Check();
+            success = new Checker(commandLine).Check();
             return success ? 0 : 1;
         }
 
         public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
 
-        public Checker()
+        public Checker(CommandLine commandLine)
         {
+            this.commandLine = commandLine;
             resolver = new CustomAssemblyResolver(this);
             files = new(commandLine.Files, CommandLine.PathComparer);
         }
