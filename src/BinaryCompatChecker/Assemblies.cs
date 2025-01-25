@@ -190,15 +190,11 @@ public partial class Checker
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
     {
         string filePath = assemblyDefinition.MainModule.FileName;
-        if (!files.Contains(filePath))
+        if (commandLine.EnableDefaultOutput)
         {
-            if (commandLine.EnableDefaultOutput)
-            {
-                WriteLine(filePath, ConsoleColor.DarkGray);
-            }
+            WriteLine(filePath, ConsoleColor.DarkGray);
         }
     }
-
     private string GetResolveKey(string referenceFullName) => currentResolveDirectory + "\\" + referenceFullName;
 
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
@@ -279,22 +275,8 @@ public partial class Checker
 
     private string TryResolveFromLoadedAssemblies(AssemblyNameReference reference, bool strictVersion = true)
     {
-        foreach (var assemblyDefinition in filePathToModuleDefinition)
-        {
-            if (assemblyDefinition.Value == null)
-            {
-                continue;
-            }
-
-            if (assemblyDefinition.Value.Name.FullName == reference.FullName ||
-                (!strictVersion && string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase)))
-            {
-                string filePath = assemblyDefinition.Value.MainModule.FileName;
-                return filePath;
-            }
-        }
-
-        return null;
+        var result = assemblyCache.TryResolve(reference, strictVersion);
+        return result;
     }
 
     private string TryResolveFromInputFiles(AssemblyNameReference reference)
@@ -532,24 +514,12 @@ public partial class Checker
 
     private AssemblyDefinition Load(string filePath)
     {
-        if (!filePathToModuleDefinition.TryGetValue(filePath, out var assemblyDefinition))
+        var result = assemblyCache.Load(filePath, resolver, diagnostics);
+
+        if (result.assemblyDefinition is { } assemblyDefinition)
         {
-            try
+            if (!result.fromCache)
             {
-                if (!GuiLabs.Metadata.PEFile.IsManagedAssembly(filePath))
-                {
-                    filePathToModuleDefinition[filePath] = null;
-                    return null;
-                }
-
-                var readerParameters = new ReaderParameters
-                {
-                    AssemblyResolver = this.resolver,
-                    InMemory = true
-                };
-                assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
-                filePathToModuleDefinition[filePath] = assemblyDefinition;
-
                 OnAssemblyLoaded(assemblyDefinition);
 
                 if (!IsNetFrameworkAssembly(assemblyDefinition))
@@ -564,14 +534,11 @@ public partial class Checker
                     assembliesExamined.Add($"{relativePath}    {assemblyDefinition.Name.Version}{targetFramework}");
                 }
             }
-            catch (Exception ex)
-            {
-                diagnostics.Add(ex.ToString());
-                return null;
-            }
+
+            assemblyDefinitionsExamined.Add(assemblyDefinition);
         }
 
-        return assemblyDefinition;
+        return result.assemblyDefinition;
     }
 
     private string GetRelativePath(string filePath)

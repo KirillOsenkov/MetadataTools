@@ -13,12 +13,6 @@ public partial class Checker
             .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var assemblies = this.resolveCache.Values
-            .Concat(this.filePathToModuleDefinition.Values)
-            .Where(v => v != null)
-            .Distinct()
-            .ToArray();
-
         foreach (var appConfigFile in appConfigFiles)
         {
             foreach (var bindingRedirect in appConfigFile.BindingRedirects)
@@ -26,7 +20,7 @@ public partial class Checker
                 CheckBindingRedirect(
                     appConfigFile,
                     bindingRedirect,
-                    assemblies,
+                    assemblyDefinitionsExamined,
                     versionMismatchesByName);
             }
         }
@@ -40,7 +34,7 @@ public partial class Checker
     private void CheckBindingRedirect(
         AppConfigFile appConfigFile,
         AppConfigFile.BindingRedirect bindingRedirect,
-        IReadOnlyList<AssemblyDefinition> assemblies,
+        IEnumerable<AssemblyDefinition> assemblies,
         Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
         string name = bindingRedirect.Name;

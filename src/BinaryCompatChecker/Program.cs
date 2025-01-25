@@ -9,18 +9,18 @@ namespace BinaryCompatChecker
 {
     public partial class Checker
     {
-        private readonly Dictionary<string, AssemblyDefinition> filePathToModuleDefinition = new(CommandLine.PathComparer);
         private readonly Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
 
         private readonly List<string> assembliesExamined = new();
+        private readonly HashSet<AssemblyDefinition> assemblyDefinitionsExamined = new();
         private readonly List<AppConfigFile> appConfigFiles = new();
         private readonly List<string> reportLines = new();
         private readonly List<IVTUsage> ivtUsages = new();
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> files;
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
+        private readonly AssemblyCache assemblyCache;
 
         private CommandLine commandLine;
 
@@ -73,8 +73,8 @@ namespace BinaryCompatChecker
         public Checker(CommandLine commandLine)
         {
             this.commandLine = commandLine;
+            this.assemblyCache = AssemblyCache.Instance;
             resolver = new CustomAssemblyResolver(this);
-            files = new(commandLine.Files, CommandLine.PathComparer);
         }
 
         /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
