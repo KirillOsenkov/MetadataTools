@@ -316,22 +316,22 @@ namespace BinaryCompatChecker
                         continue;
                     }
 
-                    Tuple<string, string> range = ParseVersionRange(oldVersionString);
-                    if (range == null)
+                    (string lowerBound, string upperBound) range = ParseVersionRange(oldVersionString);
+                    if (range == default)
                     {
                         Error($"oldVersion range for {name} is in incorrect format");
                         continue;
                     }
 
-                    if (!Version.TryParse(range.Item1, out oldVersionStart))
+                    if (!Version.TryParse(range.lowerBound, out oldVersionStart))
                     {
-                        Error($"Can't parse old start version: {range.Item1}");
+                        Error($"Can't parse old start version: {range.lowerBound}");
                         continue;
                     }
 
-                    if (!Version.TryParse(range.Item2, out oldVersionEnd))
+                    if (!Version.TryParse(range.upperBound, out oldVersionEnd))
                     {
-                        Error($"Can't parse old end version: {range.Item2}");
+                        Error($"Can't parse old end version: {range.upperBound}");
                         continue;
                     }
 
@@ -411,17 +411,17 @@ namespace BinaryCompatChecker
             }
         }
 
-        private Tuple<string, string> ParseVersionRange(string versionRange)
+        private (string lowerBound, string upperBound) ParseVersionRange(string versionRange)
         {
             int dash = versionRange.IndexOf('-');
             if (dash <= 0 || dash == versionRange.Length - 1)
             {
-                return null;
+                return default;
             }
 
             string first = versionRange.Substring(0, dash);
             string second = versionRange.Substring(dash + 1, versionRange.Length - dash - 1);
-            return Tuple.Create(first, second);
+            return (first, second);
         }
 
         private string GetAttributeValue(XElement element, string attributeName)
