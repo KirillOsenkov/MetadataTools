@@ -214,28 +214,33 @@ public partial class Checker
         ivtUsages.Add(ivtUsage);
     }
 
+    private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
+
     private Dictionary<string, bool> GetTypes(AssemblyDefinition assembly)
     {
-        if (assemblyToTypeList.TryGetValue(assembly, out var types))
+        lock (assemblyToTypeList)
         {
+            if (assemblyToTypeList.TryGetValue(assembly, out var types))
+            {
+                return types;
+            }
+
+            types = new Dictionary<string, bool>();
+            assemblyToTypeList[assembly] = types;
+
+            foreach (var topLevelType in assembly.MainModule.Types)
+            {
+                types.Add(topLevelType.FullName, topLevelType.IsPublic);
+                AddNestedTypes(topLevelType, types);
+            }
+
+            foreach (var exportedType in assembly.MainModule.ExportedTypes)
+            {
+                types.Add(exportedType.FullName, exportedType.IsPublic);
+            }
+
             return types;
         }
-
-        types = new Dictionary<string, bool>();
-        assemblyToTypeList[assembly] = types;
-
-        foreach (var topLevelType in assembly.MainModule.Types)
-        {
-            types.Add(topLevelType.FullName, topLevelType.IsPublic);
-            AddNestedTypes(topLevelType, types);
-        }
-
-        foreach (var exportedType in assembly.MainModule.ExportedTypes)
-        {
-            types.Add(exportedType.FullName, exportedType.IsPublic);
-        }
-
-        return types;
     }
 
     private void AddNestedTypes(TypeDefinition type, Dictionary<string, bool> types)

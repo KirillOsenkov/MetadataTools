@@ -181,12 +181,6 @@ public partial class Checker
         return false;
     }
 
-    private void OnAssemblyResolved(AssemblyDefinition assemblyDefinition)
-    {
-        //string filePath = assemblyDefinition.MainModule.FileName;
-        //WriteLine(filePath, ConsoleColor.DarkGray);
-    }
-
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
     {
         string filePath = assemblyDefinition.MainModule.FileName;
@@ -195,34 +189,33 @@ public partial class Checker
             WriteLine(filePath, ConsoleColor.DarkGray);
         }
     }
+
     private string GetResolveKey(string referenceFullName) => currentResolveDirectory + "\\" + referenceFullName;
 
     private AssemblyDefinition Resolve(AssemblyNameReference reference)
     {
-        string resolveKey = GetResolveKey(reference.FullName);
-        if (resolveCache.TryGetValue(resolveKey, out AssemblyDefinition result))
+        lock (resolveCache)
         {
+            string resolveKey = GetResolveKey(reference.FullName);
+            if (resolveCache.TryGetValue(resolveKey, out AssemblyDefinition result))
+            {
+                return result;
+            }
+
+            string filePath = TryResolve(reference);
+
+            if (File.Exists(filePath))
+            {
+                result = Load(filePath);
+                resolveCache[resolveKey] = result;
+            }
+            else
+            {
+                resolveCache[resolveKey] = null;
+            }
+
             return result;
         }
-
-        string filePath = TryResolve(reference);
-
-        if (File.Exists(filePath))
-        {
-            result = Load(filePath);
-            resolveCache[resolveKey] = result;
-
-            if (result != null)
-            {
-                OnAssemblyResolved(result);
-            }
-        }
-        else
-        {
-            resolveCache[resolveKey] = null;
-        }
-
-        return result;
     }
 
     private string TryResolve(AssemblyNameReference reference)

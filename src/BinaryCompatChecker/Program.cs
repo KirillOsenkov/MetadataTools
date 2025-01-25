@@ -10,7 +10,6 @@ namespace BinaryCompatChecker
     public partial class Checker
     {
         private readonly Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<AssemblyDefinition, Dictionary<string, bool>> assemblyToTypeList = new();
 
         private readonly List<string> assembliesExamined = new();
         private readonly HashSet<AssemblyDefinition> assemblyDefinitionsExamined = new();
@@ -435,9 +434,12 @@ namespace BinaryCompatChecker
                             diagnostics.Add($"In assembly '{assemblyFullName}': Failed to resolve {typeOrMember} reference '{memberReference.FullName}' in assembly '{referenceToAssembly}'");
 
                             var resolveKey = GetResolveKey(referenceToAssembly);
-                            if (referenceToAssembly != null && resolveCache.TryGetValue(resolveKey, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                            lock (resolveCache)
                             {
-                                assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
+                                if (referenceToAssembly != null && resolveCache.TryGetValue(resolveKey, out var referencedAssemblyDefinition) && referencedAssemblyDefinition != null)
+                                {
+                                    assembliesWithFailedMemberRefs.Add((referencedAssemblyDefinition, referenceToAssembly));
+                                }
                             }
                         }
                     }
