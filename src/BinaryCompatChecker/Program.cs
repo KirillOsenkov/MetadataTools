@@ -199,9 +199,9 @@ namespace BinaryCompatChecker
                     WriteLine("");
                 }
 
-                if (IsNetFrameworkAssembly(assemblyDefinition))
+                if (Framework.IsNetFrameworkAssembly(assemblyDefinition))
                 {
-                    if (IsFacadeAssembly(assemblyDefinition) && commandLine.ReportFacade)
+                    if (Framework.IsFacadeAssembly(assemblyDefinition) && commandLine.ReportFacade)
                     {
                         var relativePath = GetRelativePath(file);
                         diagnostics.Add($"Facade assembly: {relativePath}");
@@ -238,7 +238,7 @@ namespace BinaryCompatChecker
 
                     CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
 
-                    if (IsNetFrameworkAssembly(resolvedAssemblyDefinition))
+                    if (Framework.IsNetFrameworkAssembly(resolvedAssemblyDefinition))
                     {
                         continue;
                     }
@@ -362,7 +362,7 @@ namespace BinaryCompatChecker
                 WriteIVTReport(
                     reportFile,
                     ".ivt.roslyn.txt",
-                    u => IsRoslynAssembly(u.ExposingAssembly) && !IsRoslynAssembly(u.ConsumingAssembly));
+                    u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
             }
 
             return success;
@@ -467,7 +467,7 @@ namespace BinaryCompatChecker
                     TypeReference typeReference = memberReference as TypeReference ??
                         memberReference.DeclaringType;
 
-                    if (typeReference != null && typeReference.Scope?.Name is string scope && IsFrameworkName(scope))
+                    if (typeReference != null && typeReference.Scope?.Name is string scope && Framework.IsFrameworkName(scope))
                     {
                         report = false;
                     }

@@ -140,7 +140,7 @@ public partial class Checker
                 continue;
             }
 
-            if (IsFrameworkRedirect(versionMismatch.ExpectedReference.Name))
+            if (Framework.IsFrameworkRedirect(versionMismatch.ExpectedReference.Name))
             {
                 continue;
             }
@@ -184,7 +184,7 @@ public partial class Checker
         var sb = new StringBuilder();
 
         var usages = ivtUsages
-            .Where(u => !IsNetFrameworkAssembly(u.ConsumingAssembly) && !IsNetFrameworkAssembly(u.ExposingAssembly));
+            .Where(u => !Framework.IsNetFrameworkAssembly(u.ConsumingAssembly) && !Framework.IsNetFrameworkAssembly(u.ExposingAssembly));
 
         if (usageFilter != null)
         {
