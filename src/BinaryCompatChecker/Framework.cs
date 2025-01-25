@@ -1,15 +1,14 @@
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using System.IO;
-using Mono.Cecil;
 using System.Linq;
-using System.Xml.Linq;
+using Mono.Cecil;
 
 namespace BinaryCompatChecker;
 
 public class Framework
 {
-    private static Dictionary<string, bool> frameworkAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, bool> frameworkAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> frameworkNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -33,11 +32,11 @@ public class Framework
     };
 
     public static string DotnetRuntimeDirectory { get; } = Path.GetDirectoryName(typeof(object).Assembly.Location);
-    private static string windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    private static readonly string windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-    private static string desktopNetFrameworkDirectory = Path.Combine(windowsDirectory, "Microsoft.NET");
+    private static readonly string desktopNetFrameworkDirectory = Path.Combine(windowsDirectory, "Microsoft.NET");
 
-    private static List<string> desktopNetFrameworkDirectories = new List<string>
+    private static readonly List<string> desktopNetFrameworkDirectories = new List<string>
     {
         Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_MSIL"),
         Path.Combine(desktopNetFrameworkDirectory, "assembly", "GAC_32"),
@@ -70,7 +69,10 @@ public class Framework
 
     public static bool IsFrameworkRedirect(string shortName)
     {
-        return frameworkRedirects.ContainsKey(shortName);
+        lock (frameworkRedirects)
+        {
+            return frameworkRedirects.ContainsKey(shortName);
+        }
     }
 
     public static bool IsRoslynAssembly(string assemblyName)
@@ -85,8 +87,11 @@ public class Framework
 
     public static bool IsNetFrameworkAssembly(string assemblyName)
     {
-        frameworkAssemblyNames.TryGetValue(assemblyName, out bool result);
-        return result;
+        lock (frameworkAssemblyNames)
+        {
+            frameworkAssemblyNames.TryGetValue(assemblyName, out bool result);
+            return result;
+        }
     }
 
     /// <summary>
@@ -94,18 +99,21 @@ public class Framework
     /// </summary>
     public static bool IsNetFrameworkAssembly(AssemblyDefinition assembly)
     {
-        string key = assembly.MainModule.FileName;
-        if (frameworkAssemblyNames.TryGetValue(key, out bool result))
+        lock (frameworkAssemblyNames)
         {
+            string key = assembly.MainModule.FileName;
+            if (frameworkAssemblyNames.TryGetValue(key, out bool result))
+            {
+                return result;
+            }
+
+            // Hacky way of detecting it.
+            result = assembly
+                .CustomAttributes
+                .FirstOrDefault(a => IsAssemblyProductFramework(a) || IsAssemblyMetadataFramework(a)) != null;
+            frameworkAssemblyNames[key] = result;
             return result;
         }
-
-        // Hacky way of detecting it.
-        result = assembly
-            .CustomAttributes
-            .FirstOrDefault(a => IsAssemblyProductFramework(a) || IsAssemblyMetadataFramework(a)) != null;
-        frameworkAssemblyNames[key] = result;
-        return result;
     }
 
     private static bool IsAssemblyMetadataFramework(CustomAttribute a)
@@ -145,7 +153,7 @@ public class Framework
     private static readonly Version LessThan4200 = new Version("4.1.99.99");
     private static readonly Version LessThan4300 = new Version("4.2.99.99");
 
-    private static Dictionary<string, Version> frameworkRedirects = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, Version> frameworkRedirects = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Microsoft.VisualBasic"] = new Version("7.0.5500.0"),
         ["Microsoft.WindowsCE.Forms"] = new Version("1.0.5500.0"),
