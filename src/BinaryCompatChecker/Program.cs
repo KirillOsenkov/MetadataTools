@@ -40,7 +40,7 @@ namespace BinaryCompatChecker
                 var tasks = new List<Task>();
                 foreach (var invocation in configuration.FoldersToCheck)
                 {
-                    var line = invocation.GetCommandLine();
+                    var line = invocation.GetCommandLine(commandLine);
                     var task = Task.Run(() =>
                     {
                         bool result = new Checker(line).Check();

@@ -31,9 +31,30 @@ public class Invocation
     public string BaselinePath { get; set; }
     public IReadOnlyList<string> IgnoreVersionMismatch { get; set; }
 
-    public CommandLine GetCommandLine()
+    public CommandLine GetCommandLine(CommandLine original)
     {
-        var commandLine = new CommandLine();
+        var commandLine = original.Clone();
+
+        if (!string.IsNullOrEmpty(Directory))
+        {
+            commandLine.AddInclusion(Directory, Environment.CurrentDirectory);
+        }
+
+        if (!string.IsNullOrEmpty(BaselinePath))
+        {
+            commandLine.BaselineFile = BaselinePath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(CommandLineArguments))
+        {
+            var args = CommandLine.SplitBySpacesConsideringQuotes(CommandLineArguments);
+            commandLine.Process(args.ToArray());
+        }
+
+        if (IgnoreVersionMismatch != null && IgnoreVersionMismatch.Count > 0)
+        {
+            commandLine.IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatch;
+        }
 
         return commandLine;
     }
@@ -45,16 +66,17 @@ public class CommandLine
     public bool ReportIVT { get; set; }
     public bool ReportVersionMismatch { get; set; } = true;
     public bool ReportIntPtrConstructors { get; set; }
-    public bool ReportUnreferencedAssemblies { get; set; } = false;
+    public bool ReportUnreferencedAssemblies { get; set; }
     public bool ReportFacade { get; set; } = true;
     public bool ReportMissingAssemblies { get; set; } = true;
     public bool ReportMissingTypes { get; set; } = true;
     public bool ReportMissingMembers { get; set; } = true;
     public bool ReportInterfaceMismatch { get; set; } = true;
     public bool AnalyzeFrameworkAssemblies { get; set; } = true;
-    public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
     public bool ResolveFromNetCore { get; set; } = true;
     public bool ResolveFromGac { get; set; } = true;
+
+    public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
 
     public bool OutputExpectedWarnings { get; set; }
     public bool OutputNewWarnings { get; set; }
@@ -96,6 +118,34 @@ public class CommandLine
     public IEnumerable<string> ClosureRootFiles => closureRootFiles;
     public IEnumerable<string> AllDirectories => allDirectories;
     public bool ClosureOnlyMode => closureRootFiles.Count > 0 && files.Count == 0;
+
+    public CommandLine Clone()
+    {
+        var other = new CommandLine()
+        {
+            ReportEmbeddedInteropTypes = ReportEmbeddedInteropTypes,
+            ReportIVT = ReportIVT,
+            ReportVersionMismatch = ReportVersionMismatch,
+            ReportIntPtrConstructors = ReportIntPtrConstructors,
+            ReportUnreferencedAssemblies = ReportUnreferencedAssemblies,
+            ReportFacade = ReportFacade,
+            ReportMissingAssemblies = ReportMissingAssemblies,
+            ReportMissingTypes = ReportMissingTypes,
+            ReportMissingMembers = ReportMissingMembers,
+            ReportInterfaceMismatch = ReportInterfaceMismatch,
+            AnalyzeFrameworkAssemblies = AnalyzeFrameworkAssemblies,
+            ResolveFromNetCore = ResolveFromNetCore,
+            ResolveFromGac = ResolveFromGac,
+            OutputExpectedWarnings = OutputExpectedWarnings,
+            OutputNewWarnings = OutputNewWarnings,
+            OutputSummary = OutputSummary,
+            EnableDefaultOutput = EnableDefaultOutput,
+            ListAssemblies = ListAssemblies,
+            Recursive = Recursive
+        };
+
+        return other;
+    }
 
     public bool IsClosureRoot(string filePath)
     {
@@ -519,7 +569,7 @@ public class CommandLine
         return true;
     }
 
-    private bool AddInclusion(string text, string currentDirectory)
+    public bool AddInclusion(string text, string currentDirectory)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -748,6 +798,65 @@ public class CommandLine
 
         string directory = Path.GetDirectoryName(filePath);
         allDirectories.Add(directory);
+    }
+
+    public static IEnumerable<string> SplitBySpacesConsideringQuotes(string sourceString)
+    {
+        var parts = new List<string>();
+        var start = -1;
+        bool isInQuotes = false;
+
+        for (int i = 0; i < sourceString.Length; i++)
+        {
+            if (sourceString[i] == ' ' && !isInQuotes)
+            {
+                if (start > -1)
+                {
+                    if (start < i)
+                    {
+                        parts.Add(sourceString.Substring(start, i - start));
+                    }
+
+                    start = i + 1;
+                }
+            }
+            else if (sourceString[i] == '"')
+            {
+                isInQuotes = !isInQuotes;
+                if (isInQuotes)
+                {
+                    if (start == -1)
+                    {
+                        start = i;
+                    }
+                    else if (start < i)
+                    {
+                        parts.Add(sourceString.Substring(start, i - start));
+                        start = i;
+                    }
+                }
+                else
+                {
+                    if (start > -1 && start < i)
+                    {
+                        parts.Add(sourceString.Substring(start, i - start + 1));
+                    }
+
+                    start = i + 1;
+                }
+            }
+            else if (start == -1)
+            {
+                start = i;
+            }
+        }
+
+        if (start > -1 && start < sourceString.Length)
+        {
+            parts.Add(sourceString.Substring(start, sourceString.Length - start));
+        }
+
+        return parts;
     }
 
     public static void PrintUsage()
