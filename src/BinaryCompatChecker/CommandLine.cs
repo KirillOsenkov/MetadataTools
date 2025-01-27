@@ -62,6 +62,8 @@ public class Invocation
 
 public class CommandLine
 {
+    public bool IsBatchMode { get; set; }
+
     public bool ReportEmbeddedInteropTypes { get; set; }
     public bool ReportIVT { get; set; }
     public bool ReportVersionMismatch { get; set; } = true;

@@ -32,28 +32,25 @@ namespace BinaryCompatChecker
                 return -1;
             }
 
-            bool success = true;
-
             if (commandLine.ConfigFile != null)
             {
                 var configuration = Configuration.Read(commandLine.ConfigFile);
-                var tasks = new List<Task>();
+                var tasks = new List<Task<CheckResult>>();
                 foreach (var invocation in configuration.FoldersToCheck)
                 {
                     var line = invocation.GetCommandLine(commandLine);
+                    line.IsBatchMode = true;
                     var task = Task.Run(() =>
                     {
-                        bool result = new Checker(line).Check();
-                        if (!result)
-                        {
-                            success = false;
-                        }
+                        var result = new Checker(line).Check();
+                        return result;
                     });
                     task.Wait();
                     tasks.Add(task);
                 }
 
                 Task.WaitAll(tasks.ToArray());
+                bool success = tasks.All(t => t.Result.Success);
                 return success ? 0 : 1;
             }
 
@@ -63,8 +60,8 @@ namespace BinaryCompatChecker
                 return 0;
             }
 
-            success = new Checker(commandLine).Check();
-            return success ? 0 : 1;
+            var result = new Checker(commandLine).Check();
+            return result.Success ? 0 : 1;
         }
 
         public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
@@ -76,10 +73,10 @@ namespace BinaryCompatChecker
             resolver = new CustomAssemblyResolver(this);
         }
 
-        /// <returns>true if the check succeeded, false if the report is different from the baseline</returns>
-        public bool Check()
+        public CheckResult Check()
         {
-            bool success = true;
+            var result = new CheckResult();
+            result.Success = true;
 
             string reportFile = commandLine.ReportFile;
             reportFile = Path.GetFullPath(reportFile);
@@ -95,7 +92,8 @@ namespace BinaryCompatChecker
                 if (!File.Exists(baselineFile))
                 {
                     WriteError($"Baseline file doesn't exist: {commandLine.BaselineFile}");
-                    return false;
+                    result.Success = false;
+                    return result;
                 }
             }
 
@@ -319,7 +317,7 @@ namespace BinaryCompatChecker
                             WriteError(ex.Message);
                         }
 
-                        success = false;
+                        result.Success = false;
                     }
                     else
                     {
@@ -343,6 +341,7 @@ namespace BinaryCompatChecker
                     }
 
                     OutputDiff(Array.Empty<string>(), reportLines);
+                    result.Success = false;
                 }
 
                 ListExaminedAssemblies(reportFile);
@@ -365,7 +364,7 @@ namespace BinaryCompatChecker
                     u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
             }
 
-            return success;
+            return result;
         }
 
         public void CheckAssemblyReferenceVersion(
@@ -383,5 +382,10 @@ namespace BinaryCompatChecker
                 });
             }
         }
+    }
+
+    public class CheckResult
+    {
+        public bool Success { get; set; }
     }
 }
