@@ -63,7 +63,7 @@ public partial class Checker
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
     {
         string filePath = assemblyDefinition.MainModule.FileName;
-        if (commandLine.EnableDefaultOutput)
+        if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
         {
             WriteLine(filePath, ConsoleColor.DarkGray);
         }

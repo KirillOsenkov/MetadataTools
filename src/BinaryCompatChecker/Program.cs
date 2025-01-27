@@ -238,7 +238,7 @@ namespace BinaryCompatChecker
                         Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
                     }
 
-                    WriteLine("");
+                    WriteLine();
                 }
 
                 if (Framework.IsNetFrameworkAssembly(assemblyDefinition))

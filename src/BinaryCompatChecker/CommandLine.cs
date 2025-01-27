@@ -866,15 +866,26 @@ public class CommandLine
         return parts;
     }
 
+    private static void Write(string text, ConsoleColor? color = null)
+    {
+        Checker.Write(text, color);
+    }
+
+    private static void WriteLine()
+    {
+        Checker.WriteLine();
+    }
+
     public static void PrintUsage()
     {
-        Checker.WriteLine("https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker", ConsoleColor.Blue);
-        Checker.WriteLine();
-        Checker.Write(@"Usage: ", ConsoleColor.White);
-        Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
-        Checker.Write(@" <file-spec>* <option>* @<response-file>*", ConsoleColor.White);
-        Checker.WriteLine();
-        Checker.Write(@"
+        Write("https://github.com/KirillOsenkov/MetadataTools/tree/main/src/BinaryCompatChecker", ConsoleColor.Blue);
+        WriteLine();
+        WriteLine();
+        Write(@"Usage: ", ConsoleColor.White);
+        Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Write(@" <file-spec>* <option>* @<response-file>*", ConsoleColor.White);
+        WriteLine();
+        Write(@"
 Inspects assemblies and app.config files in a directory and reports potential issues.
 Writes a report of possible issues to BinaryCompatReport.txt (sorted alphabetically).
 File name/path can be customized using -out:<reportPath.txt>
@@ -886,7 +897,7 @@ This way you can compare with the baseline and write the report to a different f
 
 File specs may be specified more than once. Each file spec is one of the following:");
 
-        Checker.Write(@"
+        Write(@"
 
     * absolute directory path
     * directory relative to current directory
@@ -909,12 +920,12 @@ Dependency1.dll is a runtime dependency and should be included in the closure.
 This mode is useful when there are multiple executables in the directory
 and you want to check the dependencies of one of them and the corresponding
 .exe.config file.");
-        Checker.Write(@"
+        Write(@"
 
 Options:", ConsoleColor.White);
-        Checker.Write(@"
+        Write(@"
     All options with parameters (other than -out: and -ignore*) may be specified more than once.");
-        Checker.Write(@"
+        Write(@"
 
     !<exclude-pattern>         Exclude a relative path or file pattern from analysis.
     -l                         Output list of visited assemblies to BinaryCompatReport.Assemblies.txt
@@ -958,8 +969,8 @@ There is a separate command for the tool to replicate binding redirects from an 
 to one or more other app.config files:
 ");
 
-        Checker.Write(@"checkbinarycompat", ConsoleColor.Cyan);
-        Checker.Write(@" -replicateBindingRedirects <source.exe.config> <destination.exe.config>+", ConsoleColor.White);
-        Checker.WriteLine();
+        Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Write(@" -replicateBindingRedirects <source.exe.config> <destination.exe.config>+", ConsoleColor.White);
+        WriteLine();
     }
 }
