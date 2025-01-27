@@ -51,7 +51,7 @@ public partial class Checker
         }
     }
 
-    private void OutputDiff(IEnumerable<string> baseline, IEnumerable<string> reportLines)
+    public static void OutputDiff(CommandLine commandLine, IEnumerable<string> baseline, IEnumerable<string> reportLines)
     {
         var removed = baseline.Except(reportLines, StringComparer.OrdinalIgnoreCase);
         var added = reportLines.Except(baseline, StringComparer.OrdinalIgnoreCase);
@@ -107,13 +107,6 @@ public partial class Checker
         {
             WriteError(addedLine);
         }
-    }
-
-    private void Log(string text)
-    {
-        text = text.Replace('\r', ' ').Replace('\n', ' ');
-        text = text.Replace(", Culture=neutral", "");
-        reportLines.Add(text);
     }
 
     private void ReportVersionMismatches(IReadOnlyList<AppConfigFile> appConfigFiles, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)

@@ -14,7 +14,6 @@ namespace BinaryCompatChecker
         private readonly List<string> assembliesExamined = new();
         private readonly HashSet<AssemblyDefinition> assemblyDefinitionsExamined = new();
         private readonly List<AppConfigFile> appConfigFiles = new();
-        private readonly List<string> reportLines = new();
         private readonly List<IVTUsage> ivtUsages = new();
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
@@ -34,24 +33,7 @@ namespace BinaryCompatChecker
 
             if (commandLine.ConfigFile != null)
             {
-                var configuration = Configuration.Read(commandLine.ConfigFile);
-                var tasks = new List<Task<CheckResult>>();
-                foreach (var invocation in configuration.FoldersToCheck)
-                {
-                    var line = invocation.GetCommandLine(commandLine);
-                    line.IsBatchMode = true;
-                    var task = Task.Run(() =>
-                    {
-                        var result = new Checker(line).Check();
-                        return result;
-                    });
-                    task.Wait();
-                    tasks.Add(task);
-                }
-
-                Task.WaitAll(tasks.ToArray());
-                bool success = tasks.All(t => t.Result.Success);
-                return success ? 0 : 1;
+                return RunInBatchMode(commandLine);
             }
 
             if (commandLine.ReplicateBindingRedirects)
@@ -62,6 +44,64 @@ namespace BinaryCompatChecker
 
             var result = new Checker(commandLine).Check();
             return result.Success ? 0 : 1;
+        }
+
+        private static int RunInBatchMode(CommandLine commandLine)
+        {
+            var configuration = Configuration.Read(commandLine.ConfigFile);
+            var tasks = new List<Task<CheckResult>>();
+            foreach (var invocation in configuration.FoldersToCheck)
+            {
+                var line = invocation.GetCommandLine(commandLine);
+                line.IsBatchMode = true;
+                var task = Task.Run(() =>
+                {
+                    var result = new Checker(line).Check();
+                    return result;
+                });
+                task.Wait();
+                tasks.Add(task);
+            }
+
+            bool success = true;
+
+            foreach (var task in tasks)
+            {
+                var checkResult = task.Result;
+                if (!checkResult.Success)
+                {
+                    success = false;
+                }
+            }
+
+            if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+            {
+                if (success)
+                {
+                    WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                }
+                else
+                {
+                    WriteError($@"Binary compatibility check failed.
+ The following report files are different from the baseline file:");
+                }
+            }
+
+            foreach (var task in tasks)
+            {
+                var checkResult = task.Result;
+                if (!checkResult.Success)
+                {
+                    WriteError($@" Baseline file: {checkResult.BaselineFile}
+ Report file: {checkResult.ReportFile}");
+                    OutputDiff(
+                        checkResult.CommandLine,
+                        checkResult.BaselineDiagnostics,
+                        checkResult.ActualDiagnostics);
+                }
+            }
+
+            return success ? 0 : 1;
         }
 
         public static bool IsWindows { get; } = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
@@ -77,6 +117,7 @@ namespace BinaryCompatChecker
         {
             var result = new CheckResult();
             result.Success = true;
+            result.CommandLine = commandLine;
 
             string reportFile = commandLine.ReportFile;
             reportFile = Path.GetFullPath(reportFile);
@@ -96,6 +137,9 @@ namespace BinaryCompatChecker
                     return result;
                 }
             }
+
+            result.BaselineFile = baselineFile;
+            result.ReportFile = reportFile;
 
             var appConfigFilePaths = new List<string>();
 
@@ -138,7 +182,7 @@ namespace BinaryCompatChecker
             {
                 bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
 
-                if (commandLine.EnableDefaultOutput)
+                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
                 {
                     Write(appConfigFilePath, ConsoleColor.Magenta);
                     if (ignoreVersionMismatch)
@@ -185,7 +229,7 @@ namespace BinaryCompatChecker
 
                 string targetFramework = GetTargetFramework(assemblyDefinition);
 
-                if (commandLine.EnableDefaultOutput)
+                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
                 {
                     Write(file);
                     Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
@@ -286,9 +330,13 @@ namespace BinaryCompatChecker
                 }
             }
 
-            foreach (var ex in diagnostics.OrderBy(s => s))
+            List<string> reportLines = new();
+
+            foreach (var diagnostic in diagnostics.OrderBy(s => s))
             {
-                Log(ex);
+                var text = diagnostic.Replace('\r', ' ').Replace('\n', ' ');
+                text = text.Replace(", Culture=neutral", "");
+                reportLines.Add(text);
             }
 
             if (reportLines.Count > 0)
@@ -300,13 +348,25 @@ namespace BinaryCompatChecker
                     {
                         if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                         {
-                            WriteError($@"Binary compatibility check failed.
+                            if (!commandLine.IsBatchMode)
+                            {
+                                WriteError($@"Binary compatibility check failed.
  The current assembly binary compatibility report is different from the baseline file.
  Baseline file: {baselineFile}
  Wrote report file: {reportFile}");
+                            }
                         }
 
-                        OutputDiff(baseline, reportLines);
+                        if (commandLine.IsBatchMode)
+                        {
+                            result.BaselineDiagnostics = baseline;
+                            result.ActualDiagnostics = reportLines;
+                        }
+                        else
+                        {
+                            OutputDiff(commandLine, baseline, reportLines);
+                        }
+
                         try
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
@@ -323,7 +383,10 @@ namespace BinaryCompatChecker
                     {
                         if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                         {
-                            WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                            if (!commandLine.IsBatchMode)
+                            {
+                                WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                            }
                         }
                     }
                 }
@@ -336,11 +399,14 @@ namespace BinaryCompatChecker
 
                     if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                     {
-                        WriteError("Binary compatibility check failed.");
-                        WriteError($"Wrote {reportFile}");
+                        if (!commandLine.IsBatchMode)
+                        {
+                            WriteError("Binary compatibility check failed.");
+                            WriteError($"Wrote {reportFile}");
+                        }
                     }
 
-                    OutputDiff(Array.Empty<string>(), reportLines);
+                    OutputDiff(commandLine, Array.Empty<string>(), reportLines);
                     result.Success = false;
                 }
 
@@ -350,7 +416,10 @@ namespace BinaryCompatChecker
             {
                 if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                 {
-                    WriteLine("No issues found", ConsoleColor.Green);
+                    if (!commandLine.IsBatchMode)
+                    {
+                        WriteLine("No issues found", ConsoleColor.Green);
+                    }
                 }
             }
 
@@ -387,5 +456,10 @@ namespace BinaryCompatChecker
     public class CheckResult
     {
         public bool Success { get; set; }
+        public IReadOnlyList<string> BaselineDiagnostics { get; set; }
+        public IReadOnlyList<string> ActualDiagnostics { get; set; }
+        public string BaselineFile { get; internal set; }
+        public string ReportFile { get; internal set; }
+        public CommandLine CommandLine { get; internal set; }
     }
 }
