@@ -406,7 +406,11 @@ namespace BinaryCompatChecker
                         }
                     }
 
-                    OutputDiff(commandLine, Array.Empty<string>(), reportLines);
+                    if (!commandLine.IsBatchMode)
+                    {
+                        OutputDiff(commandLine, Array.Empty<string>(), reportLines);
+                    }
+
                     result.Success = false;
                 }
 

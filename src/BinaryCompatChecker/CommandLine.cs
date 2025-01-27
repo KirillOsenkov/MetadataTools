@@ -199,7 +199,7 @@ public class CommandLine
             {
                 if (!responseFiles.Add(filePath))
                 {
-                    Checker.WriteError($"Response file can't be included more than once: {responseFile}");
+                    WriteError($"Response file can't be included more than once: {responseFile}");
                     return false;
                 }
 
@@ -216,7 +216,7 @@ public class CommandLine
             }
             else
             {
-                Checker.WriteError("Response file doesn't exist: " + responseFile);
+                WriteError("Response file doesn't exist: " + responseFile);
                 return false;
             }
         }
@@ -235,7 +235,7 @@ public class CommandLine
                 ConfigFile = Path.GetFullPath(arg);
                 if (!File.Exists(ConfigFile))
                 {
-                    Checker.WriteError($"Specified config file not found: {ConfigFile}");
+                    WriteError($"Specified config file not found: {ConfigFile}");
                     return false;
                 }
 
@@ -449,7 +449,7 @@ public class CommandLine
                 resolveDir = Path.GetFullPath(resolveDir);
                 if (!Directory.Exists(resolveDir))
                 {
-                    Checker.WriteError($"Custom resolve directory doesn't exist: {resolveDir}");
+                    WriteError($"Custom resolve directory doesn't exist: {resolveDir}");
                     return false;
                 }
 
@@ -483,7 +483,7 @@ public class CommandLine
 
             if (arg.StartsWith("-") || arg.StartsWith("/"))
             {
-                Checker.WriteError($"Unknown argument: {arg}");
+                WriteError($"Unknown argument: {arg}");
                 return false;
             }
         }
@@ -492,14 +492,14 @@ public class CommandLine
         {
             if (arguments.Count == 0)
             {
-                Checker.WriteError($"Specify a source app.config file and one or more destination app.config files for -replicateBindingRedirects");
+                WriteError($"Specify a source app.config file and one or more destination app.config files for -replicateBindingRedirects");
                 return false;
             }
 
             SourceAppConfig = Path.GetFullPath(arguments[0]);
             if (!File.Exists(SourceAppConfig))
             {
-                Checker.WriteError($"File not found: {SourceAppConfig}");
+                WriteError($"File not found: {SourceAppConfig}");
                 return false;
             }
 
@@ -507,7 +507,7 @@ public class CommandLine
             var nonExistingDestination = DestinationAppConfigs.FirstOrDefault(f => !File.Exists(f));
             if (nonExistingDestination != null)
             {
-                Checker.WriteError($"File not found: {nonExistingDestination}");
+                WriteError($"File not found: {nonExistingDestination}");
                 return false;
             }
 
@@ -525,7 +525,7 @@ public class CommandLine
             {
                 if (!AddInclusion(closureRootPattern, currentDirectory))
                 {
-                    Checker.WriteError($"Expected directory, file glob or pattern: {closureRootPattern}");
+                    WriteError($"Expected directory, file glob or pattern: {closureRootPattern}");
                     return false;
                 }
             }
@@ -551,7 +551,7 @@ public class CommandLine
         {
             if (!AddInclusion(arg, currentDirectory))
             {
-                Checker.WriteError($"Expected directory, file glob or pattern: {arg}");
+                WriteError($"Expected directory, file glob or pattern: {arg}");
                 return false;
             }
         }
@@ -569,6 +569,11 @@ public class CommandLine
         }
 
         return true;
+    }
+
+    private void WriteError(string text)
+    {
+        Checker.WriteError(text);
     }
 
     public bool AddInclusion(string text, string currentDirectory)
