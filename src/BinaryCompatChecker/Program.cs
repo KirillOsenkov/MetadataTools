@@ -25,7 +25,7 @@ namespace BinaryCompatChecker
         [STAThread]
         static int Main(string[] args)
         {
-            var commandLine = CommandLine.Parse(args);
+            var commandLine = CommandLine.Parse(args, Environment.CurrentDirectory);
             if (commandLine == null)
             {
                 return -1;
@@ -95,7 +95,7 @@ namespace BinaryCompatChecker
             {
                 if (success)
                 {
-                    WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                    WriteLine($"Binary compatibility check succeeded.", ConsoleColor.Green);
                 }
                 else
                 {
@@ -422,6 +422,9 @@ namespace BinaryCompatChecker
                             WriteError($"Wrote {reportFile}");
                         }
                     }
+
+                    result.BaselineDiagnostics = Array.Empty<string>();
+                    result.ActualDiagnostics = reportLines;
 
                     if (!commandLine.IsBatchMode)
                     {

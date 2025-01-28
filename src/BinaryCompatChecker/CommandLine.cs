@@ -29,38 +29,43 @@ public class Invocation
     public string Directory { get; set; }
     public string CommandLineArguments { get; set; }
     public string BaselinePath { get; set; }
+    public string ReportPath { get; set; }
     public IReadOnlyList<string> IgnoreVersionMismatch { get; set; }
     public IReadOnlyList<string> Resolve { get; set; }
     public IReadOnlyList<string> Exclude { get; set; }
+    public IReadOnlyList<string> Closure { get; set; }
 
     public CommandLine GetCommandLine(CommandLine original)
     {
         var commandLine = original.Clone();
 
+        var directory = Path.GetFullPath(Directory);
+        if (!System.IO.Directory.Exists(directory))
+        {
+            Checker.WriteError($"Directory not found: {directory}");
+            return null;
+        }
+
+        commandLine.CurrentDirectory = directory;
+
+        var arguments = new List<string>();
+
         if (!string.IsNullOrWhiteSpace(CommandLineArguments))
         {
             var args = CommandLine.SplitBySpacesConsideringQuotes(CommandLineArguments);
-            if (!commandLine.Process(args.ToArray()))
-            {
-                return null;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(Directory))
-        {
-            commandLine.Process([Directory]);
+            arguments.AddRange(args);
         }
 
         if (!string.IsNullOrEmpty(BaselinePath))
         {
-            commandLine.Process([$"-baseline:\"{BaselinePath}\""]);
+            arguments.Add($"-baseline:\"{BaselinePath}\"");
         }
 
         if (Resolve != null)
         {
             foreach (var resolve in Resolve)
             {
-                commandLine.Process([$"-resolve:\"{resolve}\""]);
+                arguments.Add($"-resolve:\"{resolve}\"");
             }
         }
 
@@ -68,7 +73,7 @@ public class Invocation
         {
             foreach (var ignoreVersionMismatch in IgnoreVersionMismatch)
             {
-                commandLine.Process([$"-ignoreVersionMismatch:\"{ignoreVersionMismatch}\""]);
+                arguments.Add($"-ignoreVersionMismatch:\"{ignoreVersionMismatch}\"");
             }
         }
 
@@ -76,8 +81,26 @@ public class Invocation
         {
             foreach (var exclude in Exclude)
             {
-                commandLine.Process([$"!\"{exclude}\""]);
+                arguments.Add($"!\"{exclude}\"");
             }
+        }
+
+        if (Closure != null)
+        {
+            foreach (var closure in Closure)
+            {
+                arguments.Add($"-closure:\"{closure}\"");
+            }
+        }
+
+        if (!commandLine.Process(arguments))
+        {
+            return null;
+        }
+
+        if (!commandLine.Finalize(arguments))
+        {
+            return null;
         }
 
         return commandLine;
@@ -87,6 +110,7 @@ public class Invocation
 public class CommandLine
 {
     public bool IsBatchMode { get; set; }
+    public string CurrentDirectory { get; set; }
 
     public bool ReportEmbeddedInteropTypes { get; set; }
     public bool ReportIVT { get; set; }
@@ -129,10 +153,19 @@ public class CommandLine
     private HashSet<string> rootDirectories = new(PathComparer);
     public IEnumerable<string> RootDirectories => rootDirectories;
 
-    public static CommandLine Parse(string[] args)
+    public static CommandLine Parse(string[] args, string currentDirectory)
     {
         var result = new CommandLine();
-        if (!result.Process(args))
+        result.CurrentDirectory = currentDirectory;
+
+        var arguments = args.ToList();
+
+        if (!result.Process(arguments))
+        {
+            return null;
+        }
+
+        if (!result.Finalize(arguments))
         {
             return null;
         }
@@ -205,12 +238,9 @@ public class CommandLine
     List<string> closureRootFiles = new();
     IncludeExcludePattern includeExclude;
 
-    public bool Process(string[] args)
+    public bool Process(IList<string> arguments)
     {
-        // Parse parameterized args
-        var arguments = new List<string>(args);
-
-        var currentDirectory = Environment.CurrentDirectory;
+        var currentDirectory = CurrentDirectory;
 
         var responseFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -520,6 +550,15 @@ public class CommandLine
                 return false;
             }
         }
+
+        return true;
+    }
+
+    public bool Finalize(IReadOnlyList<string> arguments = null)
+    {
+        arguments ??= Array.Empty<string>();
+
+        var currentDirectory = CurrentDirectory;
 
         if (ReplicateBindingRedirects)
         {
