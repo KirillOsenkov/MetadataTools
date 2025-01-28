@@ -48,11 +48,28 @@ namespace BinaryCompatChecker
 
         private static int RunInBatchMode(CommandLine commandLine)
         {
-            var configuration = Configuration.Read(commandLine.ConfigFile);
+            Configuration configuration;
+
+            try
+            {
+                configuration = Configuration.Read(commandLine.ConfigFile);
+            }
+            catch (Exception ex)
+            {
+                WriteError($"Invalid configuration file: {commandLine.ConfigFile}");
+                WriteError(ex.Message);
+                return 2;
+            }
+
             var tasks = new List<Task<CheckResult>>();
             foreach (var invocation in configuration.FoldersToCheck)
             {
                 var line = invocation.GetCommandLine(commandLine);
+                if (line == null)
+                {
+                    return 3;
+                }
+
                 line.IsBatchMode = true;
                 var task = Task.Run(() =>
                 {

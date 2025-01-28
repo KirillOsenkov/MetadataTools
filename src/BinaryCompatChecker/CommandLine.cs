@@ -30,30 +30,54 @@ public class Invocation
     public string CommandLineArguments { get; set; }
     public string BaselinePath { get; set; }
     public IReadOnlyList<string> IgnoreVersionMismatch { get; set; }
+    public IReadOnlyList<string> Resolve { get; set; }
+    public IReadOnlyList<string> Exclude { get; set; }
 
     public CommandLine GetCommandLine(CommandLine original)
     {
         var commandLine = original.Clone();
 
+        if (!string.IsNullOrWhiteSpace(CommandLineArguments))
+        {
+            var args = CommandLine.SplitBySpacesConsideringQuotes(CommandLineArguments);
+            if (!commandLine.Process(args.ToArray()))
+            {
+                return null;
+            }
+        }
+
         if (!string.IsNullOrEmpty(Directory))
         {
-            commandLine.AddInclusion(Directory, Environment.CurrentDirectory);
+            commandLine.Process([Directory]);
         }
 
         if (!string.IsNullOrEmpty(BaselinePath))
         {
-            commandLine.BaselineFile = BaselinePath;
+            commandLine.Process([$"-baseline:\"{BaselinePath}\""]);
         }
 
-        if (!string.IsNullOrWhiteSpace(CommandLineArguments))
+        if (Resolve != null)
         {
-            var args = CommandLine.SplitBySpacesConsideringQuotes(CommandLineArguments);
-            commandLine.Process(args.ToArray());
+            foreach (var resolve in Resolve)
+            {
+                commandLine.Process([$"-resolve:\"{resolve}\""]);
+            }
         }
 
-        if (IgnoreVersionMismatch != null && IgnoreVersionMismatch.Count > 0)
+        if (IgnoreVersionMismatch != null)
         {
-            commandLine.IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatch;
+            foreach (var ignoreVersionMismatch in IgnoreVersionMismatch)
+            {
+                commandLine.Process([$"-ignoreVersionMismatch:\"{ignoreVersionMismatch}\""]);
+            }
+        }
+
+        if (Exclude != null)
+        {
+            foreach (var exclude in Exclude)
+            {
+                commandLine.Process([$"!\"{exclude}\""]);
+            }
         }
 
         return commandLine;
@@ -255,7 +279,10 @@ public class CommandLine
                     var configs = arg.Substring(prefixLength + 1).Split(';', ',');
                     if (configs.Length > 0)
                     {
-                        IgnoreVersionMismatchForAppConfigs = configs;
+                        IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatchForAppConfigs
+                            .Concat(configs)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
                         ReportVersionMismatch = true;
                     }
                 }
@@ -446,6 +473,12 @@ public class CommandLine
             {
                 string resolveDir = arg.Substring("/resolve:".Length);
                 resolveDir = resolveDir.Trim('"');
+                if (string.IsNullOrWhiteSpace(resolveDir))
+                {
+                    WriteError("Resolve directory not specified");
+                    return false;
+                }
+
                 resolveDir = Path.GetFullPath(resolveDir);
                 if (!Directory.Exists(resolveDir))
                 {
@@ -830,27 +863,27 @@ public class CommandLine
             else if (sourceString[i] == '"')
             {
                 isInQuotes = !isInQuotes;
-                if (isInQuotes)
-                {
-                    if (start == -1)
-                    {
-                        start = i;
-                    }
-                    else if (start < i)
-                    {
-                        parts.Add(sourceString.Substring(start, i - start));
-                        start = i;
-                    }
-                }
-                else
-                {
-                    if (start > -1 && start < i)
-                    {
-                        parts.Add(sourceString.Substring(start, i - start + 1));
-                    }
+                //if (isInQuotes)
+                //{
+                //    if (start == -1)
+                //    {
+                //        start = i;
+                //    }
+                //    else if (start < i)
+                //    {
+                //        parts.Add(sourceString.Substring(start, i - start));
+                //        start = i;
+                //    }
+                //}
+                //else
+                //{
+                //    if (start > -1 && start < i)
+                //    {
+                //        parts.Add(sourceString.Substring(start, i - start + 1));
+                //    }
 
-                    start = i + 1;
-                }
+                //    start = i + 1;
+                //}
             }
             else if (start == -1)
             {
