@@ -407,29 +407,32 @@ namespace BinaryCompatChecker
             }
             else if (!File.Exists(reportFile))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-
-                // initial baseline creation mode
-                File.WriteAllLines(reportFile, reportLines);
-
-                if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                if (reportLines.Count > 0)
                 {
+                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+
+                    // initial baseline creation mode
+                    File.WriteAllLines(reportFile, reportLines);
+
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        if (!commandLine.IsBatchMode)
+                        {
+                            WriteError("Binary compatibility check failed.");
+                            WriteError($"Wrote {reportFile}");
+                        }
+                    }
+
+                    result.BaselineDiagnostics = Array.Empty<string>();
+                    result.ActualDiagnostics = reportLines;
+
                     if (!commandLine.IsBatchMode)
                     {
-                        WriteError("Binary compatibility check failed.");
-                        WriteError($"Wrote {reportFile}");
+                        OutputDiff(commandLine, Array.Empty<string>(), reportLines);
                     }
+
+                    result.Success = false;
                 }
-
-                result.BaselineDiagnostics = Array.Empty<string>();
-                result.ActualDiagnostics = reportLines;
-
-                if (!commandLine.IsBatchMode)
-                {
-                    OutputDiff(commandLine, Array.Empty<string>(), reportLines);
-                }
-
-                result.Success = false;
             }
 
             ListExaminedAssemblies(reportFile);
