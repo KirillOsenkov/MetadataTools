@@ -356,96 +356,83 @@ namespace BinaryCompatChecker
                 reportLines.Add(text);
             }
 
-            if (reportLines.Count > 0)
+            if (File.Exists(baselineFile))
             {
-                if (File.Exists(baselineFile))
+                var baseline = File.ReadAllLines(baselineFile);
+                if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
                 {
-                    var baseline = File.ReadAllLines(baselineFile);
-                    if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
-                    {
-                        if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
-                        {
-                            if (!commandLine.IsBatchMode)
-                            {
-                                WriteError($@"Binary compatibility check failed.
- The current assembly binary compatibility report is different from the baseline file.
- Baseline file: {baselineFile}
- Wrote report file: {reportFile}");
-                            }
-                        }
-
-                        if (commandLine.IsBatchMode)
-                        {
-                            result.BaselineDiagnostics = baseline;
-                            result.ActualDiagnostics = reportLines;
-                        }
-                        else
-                        {
-                            OutputDiff(commandLine, baseline, reportLines);
-                        }
-
-                        try
-                        {
-                            Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-                            File.WriteAllLines(reportFile, reportLines);
-                        }
-                        catch (Exception ex)
-                        {
-                            WriteError(ex.Message);
-                        }
-
-                        result.Success = false;
-                    }
-                    else
-                    {
-                        if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
-                        {
-                            if (!commandLine.IsBatchMode)
-                            {
-                                WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
-                            }
-                        }
-                    }
-                }
-                else if (!File.Exists(reportFile))
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-
-                    // initial baseline creation mode
-                    File.WriteAllLines(reportFile, reportLines);
-
                     if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                     {
                         if (!commandLine.IsBatchMode)
                         {
-                            WriteError("Binary compatibility check failed.");
-                            WriteError($"Wrote {reportFile}");
+                            WriteError($@"Binary compatibility check failed.
+ The current assembly binary compatibility report is different from the baseline file.
+ Baseline file: {baselineFile}
+ Wrote report file: {reportFile}");
                         }
                     }
 
-                    result.BaselineDiagnostics = Array.Empty<string>();
-                    result.ActualDiagnostics = reportLines;
-
-                    if (!commandLine.IsBatchMode)
+                    if (commandLine.IsBatchMode)
                     {
-                        OutputDiff(commandLine, Array.Empty<string>(), reportLines);
+                        result.BaselineDiagnostics = baseline;
+                        result.ActualDiagnostics = reportLines;
+                    }
+                    else
+                    {
+                        OutputDiff(commandLine, baseline, reportLines);
+                    }
+
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+                        File.WriteAllLines(reportFile, reportLines);
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteError(ex.Message);
                     }
 
                     result.Success = false;
                 }
-
-                ListExaminedAssemblies(reportFile);
+                else
+                {
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        if (!commandLine.IsBatchMode)
+                        {
+                            WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                        }
+                    }
+                }
             }
-            else
+            else if (!File.Exists(reportFile))
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+
+                // initial baseline creation mode
+                File.WriteAllLines(reportFile, reportLines);
+
                 if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                 {
                     if (!commandLine.IsBatchMode)
                     {
-                        WriteLine("No issues found", ConsoleColor.Green);
+                        WriteError("Binary compatibility check failed.");
+                        WriteError($"Wrote {reportFile}");
                     }
                 }
+
+                result.BaselineDiagnostics = Array.Empty<string>();
+                result.ActualDiagnostics = reportLines;
+
+                if (!commandLine.IsBatchMode)
+                {
+                    OutputDiff(commandLine, Array.Empty<string>(), reportLines);
+                }
+
+                result.Success = false;
             }
+
+            ListExaminedAssemblies(reportFile);
 
             if (commandLine.ReportIVT)
             {
