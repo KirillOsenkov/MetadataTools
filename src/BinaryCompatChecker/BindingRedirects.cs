@@ -85,7 +85,7 @@ public partial class Checker
         {
             foreach (var codeBase in codeBases)
             {
-                codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
+                codeBase.AssemblyDefinition ??= Load(codeBase.FilePath, markAsExamined: false);
                 if (codeBase.AssemblyDefinition != null)
                 {
                     if (!foundVersions.Contains(codeBase.AssemblyDefinition.Name))
@@ -197,7 +197,7 @@ public partial class Checker
             var match = codeBases.FirstOrDefault(c => c.Version == requestedVersion);
             if (match != null)
             {
-                match.AssemblyDefinition ??= Load(match.FilePath);
+                match.AssemblyDefinition ??= Load(match.FilePath, markAsExamined: false);
                 if (match.AssemblyDefinition != null && match.AssemblyDefinition.Name.Version == requestedVersion)
                 {
                     return true;

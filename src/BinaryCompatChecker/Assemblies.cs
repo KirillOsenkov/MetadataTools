@@ -229,7 +229,7 @@ public partial class Checker
                 {
                     if (resolvedVersion == codeBase.Version)
                     {
-                        var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath);
+                        var assemblyDefinition = codeBase.AssemblyDefinition ??= Load(codeBase.FilePath, markAsExamined: false);
                         if (assemblyDefinition != null &&
                             string.Equals(assemblyDefinition.Name.Name, reference.Name, StringComparison.OrdinalIgnoreCase) &&
                             assemblyDefinition.Name.Version == resolvedVersion)
@@ -406,7 +406,7 @@ public partial class Checker
     private Dictionary<string, string> loadedAssemblyPaths = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string> loadedAssemblyPathsNonStrict = new(StringComparer.OrdinalIgnoreCase);
 
-    private AssemblyDefinition Load(string filePath)
+    private AssemblyDefinition Load(string filePath, bool markAsExamined = true)
     {
         var result = assemblyCache.Load(filePath, resolver, diagnostics);
 
@@ -416,7 +416,7 @@ public partial class Checker
             {
                 OnAssemblyLoaded(assemblyDefinition);
 
-                if (!Framework.IsNetFrameworkAssembly(assemblyDefinition))
+                if (!Framework.IsNetFrameworkAssembly(assemblyDefinition) && markAsExamined)
                 {
                     string relativePath = GetRelativePath(filePath);
                     string targetFramework = GetTargetFramework(assemblyDefinition);
@@ -429,9 +429,12 @@ public partial class Checker
                 }
             }
 
-            assemblyDefinitionsExamined.Add(assemblyDefinition);
-            loadedAssemblyPaths[assemblyDefinition.FullName] = filePath;
-            loadedAssemblyPathsNonStrict[assemblyDefinition.Name.Name] = filePath;
+            if (markAsExamined)
+            {
+                assemblyDefinitionsExamined.Add(assemblyDefinition);
+                loadedAssemblyPaths[assemblyDefinition.FullName] = filePath;
+                loadedAssemblyPathsNonStrict[assemblyDefinition.Name.Name] = filePath;
+            }
         }
 
         return result.assemblyDefinition;
