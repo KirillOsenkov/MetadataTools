@@ -144,6 +144,21 @@ namespace BinaryCompatChecker
             result.CommandLine = commandLine;
 
             string reportFile = commandLine.ReportFile;
+            if (reportFile == null && commandLine.BaselineFile != null)
+            {
+                reportFile = commandLine.BaselineFile;
+            }
+
+            if (reportFile == null)
+            {
+                reportFile = "BinaryCompatReport.txt";
+            }
+
+            if (commandLine.ReportDirectory != null && !Path.IsPathRooted(reportFile))
+            {
+                reportFile = Path.Combine(commandLine.ReportDirectory, reportFile);
+            }
+
             reportFile = Path.GetFullPath(reportFile);
 
             string baselineFile = commandLine.BaselineFile;
@@ -153,10 +168,15 @@ namespace BinaryCompatChecker
             }
             else
             {
+                if (commandLine.BaselineDirectory != null && !Path.IsPathRooted(baselineFile))
+                {
+                    baselineFile = Path.Combine(commandLine.BaselineDirectory, baselineFile);
+                }
+
                 baselineFile = Path.GetFullPath(baselineFile);
                 if (!File.Exists(baselineFile))
                 {
-                    WriteError($"Baseline file doesn't exist: {commandLine.BaselineFile}");
+                    WriteError($"Baseline file doesn't exist: {baselineFile}");
                     result.Success = false;
                     return result;
                 }

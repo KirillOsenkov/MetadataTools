@@ -143,7 +143,9 @@ public class CommandLine
     public IReadOnlyList<string> IgnoreVersionMismatchForAppConfigs { get; set; } = Array.Empty<string>();
 
     public string BaselineFile { get; set; }
-    public string ReportFile { get; set; } = "BinaryCompatReport.txt";
+    public string BaselineDirectory { get; set; }
+    public string ReportFile { get; set; }
+    public string ReportDirectory { get; set; }
     public bool ListAssemblies { get; set; }
 
     public string ConfigFile { get; set; }
@@ -204,7 +206,9 @@ public class CommandLine
             EnableDefaultOutput = EnableDefaultOutput,
             ListAssemblies = ListAssemblies,
             Recursive = Recursive,
-            CustomFailurePrompt = CustomFailurePrompt
+            CustomFailurePrompt = CustomFailurePrompt,
+            BaselineDirectory = BaselineDirectory,
+            ReportDirectory = ReportDirectory
         };
 
         return other;
@@ -425,6 +429,43 @@ public class CommandLine
                     report = report.Trim('"');
                     arguments.Remove(arg);
                     BaselineFile = report;
+                    continue;
+                }
+
+                if (argName.StartsWith("baselineDirectory:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var baselineDirectory = arg.Substring("/baselineDirectory:".Length).Trim('"');
+                    baselineDirectory = Path.GetFullPath(baselineDirectory);
+                    if (!Directory.Exists(baselineDirectory))
+                    {
+                        WriteError($"Baseline directory doesn't exist: {baselineDirectory}");
+                        return false;
+                    }
+
+                    arguments.Remove(arg);
+                    BaselineDirectory = baselineDirectory;
+                    continue;
+                }
+
+                if (argName.StartsWith("reportDirectory:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var reportDirectory = arg.Substring("/reportDirectory:".Length).Trim('"');
+                    reportDirectory = Path.GetFullPath(reportDirectory);
+                    if (!Directory.Exists(reportDirectory))
+                    {
+                        try
+                        {
+                            Directory.CreateDirectory(reportDirectory);
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteError($"Unable to create report directory: {reportDirectory} ({ex.Message})");
+                            return false;
+                        }
+                    }
+
+                    arguments.Remove(arg);
+                    ReportDirectory = reportDirectory;
                     continue;
                 }
 
@@ -1005,6 +1046,8 @@ Options:", ConsoleColor.White);
     -p:<pattern>               Semicolon-separated file pattern(s) such as *.dll;*.exe.
     -baseline:<baseline.txt>   Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
     -out:<report.txt>          Write report to <report.txt> instead of BinaryCompatReport.txt.
+    -baselineDirectory:<...>   Directory to resolve baselines in if the baseline is a relative path.
+    -reportDirectory:<...>     Directory to write report files to if -out: is a relative path.
     -customFailurePrompt:<...> Custom text to display when analysis fails (maybe a link to wiki/readme).
 
     -ignoreVersionMismatch     Do not report assembly version mismatches.
