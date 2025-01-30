@@ -1005,6 +1005,7 @@ Options:", ConsoleColor.White);
     -p:<pattern>               Semicolon-separated file pattern(s) such as *.dll;*.exe.
     -baseline:<baseline.txt>   Optional, read <baseline.txt> instead of BinaryCompatReport.txt.
     -out:<report.txt>          Write report to <report.txt> instead of BinaryCompatReport.txt.
+    -customFailurePrompt:<...> Custom text to display when analysis fails (maybe a link to wiki/readme).
 
     -ignoreVersionMismatch     Do not report assembly version mismatches.
     -ignoreFacade              Do not report facade assemblies.
