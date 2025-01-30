@@ -62,6 +62,11 @@ namespace BinaryCompatChecker
                 return 2;
             }
 
+            if (configuration.CustomFailurePrompt != null)
+            {
+                commandLine.CustomFailurePrompt = configuration.CustomFailurePrompt;
+            }
+
             var tasks = new List<Task<CheckResult>>();
             foreach (var invocation in configuration.FoldersToCheck)
             {
@@ -100,7 +105,8 @@ namespace BinaryCompatChecker
                 }
                 else
                 {
-                    WriteError($@"Binary compatibility check failed.
+                    string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine} {commandLine.CustomFailurePrompt}" : "";
+                    WriteError($@"Binary compatibility check failed.{customPrompt}
  The following report files are different from the baseline file:");
                 }
             }
@@ -368,10 +374,11 @@ namespace BinaryCompatChecker
                     {
                         if (!commandLine.IsBatchMode)
                         {
-                            WriteError($@"Binary compatibility check failed.
- The current assembly binary compatibility report is different from the baseline file.
+                            string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine} {commandLine.CustomFailurePrompt}" : "";
+                            WriteError($@"Binary compatibility check failed.{customPrompt}
+ The current report is different from the baseline file.
  Baseline file: {baselineFile}
- Wrote report file: {reportFile}");
+ Report file: {reportFile}");
                         }
                     }
 
@@ -422,6 +429,11 @@ namespace BinaryCompatChecker
                         if (!commandLine.IsBatchMode)
                         {
                             WriteError("Binary compatibility check failed.");
+                            if (!string.IsNullOrEmpty(commandLine.CustomFailurePrompt))
+                            {
+                                WriteError(commandLine.CustomFailurePrompt);
+                            }
+
                             WriteError($"Wrote {reportFile}");
                         }
                     }

@@ -9,6 +9,7 @@ namespace BinaryCompatChecker;
 public class Configuration
 {
     public IReadOnlyList<Invocation> FoldersToCheck { get; set; }
+    public string CustomFailurePrompt { get; set; }
 
     public static Configuration Read(string configFile)
     {
@@ -133,6 +134,8 @@ public class CommandLine
     public bool OutputSummary { get; set; }
     public bool EnableDefaultOutput { get; set; } = true;
 
+    public string CustomFailurePrompt { get; set; }
+
     public bool ReplicateBindingRedirects { get; set; }
     public string SourceAppConfig { get; set; }
     public IReadOnlyList<string> DestinationAppConfigs { get; set; }
@@ -200,7 +203,8 @@ public class CommandLine
             OutputSummary = OutputSummary,
             EnableDefaultOutput = EnableDefaultOutput,
             ListAssemblies = ListAssemblies,
-            Recursive = Recursive
+            Recursive = Recursive,
+            CustomFailurePrompt = CustomFailurePrompt
         };
 
         return other;
@@ -284,197 +288,256 @@ public class CommandLine
 
         foreach (var arg in arguments.ToArray())
         {
-            if (arg.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            if (arg.StartsWith("/") || arg.StartsWith("-"))
             {
-                ConfigFile = Path.GetFullPath(arg);
-                if (!File.Exists(ConfigFile))
+                string argName = arg.Substring(1);
+
+                if (argName.StartsWith("ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
                 {
-                    WriteError($"Specified config file not found: {ConfigFile}");
-                    return false;
-                }
+                    ReportVersionMismatch = false;
+                    arguments.Remove(arg);
 
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.StartsWith("/ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase) ||
-                arg.StartsWith("-ignoreVersionMismatch", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportVersionMismatch = false;
-                arguments.Remove(arg);
-
-                int prefixLength = "/ignoreVersionMismatch".Length;
-                if (arg.Length > prefixLength + 1 && arg[prefixLength] == ':')
-                {
-                    var configs = arg.Substring(prefixLength + 1).Split(';', ',').Select(c => c.Trim('"')).ToArray();
-                    if (configs.Length > 0)
+                    int prefixLength = "/ignoreVersionMismatch".Length;
+                    if (arg.Length > prefixLength + 1 && arg[prefixLength] == ':')
                     {
-                        IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatchForAppConfigs
-                            .Concat(configs)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToArray();
-                        ReportVersionMismatch = true;
+                        var configs = arg.Substring(prefixLength + 1).Split(';', ',').Select(c => c.Trim('"')).ToArray();
+                        if (configs.Length > 0)
+                        {
+                            IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatchForAppConfigs
+                                .Concat(configs)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToArray();
+                            ReportVersionMismatch = true;
+                        }
                     }
+
+                    continue;
                 }
 
-                continue;
-            }
-
-            if (arg.Equals("/ignoreFacade", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreFacade", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportFacade = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ignoreMissingAssemblies", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreMissingAssemblies", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportMissingAssemblies = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ignoreFrameworkAssemblies", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreFrameworkAssemblies", StringComparison.OrdinalIgnoreCase))
-            {
-                AnalyzeFrameworkAssemblies = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ignoreMissingTypes", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreMissingTypes", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportMissingTypes = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ignoreMissingMembers", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreMissingMembers", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportMissingMembers = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ignoreInterfaces", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ignoreInterfaces", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportInterfaceMismatch = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/doNotResolveFromNetCore", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-doNotResolveFromNetCore", StringComparison.OrdinalIgnoreCase))
-            {
-                ResolveFromNetCore = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase))
-            {
-                ResolveFromGac = false;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/outputExpectedWarnings", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-outputExpectedWarnings", StringComparison.OrdinalIgnoreCase))
-            {
-                OutputExpectedWarnings = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/outputNewWarnings", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-outputNewWarnings", StringComparison.OrdinalIgnoreCase))
-            {
-                OutputNewWarnings = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/outputSummary", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-outputSummary", StringComparison.OrdinalIgnoreCase))
-            {
-                OutputSummary = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/embeddedInteropTypes", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportEmbeddedInteropTypes = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/ivt", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-ivt", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportIVT = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/s", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-s", StringComparison.OrdinalIgnoreCase))
-            {
-                Recursive = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.Equals("/intPtrCtors", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-intPtrCtors", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportIntPtrConstructors = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.StartsWith("/baseline:") || arg.StartsWith("-baseline:"))
-            {
-                var report = arg.Substring(10);
-                report = report.Trim('"');
-                arguments.Remove(arg);
-                BaselineFile = report;
-                continue;
-            }
-
-            if (arg.Equals("/replicatebindingredirects", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("-replicatebindingredirects", StringComparison.OrdinalIgnoreCase))
-            {
-                arguments.Remove(arg);
-                ReplicateBindingRedirects = true;
-                continue;
-            }
-
-            if (arg.StartsWith("/out:") || arg.StartsWith("-out:"))
-            {
-                var report = arg.Substring(5);
-                report = report.Trim('"');
-                arguments.Remove(arg);
-                ReportFile = report;
-                continue;
-            }
-
-            if (arg.StartsWith("/l") || arg.StartsWith("-l"))
-            {
-                if (arg.Length == 2)
+                if (argName.Equals("ignoreFacade", StringComparison.OrdinalIgnoreCase))
                 {
-                    ListAssemblies = true;
+                    ReportFacade = false;
+                    arguments.Remove(arg);
+                    continue;
                 }
 
-                arguments.Remove(arg);
-                continue;
+                if (argName.Equals("ignoreMissingAssemblies", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportMissingAssemblies = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreFrameworkAssemblies", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnalyzeFrameworkAssemblies = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreMissingTypes", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportMissingTypes = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreMissingMembers", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportMissingMembers = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreInterfaces", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportInterfaceMismatch = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("doNotResolveFromNetCore", StringComparison.OrdinalIgnoreCase))
+                {
+                    ResolveFromNetCore = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase))
+                {
+                    ResolveFromGac = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("outputExpectedWarnings", StringComparison.OrdinalIgnoreCase))
+                {
+                    OutputExpectedWarnings = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("outputNewWarnings", StringComparison.OrdinalIgnoreCase))
+                {
+                    OutputNewWarnings = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("outputSummary", StringComparison.OrdinalIgnoreCase))
+                {
+                    OutputSummary = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("embeddedInteropTypes", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportEmbeddedInteropTypes = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ivt", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportIVT = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("s", StringComparison.OrdinalIgnoreCase))
+                {
+                    Recursive = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("intPtrCtors", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportIntPtrConstructors = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.StartsWith("baseline:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var report = arg.Substring(10);
+                    report = report.Trim('"');
+                    arguments.Remove(arg);
+                    BaselineFile = report;
+                    continue;
+                }
+
+                if (argName.Equals("replicatebindingredirects", StringComparison.OrdinalIgnoreCase))
+                {
+                    arguments.Remove(arg);
+                    ReplicateBindingRedirects = true;
+                    continue;
+                }
+
+                if (argName.StartsWith("out:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var report = arg.Substring(5);
+                    report = report.Trim('"');
+                    arguments.Remove(arg);
+                    ReportFile = report;
+                    continue;
+                }
+
+                if (argName.StartsWith("l", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (argName.Length == 1)
+                    {
+                        ListAssemblies = true;
+                    }
+
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.StartsWith("customFailurePrompt:", StringComparison.OrdinalIgnoreCase))
+                {
+                    CustomFailurePrompt = argName.Substring("customFailurePrompt:".Length).Trim('"');
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.StartsWith("closure:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string closure = arg.Substring("/closure:".Length);
+                    var parts = closure.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var part in parts)
+                    {
+                        closureRootPatterns.Add(part.Trim('"'));
+                    }
+
+                    ReportUnreferencedAssemblies = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.StartsWith("resolve:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string resolveDir = arg.Substring("/resolve:".Length);
+                    resolveDir = resolveDir.Trim('"');
+                    if (string.IsNullOrWhiteSpace(resolveDir))
+                    {
+                        WriteError("Resolve directory not specified");
+                        return false;
+                    }
+
+                    resolveDir = Path.GetFullPath(resolveDir);
+                    if (!Directory.Exists(resolveDir))
+                    {
+                        WriteError($"Custom resolve directory doesn't exist: {resolveDir}");
+                        return false;
+                    }
+
+                    CustomResolveDirectories.Add(resolveDir);
+                    AddRootDirectory(resolveDir);
+
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if ((argName.StartsWith("p:", StringComparison.OrdinalIgnoreCase)) && arg.Length > 3)
+                {
+                    string pattern = arg.Substring(3);
+                    pattern = pattern.Trim('"');
+
+                    if (pattern.Contains(';'))
+                    {
+                        foreach (var sub in pattern.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            patterns.Add(sub.Trim());
+                        }
+                    }
+                    else
+                    {
+                        patterns.Add(pattern);
+                    }
+
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                WriteError($"Unknown argument: {arg}");
+                return false;
+            }
+            else
+            {
+                if (arg.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    ConfigFile = Path.GetFullPath(arg);
+                    if (!File.Exists(ConfigFile))
+                    {
+                        WriteError($"Specified config file not found: {ConfigFile}");
+                        return false;
+                    }
+
+                    arguments.Remove(arg);
+                    continue;
+                }
             }
 
             if (arg.StartsWith("!") && arg.Length > 1)
@@ -483,71 +546,6 @@ public class CommandLine
                 exclusions.Add(pattern);
                 arguments.Remove(arg);
                 continue;
-            }
-
-            if (arg.StartsWith("/closure:") || arg.StartsWith("-closure:"))
-            {
-                string closure = arg.Substring("/closure:".Length);
-                var parts = closure.Split(';', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var part in parts)
-                {
-                    closureRootPatterns.Add(part.Trim('"'));
-                }
-
-                ReportUnreferencedAssemblies = true;
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.StartsWith("/resolve:") || arg.StartsWith("-resolve:"))
-            {
-                string resolveDir = arg.Substring("/resolve:".Length);
-                resolveDir = resolveDir.Trim('"');
-                if (string.IsNullOrWhiteSpace(resolveDir))
-                {
-                    WriteError("Resolve directory not specified");
-                    return false;
-                }
-
-                resolveDir = Path.GetFullPath(resolveDir);
-                if (!Directory.Exists(resolveDir))
-                {
-                    WriteError($"Custom resolve directory doesn't exist: {resolveDir}");
-                    return false;
-                }
-
-                CustomResolveDirectories.Add(resolveDir);
-                AddRootDirectory(resolveDir);
-
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if ((arg.StartsWith("/p:") || arg.StartsWith("-p:")) && arg.Length > 3)
-            {
-                string pattern = arg.Substring(3);
-                pattern = pattern.Trim('"');
-
-                if (pattern.Contains(';'))
-                {
-                    foreach (var sub in pattern.Split(';', StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        patterns.Add(sub.Trim());
-                    }
-                }
-                else
-                {
-                    patterns.Add(pattern);
-                }
-
-                arguments.Remove(arg);
-                continue;
-            }
-
-            if (arg.StartsWith("-") || arg.StartsWith("/"))
-            {
-                WriteError($"Unknown argument: {arg}");
-                return false;
             }
         }
 
