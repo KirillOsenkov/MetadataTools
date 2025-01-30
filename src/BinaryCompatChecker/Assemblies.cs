@@ -152,8 +152,20 @@ public partial class Checker
 
     private string TryResolveFromLoadedAssemblies(AssemblyNameReference reference, bool strictVersion = true)
     {
-        var result = assemblyCache.TryResolve(reference, strictVersion);
-        return result;
+        if (loadedAssemblyPaths.TryGetValue(reference.FullName, out var result))
+        {
+            return result;
+        }
+
+        if (!strictVersion)
+        {
+            if (loadedAssemblyPathsNonStrict.TryGetValue(reference.Name, out result))
+            {
+                return result;
+            }
+        }
+
+        return null;
     }
 
     private string TryResolveFromInputFiles(AssemblyNameReference reference)
@@ -391,6 +403,9 @@ public partial class Checker
         return null;
     }
 
+    private Dictionary<string, string> loadedAssemblyPaths = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> loadedAssemblyPathsNonStrict = new(StringComparer.OrdinalIgnoreCase);
+
     private AssemblyDefinition Load(string filePath)
     {
         var result = assemblyCache.Load(filePath, resolver, diagnostics);
@@ -415,6 +430,8 @@ public partial class Checker
             }
 
             assemblyDefinitionsExamined.Add(assemblyDefinition);
+            loadedAssemblyPaths[assemblyDefinition.FullName] = filePath;
+            loadedAssemblyPathsNonStrict[assemblyDefinition.Name.Name] = filePath;
         }
 
         return result.assemblyDefinition;

@@ -11,29 +11,6 @@ public class AssemblyCache
 
     public static AssemblyCache Instance { get; } = new AssemblyCache();
 
-    public string TryResolve(AssemblyNameReference reference, bool strictVersion)
-    {
-        lock (filePathToModuleDefinition)
-        {
-            foreach (var assemblyDefinition in filePathToModuleDefinition)
-            {
-                if (assemblyDefinition.Value == null)
-                {
-                    continue;
-                }
-
-                if (string.Equals(assemblyDefinition.Value.Name.FullName, reference.FullName, StringComparison.OrdinalIgnoreCase) ||
-                    (!strictVersion && string.Equals(Path.GetFileNameWithoutExtension(assemblyDefinition.Key), reference.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    string filePath = assemblyDefinition.Value.MainModule.FileName;
-                    return filePath;
-                }
-            }
-        }
-
-        return null;
-    }
-
     public (AssemblyDefinition assemblyDefinition, bool fromCache) Load(string filePath, IAssemblyResolver resolver, HashSet<string> diagnostics)
     {
         bool fromCache = true;
