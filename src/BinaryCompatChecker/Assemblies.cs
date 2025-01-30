@@ -63,6 +63,11 @@ public partial class Checker
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
     {
         string filePath = assemblyDefinition.MainModule.FileName;
+        if (filesToVisit.Contains(filePath))
+        {
+            return;
+        }
+
         if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
         {
             WriteLine(filePath, ConsoleColor.DarkGray);

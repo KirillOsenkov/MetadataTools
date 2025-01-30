@@ -247,7 +247,7 @@ public class CommandLine
         while (arguments.FirstOrDefault(a => a.StartsWith("@")) is string responseFile)
         {
             arguments.Remove(responseFile);
-            responseFile = responseFile.Substring(1);
+            responseFile = responseFile.Substring(1).Trim('"');
             var filePath = Path.GetFullPath(responseFile);
             if (File.Exists(filePath))
             {
@@ -306,7 +306,7 @@ public class CommandLine
                 int prefixLength = "/ignoreVersionMismatch".Length;
                 if (arg.Length > prefixLength + 1 && arg[prefixLength] == ':')
                 {
-                    var configs = arg.Substring(prefixLength + 1).Split(';', ',');
+                    var configs = arg.Substring(prefixLength + 1).Split(';', ',').Select(c => c.Trim('"')).ToArray();
                     if (configs.Length > 0)
                     {
                         IgnoreVersionMismatchForAppConfigs = IgnoreVersionMismatchForAppConfigs

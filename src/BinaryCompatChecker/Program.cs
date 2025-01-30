@@ -18,6 +18,7 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
+        private readonly HashSet<string> filesToVisit = new(CommandLine.PathComparer);
         private readonly AssemblyCache assemblyCache;
 
         private CommandLine commandLine;
@@ -194,6 +195,8 @@ namespace BinaryCompatChecker
 
                 fileQueue.Enqueue(file);
             }
+
+            filesToVisit.UnionWith(fileQueue);
 
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
