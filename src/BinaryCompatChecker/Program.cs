@@ -82,7 +82,6 @@ namespace BinaryCompatChecker
                     var result = new Checker(line).Check();
                     return result;
                 });
-                task.Wait();
                 tasks.Add(task);
             }
 
