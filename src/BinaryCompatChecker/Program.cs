@@ -86,6 +86,7 @@ namespace BinaryCompatChecker
             }
 
             bool success = true;
+            bool hasDiff = false;
 
             foreach (var task in tasks)
             {
@@ -93,6 +94,10 @@ namespace BinaryCompatChecker
                 if (!checkResult.Success)
                 {
                     success = false;
+                    if (checkResult.BaselineDiagnostics != null || checkResult.ActualDiagnostics != null)
+                    {
+                        hasDiff = true;
+                    }
                 }
             }
 
@@ -105,30 +110,34 @@ namespace BinaryCompatChecker
                 else
                 {
                     string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine} {commandLine.CustomFailurePrompt}" : "";
-                    WriteError($@"Binary compatibility check failed.{customPrompt}
- The following report files are different from the baseline file:");
+                    WriteError($@"Binary compatibility check failed.{customPrompt}");
                 }
             }
 
-            foreach (var task in tasks)
+            if (hasDiff)
             {
-                var checkResult = task.Result;
-                if (!checkResult.Success)
+                WriteError($@"
+The following report files are different from the baseline file:");
+                foreach (var task in tasks)
                 {
-                    if (checkResult.BaselineFile != null || checkResult.ReportFile != null)
+                    var checkResult = task.Result;
+                    if (!checkResult.Success)
                     {
-                        WriteError($@" Baseline file: {checkResult.BaselineFile}
- Report file: {checkResult.ReportFile}");
-                    }
+                        if (checkResult.BaselineFile != null || checkResult.ReportFile != null)
+                        {
+                            WriteError($@"Baseline file: {checkResult.BaselineFile}
+Report file: {checkResult.ReportFile}");
+                        }
 
-                    if (checkResult.BaselineDiagnostics != null || checkResult.ActualDiagnostics != null)
-                    {
-                        var baselineDiagnostics = checkResult.BaselineDiagnostics ?? Array.Empty<string>();
-                        var actualDiagnostics = checkResult.ActualDiagnostics ?? Array.Empty<string>();
-                        OutputDiff(
-                            checkResult.CommandLine,
-                            baselineDiagnostics,
-                            actualDiagnostics);
+                        if (checkResult.BaselineDiagnostics != null || checkResult.ActualDiagnostics != null)
+                        {
+                            var baselineDiagnostics = checkResult.BaselineDiagnostics ?? Array.Empty<string>();
+                            var actualDiagnostics = checkResult.ActualDiagnostics ?? Array.Empty<string>();
+                            OutputDiff(
+                                checkResult.CommandLine,
+                                baselineDiagnostics,
+                                actualDiagnostics);
+                        }
                     }
                 }
             }
