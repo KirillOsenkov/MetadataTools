@@ -109,7 +109,7 @@ namespace BinaryCompatChecker
                 }
                 else
                 {
-                    string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine} {commandLine.CustomFailurePrompt}" : "";
+                    string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine}{commandLine.CustomFailurePrompt}" : "";
                     WriteError($@"Binary compatibility check failed.{customPrompt}");
                 }
             }
@@ -411,11 +411,11 @@ Report file: {checkResult.ReportFile}");
                     {
                         if (!commandLine.IsBatchMode)
                         {
-                            string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine} {commandLine.CustomFailurePrompt}" : "";
+                            string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine}{commandLine.CustomFailurePrompt}" : "";
                             WriteError($@"Binary compatibility check failed.{customPrompt}
- The current report is different from the baseline file.
- Baseline file: {baselineFile}
- Report file: {reportFile}");
+The current report is different from the baseline file.
+Baseline file: {baselineFile}
+Report file: {reportFile}");
                         }
                     }
 
