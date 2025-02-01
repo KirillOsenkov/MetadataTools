@@ -115,12 +115,21 @@ namespace BinaryCompatChecker
                 var checkResult = task.Result;
                 if (!checkResult.Success)
                 {
-                    WriteError($@" Baseline file: {checkResult.BaselineFile}
+                    if (checkResult.BaselineFile != null || checkResult.ReportFile != null)
+                    {
+                        WriteError($@" Baseline file: {checkResult.BaselineFile}
  Report file: {checkResult.ReportFile}");
-                    OutputDiff(
-                        checkResult.CommandLine,
-                        checkResult.BaselineDiagnostics,
-                        checkResult.ActualDiagnostics);
+                    }
+
+                    if (checkResult.BaselineDiagnostics != null || checkResult.ActualDiagnostics != null)
+                    {
+                        var baselineDiagnostics = checkResult.BaselineDiagnostics ?? Array.Empty<string>();
+                        var actualDiagnostics = checkResult.ActualDiagnostics ?? Array.Empty<string>();
+                        OutputDiff(
+                            checkResult.CommandLine,
+                            baselineDiagnostics,
+                            actualDiagnostics);
+                    }
                 }
             }
 
