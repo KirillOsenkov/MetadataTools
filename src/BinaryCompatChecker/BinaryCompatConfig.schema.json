@@ -1,0 +1,66 @@
+{
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "CustomFailurePrompt": {
+            "type": "string"
+        },
+        "FoldersToCheck": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "Name": {
+                        "type": "string"
+                    },
+                    "Directory": {
+                        "type": "string"
+                    },
+                    "CommandLineArguments": {
+                        "type": "string"
+                    },
+                    "BaselinePath": {
+                        "type": "string"
+                    },
+                    "ReportPath": {
+                        "type": "string"
+                    },
+                    "IgnoreVersionMismatch":
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "Resolve":
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "Exclude":
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "Closure":
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "Directory"
+                ]
+            }
+        }
+    }
+}
