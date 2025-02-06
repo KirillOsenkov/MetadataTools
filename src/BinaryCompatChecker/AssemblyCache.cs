@@ -32,7 +32,7 @@ public class AssemblyCache
                     var readerParameters = new ReaderParameters
                     {
                         AssemblyResolver = resolver,
-                        InMemory = true
+                        InMemory = false
                     };
                     assemblyDefinition = AssemblyDefinition.ReadAssembly(filePath, readerParameters);
                     filePathToModuleDefinition[filePath] = assemblyDefinition;
@@ -54,6 +54,11 @@ public class AssemblyCache
 
     public void Clear()
     {
+        foreach (var module in filePathToModuleDefinition.Values)
+        {
+            module?.Dispose();
+        }
+
         filePathToModuleDefinition.Clear();
     }
 }
