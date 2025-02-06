@@ -71,15 +71,18 @@ namespace BinaryCompatChecker
             var tasks = new List<Task<CheckResult>>();
             foreach (var invocation in configuration.FoldersToCheck)
             {
-                var line = invocation.GetCommandLine(commandLine);
-                if (line == null)
-                {
-                    return 3;
-                }
-
-                line.IsBatchMode = true;
                 var task = Task.Run(() =>
                 {
+                    var line = invocation.GetCommandLine(commandLine);
+                    if (line == null)
+                    {
+                        return new CheckResult
+                        {
+                            Success = false
+                        };
+                    }
+
+                    line.IsBatchMode = true;
                     var result = new Checker(line).Check();
                     return result;
                 });
