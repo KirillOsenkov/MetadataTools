@@ -211,7 +211,7 @@ public partial class Checker
 
     public static bool AreSame(MethodReference method, MethodReference reference)
     {
-        if (method.Name != reference.Name)
+        if (!string.Equals(method.Name, reference.Name, StringComparison.Ordinal))
             return false;
 
         if (method.HasGenericParameters != reference.HasGenericParameters)
