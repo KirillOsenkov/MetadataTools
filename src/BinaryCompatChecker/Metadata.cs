@@ -176,7 +176,7 @@ public partial class Checker
                 methodName = methodName.Substring(dot + 1);
             }
 
-            if (methodName != reference.Name)
+            if (!string.Equals(methodName, reference.Name, StringComparison.Ordinal))
                 continue;
 
             if (method.HasGenericParameters != reference.HasGenericParameters)
