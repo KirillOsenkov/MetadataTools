@@ -502,6 +502,7 @@ Report file: {reportFile}");
             }
 
             privateAssemblyCache?.Clear();
+            ((CustomAssemblyResolver)resolver).Clear();
 
             return result;
         }

@@ -58,6 +58,11 @@ public partial class Checker
 
             return resolved;
         }
+
+        public void Clear()
+        {
+            resolutionCache.Clear();
+        }
     }
 
     private void OnAssemblyLoaded(AssemblyDefinition assemblyDefinition)
