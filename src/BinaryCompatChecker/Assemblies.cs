@@ -408,7 +408,14 @@ public partial class Checker
 
     private AssemblyDefinition Load(string filePath, bool markAsExamined = true)
     {
-        var result = assemblyCache.Load(filePath, resolver, diagnostics);
+        var cache = assemblyCache;
+
+        if (IsLocalAssembly(filePath))
+        {
+            cache = privateAssemblyCache;
+        }
+
+        var result = cache.Load(filePath, resolver, diagnostics);
 
         if (result.assemblyDefinition is { } assemblyDefinition)
         {
@@ -438,6 +445,19 @@ public partial class Checker
         }
 
         return result.assemblyDefinition;
+    }
+
+    private bool IsLocalAssembly(string filePath)
+    {
+        foreach (var rootDirectory in commandLine.RootDirectories)
+        {
+            if (filePath.StartsWith(rootDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private string GetRelativePath(string filePath)

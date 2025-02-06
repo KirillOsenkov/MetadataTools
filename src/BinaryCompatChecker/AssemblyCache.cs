@@ -51,4 +51,9 @@ public class AssemblyCache
             return (assemblyDefinition, fromCache);
         }
     }
+
+    public void Clear()
+    {
+        filePathToModuleDefinition.Clear();
+    }
 }

@@ -20,6 +20,7 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
         private readonly HashSet<string> filesToVisit = new(CommandLine.PathComparer);
         private readonly AssemblyCache assemblyCache;
+        private readonly AssemblyCache privateAssemblyCache;
 
         private CommandLine commandLine;
 
@@ -151,6 +152,7 @@ Report file: {checkResult.ReportFile}");
         {
             this.commandLine = commandLine;
             this.assemblyCache = AssemblyCache.Instance;
+            this.privateAssemblyCache = new AssemblyCache();
             resolver = new CustomAssemblyResolver(this);
         }
 
@@ -498,6 +500,8 @@ Report file: {reportFile}");
                     ".ivt.roslyn.txt",
                     u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
             }
+
+            privateAssemblyCache?.Clear();
 
             return result;
         }
