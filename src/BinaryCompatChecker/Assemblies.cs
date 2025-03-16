@@ -118,13 +118,15 @@ public partial class Checker
             return result;
         }
 
-        result = TryResolveFromInputFiles(reference);
+        // codeBase takes precedence over the input files, see:
+        // https://learn.microsoft.com/en-us/dotnet/framework/deployment/how-the-runtime-locates-assemblies
+        result = TryResolveFromCodeBase(reference);
         if (result != null)
         {
             return result;
         }
 
-        result = TryResolveFromCodeBase(reference);
+        result = TryResolveFromInputFiles(reference);
         if (result != null)
         {
             return result;
