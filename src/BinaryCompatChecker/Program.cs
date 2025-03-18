@@ -409,7 +409,7 @@ Report file: {checkResult.ReportFile}");
 
             if (File.Exists(baselineFile))
             {
-                var baseline = File.ReadAllLines(baselineFile);
+                var baseline = File.ReadLines(baselineFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
                 if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
                 {
                     if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
