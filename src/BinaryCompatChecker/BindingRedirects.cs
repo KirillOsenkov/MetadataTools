@@ -170,7 +170,8 @@ public partial class Checker
             foundNewVersion = true;
         }
 
-        if (!foundNewVersion)
+        // Suppress message if an assemblyBinding node has no bindingRedirects, for example it has codeBase only.
+        if (bindingRedirect.BindingRedirectElement != null && !foundNewVersion)
         {
             string withVersion = "";
             if (newVersion != null)
