@@ -249,7 +249,7 @@ Report file: {checkResult.ReportFile}");
             if (commandLine.CheckPerAppConfig && appConfigFilePaths.Count > 1)
             {
                 Checker[] allResults = Task.WhenAll(
-                    appConfigFilePaths.Select((appConfigFilePath, index) =>
+                    appConfigFilePaths.Select(appConfigFilePath =>
                     {
                         Queue<string> filesForSubCheck = new Queue<string>(fileQueue);
                         var task = Task.Run(() =>
@@ -261,11 +261,34 @@ Report file: {checkResult.ReportFile}");
                         return task;
                     })).Result;
 
-                assembliesExamined.AddRange(allResults.SelectMany(r => r.assembliesExamined).Distinct()); 
-                diagnostics.UnionWith(allResults.SelectMany(r => r.diagnostics)); 
+                assembliesExamined.AddRange(allResults.SelectMany(r => r.assembliesExamined).Distinct());
+
+                foreach (var d in allResults.SelectMany(r => r.diagnostics))
+                {
+                    bool[] reportedDiagnostics = new bool[allResults.Length];
+                    for (int i = 0; i < allResults.Length; i++)
+                    {
+                        if (allResults[i].diagnostics.Contains(d))
+                        {
+                            reportedDiagnostics[i] = true;
+                        }
+                    }
+                    if (reportedDiagnostics.All(x => x))
+                    {
+                        diagnostics.Add(d);
+                    }
+                    else
+                    {
+                        var diagnostic = $"{d}. Not handled by: {string.Join(", ", appConfigFilePaths
+                            .Where((_, idx) => reportedDiagnostics[idx])
+                            .Select(GetRelativePath))}";
+                        diagnostics.Add(diagnostic);
+                    }
+                }
+
                 ivtUsages.AddRange(
                     allResults.SelectMany(r => r.ivtUsages)
-                    .DistinctBy(ivt => (ivt.ExposingAssembly, ivt.ConsumingAssembly, ivt.Member))); 
+                    .DistinctBy(ivt => (ivt.ExposingAssembly, ivt.ConsumingAssembly, ivt.Member)));
             }
             else
             {
