@@ -246,6 +246,146 @@ Report file: {checkResult.ReportFile}");
 
             filesToVisit.UnionWith(fileQueue);
 
+            if (commandLine.CheckPerAppConfig && appConfigFilePaths.Count > 1)
+            {
+                Checker[] allResults = Task.WhenAll(
+                    appConfigFilePaths.Select((appConfigFilePath, index) =>
+                    {
+                        Queue<string> filesForSubCheck = new Queue<string>(fileQueue);
+                        var task = Task.Run(() =>
+                        {
+                            var subChecker = new Checker(commandLine);
+                            subChecker.Check(filesForSubCheck, [appConfigFilePath]);
+                            return subChecker;
+                        });
+                        return task;
+                    })).Result;
+
+                assembliesExamined.AddRange(allResults.SelectMany(r => r.assembliesExamined).Distinct()); 
+                diagnostics.UnionWith(allResults.SelectMany(r => r.diagnostics)); 
+                ivtUsages.AddRange(
+                    allResults.SelectMany(r => r.ivtUsages)
+                    .DistinctBy(ivt => (ivt.ExposingAssembly, ivt.ConsumingAssembly, ivt.Member))); 
+            }
+            else
+            {
+                Check(fileQueue, appConfigFilePaths);
+            }
+
+            List<string> reportLines = new();
+
+            foreach (var diagnostic in diagnostics.OrderBy(s => s))
+            {
+                var text = diagnostic.Replace('\r', ' ').Replace('\n', ' ');
+                text = text.Replace(", Culture=neutral", "");
+                reportLines.Add(text);
+            }
+
+            if (File.Exists(baselineFile))
+            {
+                var baseline = File.ReadAllLines(baselineFile);
+                if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        if (!commandLine.IsBatchMode)
+                        {
+                            string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine}{commandLine.CustomFailurePrompt}" : "";
+                            WriteError($@"Binary compatibility check failed.{customPrompt}
+The current report is different from the baseline file.
+Baseline file: {baselineFile}
+Report file: {reportFile}");
+                        }
+                    }
+
+                    if (commandLine.IsBatchMode)
+                    {
+                        result.BaselineDiagnostics = baseline;
+                        result.ActualDiagnostics = reportLines;
+                    }
+                    else
+                    {
+                        OutputDiff(commandLine, baseline, reportLines);
+                    }
+
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+                        File.WriteAllLines(reportFile, reportLines);
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteError(ex.Message);
+                    }
+
+                    result.Success = false;
+                }
+                else
+                {
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        if (!commandLine.IsBatchMode)
+                        {
+                            WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
+                        }
+                    }
+                }
+            }
+            else if (!File.Exists(reportFile))
+            {
+                if (reportLines.Count > 0)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
+
+                    // initial baseline creation mode
+                    File.WriteAllLines(reportFile, reportLines);
+
+                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
+                    {
+                        if (!commandLine.IsBatchMode)
+                        {
+                            WriteError("Binary compatibility check failed.");
+                            if (!string.IsNullOrEmpty(commandLine.CustomFailurePrompt))
+                            {
+                                WriteError(commandLine.CustomFailurePrompt);
+                            }
+
+                            WriteError($"Wrote {reportFile}");
+                        }
+                    }
+
+                    result.BaselineDiagnostics = Array.Empty<string>();
+                    result.ActualDiagnostics = reportLines;
+
+                    if (!commandLine.IsBatchMode)
+                    {
+                        OutputDiff(commandLine, Array.Empty<string>(), reportLines);
+                    }
+
+                    result.Success = false;
+                }
+            }
+
+            ListExaminedAssemblies(reportFile);
+
+            if (commandLine.ReportIVT)
+            {
+                WriteIVTReport(reportFile);
+
+                WriteIVTReport(
+                    reportFile,
+                    ".ivt.roslyn.txt",
+                    u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
+            }
+
+            privateAssemblyCache?.Clear();
+            ((CustomAssemblyResolver)resolver).Clear();
+
+            return result;
+        }
+
+        private void Check(Queue<string> fileQueue, IEnumerable<string> appConfigFilePaths)
+        {
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
                 bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
@@ -397,117 +537,6 @@ Report file: {checkResult.ReportFile}");
                     }
                 }
             }
-
-            List<string> reportLines = new();
-
-            foreach (var diagnostic in diagnostics.OrderBy(s => s))
-            {
-                var text = diagnostic.Replace('\r', ' ').Replace('\n', ' ');
-                text = text.Replace(", Culture=neutral", "");
-                reportLines.Add(text);
-            }
-
-            if (File.Exists(baselineFile))
-            {
-                var baseline = File.ReadLines(baselineFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
-                if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
-                {
-                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
-                    {
-                        if (!commandLine.IsBatchMode)
-                        {
-                            string customPrompt = commandLine.CustomFailurePrompt != null ? $"{Environment.NewLine}{commandLine.CustomFailurePrompt}" : "";
-                            WriteError($@"Binary compatibility check failed.{customPrompt}
-The current report is different from the baseline file.
-Baseline file: {baselineFile}
-Report file: {reportFile}");
-                        }
-                    }
-
-                    if (commandLine.IsBatchMode)
-                    {
-                        result.BaselineDiagnostics = baseline;
-                        result.ActualDiagnostics = reportLines;
-                    }
-                    else
-                    {
-                        OutputDiff(commandLine, baseline, reportLines);
-                    }
-
-                    try
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-                        File.WriteAllLines(reportFile, reportLines);
-                    }
-                    catch (Exception ex)
-                    {
-                        WriteError(ex.Message);
-                    }
-
-                    result.Success = false;
-                }
-                else
-                {
-                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
-                    {
-                        if (!commandLine.IsBatchMode)
-                        {
-                            WriteLine($"Binary compatibility report matches the baseline file.", ConsoleColor.Green);
-                        }
-                    }
-                }
-            }
-            else if (!File.Exists(reportFile))
-            {
-                if (reportLines.Count > 0)
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(reportFile));
-
-                    // initial baseline creation mode
-                    File.WriteAllLines(reportFile, reportLines);
-
-                    if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
-                    {
-                        if (!commandLine.IsBatchMode)
-                        {
-                            WriteError("Binary compatibility check failed.");
-                            if (!string.IsNullOrEmpty(commandLine.CustomFailurePrompt))
-                            {
-                                WriteError(commandLine.CustomFailurePrompt);
-                            }
-
-                            WriteError($"Wrote {reportFile}");
-                        }
-                    }
-
-                    result.BaselineDiagnostics = Array.Empty<string>();
-                    result.ActualDiagnostics = reportLines;
-
-                    if (!commandLine.IsBatchMode)
-                    {
-                        OutputDiff(commandLine, Array.Empty<string>(), reportLines);
-                    }
-
-                    result.Success = false;
-                }
-            }
-
-            ListExaminedAssemblies(reportFile);
-
-            if (commandLine.ReportIVT)
-            {
-                WriteIVTReport(reportFile);
-
-                WriteIVTReport(
-                    reportFile,
-                    ".ivt.roslyn.txt",
-                    u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
-            }
-
-            privateAssemblyCache?.Clear();
-            ((CustomAssemblyResolver)resolver).Clear();
-
-            return result;
         }
 
         public void CheckAssemblyReferenceVersion(

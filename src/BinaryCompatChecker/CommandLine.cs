@@ -129,6 +129,8 @@ public class CommandLine
 
     public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
 
+    public bool CheckPerAppConfig { get; set; } = true;
+
     public bool OutputExpectedWarnings { get; set; }
     public bool OutputNewWarnings { get; set; }
     public bool OutputSummary { get; set; }
