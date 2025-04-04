@@ -129,6 +129,8 @@ public class CommandLine
 
     public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
 
+    public bool CheckPerAppConfig { get; set; };
+
     public bool OutputExpectedWarnings { get; set; }
     public bool OutputNewWarnings { get; set; }
     public bool OutputSummary { get; set; }
@@ -370,6 +372,13 @@ public class CommandLine
                 if (argName.Equals("doNotResolveFromGAC", StringComparison.OrdinalIgnoreCase))
                 {
                     ResolveFromGac = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("checkPerAppConfig", StringComparison.OrdinalIgnoreCase))
+                {
+                    CheckPerAppConfig = true;
                     arguments.Remove(arg);
                     continue;
                 }
@@ -1059,6 +1068,7 @@ Options:", ConsoleColor.White);
     -ignoreInterfaces          Do not report missing interface implementations.
     -doNotResolveFromGAC       Do not resolve assemblies from GAC.
     -doNotResolveFromNetCore   Do not resolve assemblies from .NET runtime directories.
+    -checkPerAppConfig         Run the check for each app.config separately.
     -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
     -embeddedInteropTypes      Report embedded interop types.
     -intPtrCtors               Report IntPtr constructors (Mono).
