@@ -415,13 +415,16 @@ Report file: {reportFile}");
 
                 if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
                 {
-                    Write(appConfigFilePath, ConsoleColor.Magenta);
-                    if (ignoreVersionMismatch)
+                    lock (Console.Out)
                     {
-                        Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
-                    }
+                        Write(appConfigFilePath, ConsoleColor.Magenta);
+                        if (ignoreVersionMismatch)
+                        {
+                            Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+                        }
 
-                    WriteLine();
+                        WriteLine();
+                    }
                 }
 
                 var appConfigFileName = Path.GetFileName(appConfigFilePath);
@@ -462,14 +465,17 @@ Report file: {reportFile}");
 
                 if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
                 {
-                    Write(file);
-                    Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
-                    if (targetFramework != null)
+                    lock (Console.Out)
                     {
-                        Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
-                    }
+                        Write(file);
+                        Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
+                        if (targetFramework != null)
+                        {
+                            Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
+                        }
 
-                    WriteLine();
+                        WriteLine();
+                    }
                 }
 
                 if (Framework.IsNetFrameworkAssembly(assemblyDefinition))
