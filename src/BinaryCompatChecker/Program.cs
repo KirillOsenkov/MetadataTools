@@ -19,7 +19,6 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
         private readonly HashSet<string> filesToVisit = new(CommandLine.PathComparer);
-        private readonly AssemblyCache assemblyCache;
         private readonly AssemblyCache privateAssemblyCache;
 
         private CommandLine commandLine;
@@ -154,7 +153,6 @@ Report file: {checkResult.ReportFile}");
         public Checker(CommandLine commandLine)
         {
             this.commandLine = commandLine;
-            this.assemblyCache = AssemblyCache.Instance;
             this.privateAssemblyCache = new AssemblyCache();
             resolver = new CustomAssemblyResolver(this);
         }

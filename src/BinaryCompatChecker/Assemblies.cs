@@ -415,12 +415,7 @@ public partial class Checker
 
     private AssemblyDefinition Load(string filePath, bool markAsExamined = true)
     {
-        var cache = assemblyCache;
-
-        if (IsLocalAssembly(filePath))
-        {
-            cache = privateAssemblyCache;
-        }
+        var cache = privateAssemblyCache;
 
         var result = cache.Load(filePath, resolver, diagnostics);
 
