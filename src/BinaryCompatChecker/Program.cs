@@ -244,156 +244,53 @@ Report file: {checkResult.ReportFile}");
 
             filesToVisit.UnionWith(fileQueue);
 
-            foreach (var appConfigFilePath in appConfigFilePaths)
+            if (commandLine.CheckPerAppConfig && appConfigFilePaths.Count > 1)
             {
-                bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
-
-                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
-                {
-                    Write(appConfigFilePath, ConsoleColor.Magenta);
-                    if (ignoreVersionMismatch)
+                Checker[] allResults = Task.WhenAll(
+                    appConfigFilePaths.Select(appConfigFilePath =>
                     {
-                        Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
-                    }
-
-                    WriteLine();
-                }
-
-                var appConfigFileName = Path.GetFileName(appConfigFilePath);
-                var appConfigFile = AppConfigFile.Read(appConfigFilePath);
-                if (ignoreVersionMismatch)
-                {
-                    appConfigFile.IgnoreVersionMismatch = true;
-                }
-
-                if (appConfigFile.Errors.Any())
-                {
-                    foreach (var error in appConfigFile.Errors)
-                    {
-                        diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
-                    }
-                }
-
-                appConfigFiles.Add(appConfigFile);
-            }
-
-            Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
-
-            while (fileQueue.Count != 0)
-            {
-                string file = fileQueue.Dequeue();
-                if (!visitedFiles.Add(file))
-                {
-                    continue;
-                }
-
-                var assemblyDefinition = Load(file);
-                if (assemblyDefinition == null)
-                {
-                    continue;
-                }
-
-                string targetFramework = GetTargetFramework(assemblyDefinition);
-
-                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
-                {
-                    Write(file);
-                    Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
-                    if (targetFramework != null)
-                    {
-                        Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
-                    }
-
-                    WriteLine();
-                }
-
-                if (Framework.IsNetFrameworkAssembly(assemblyDefinition))
-                {
-                    if (Framework.IsFacadeAssembly(assemblyDefinition) && commandLine.ReportFacade)
-                    {
-                        var relativePath = GetRelativePath(file);
-                        diagnostics.Add($"Facade assembly: {relativePath}");
-                    }
-
-                    if (!commandLine.AnalyzeFrameworkAssemblies)
-                    {
-                        continue;
-                    }
-                }
-
-                // var relativePath = file.Substring(rootDirectory.Length + 1);
-                // Log($"Assembly: {relativePath}: {assemblyDefinition.FullName}");
-
-                var references = assemblyDefinition.MainModule.AssemblyReferences;
-                List<string> referencePaths = new();
-                foreach (var reference in references)
-                {
-                    currentResolveDirectory = Path.GetDirectoryName(file);
-                    var resolvedAssemblyDefinition = Resolve(reference);
-                    if (resolvedAssemblyDefinition == null)
-                    {
-                        unresolvedAssemblies.Add(reference.Name);
-                        if (commandLine.ReportMissingAssemblies)
+                        Queue<string> filesForSubCheck = new Queue<string>(fileQueue);
+                        var task = Task.Run(() =>
                         {
-                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
-                        }
+                            var subChecker = new Checker(commandLine);
+                            subChecker.Check(filesForSubCheck, [appConfigFilePath]);
+                            return subChecker;
+                        });
+                        return task;
+                    })).Result;
 
-                        continue;
-                    }
+                assembliesExamined.AddRange(allResults.SelectMany(r => r.assembliesExamined).Distinct());
 
-                    string referenceFilePath = resolvedAssemblyDefinition.MainModule.FileName;
-                    referencePaths.Add(referenceFilePath);
-
-                    CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
-
-                    if (Framework.IsNetFrameworkAssembly(resolvedAssemblyDefinition))
-                    {
-                        continue;
-                    }
-
-                    if (commandLine.ClosureOnlyMode)
-                    {
-                        fileQueue.Enqueue(referenceFilePath);
-                    }
-
-                    CheckTypes(assemblyDefinition, resolvedAssemblyDefinition);
-                }
-
-                referenceMap[file] = referencePaths;
-
-                CheckMembers(assemblyDefinition);
-            }
-
-            CheckAppConfigFiles(appConfigFiles);
-
-            if (commandLine.ReportUnreferencedAssemblies)
-            {
-                HashSet<string> closure = new(CommandLine.PathComparer);
-                BuildClosure(commandLine.ClosureRootFiles);
-
-                void BuildClosure(IEnumerable<string> assemblies)
+                foreach (var d in allResults.SelectMany(r => r.diagnostics))
                 {
-                    foreach (var assembly in assemblies)
+                    bool[] reportedDiagnostics = new bool[allResults.Length];
+                    for (int i = 0; i < allResults.Length; i++)
                     {
-                        if (closure.Add(assembly) && referenceMap.TryGetValue(assembly, out var references))
+                        if (allResults[i].diagnostics.Contains(d))
                         {
-                            BuildClosure(references);
+                            reportedDiagnostics[i] = true;
                         }
                     }
-                }
-
-                foreach (var file in commandLine.Files)
-                {
-                    if (file.EndsWith(".config", CommandLine.PathComparison))
+                    if (reportedDiagnostics.All(x => x))
                     {
-                        continue;
+                        diagnostics.Add(d);
                     }
-
-                    if (!closure.Contains(file))
+                    else
                     {
-                        diagnostics.Add("Unreferenced assembly: " + GetRelativePath(file));
+                        var diagnostic = $"{d}. Not handled by: {string.Join(", ", appConfigFilePaths
+                            .Where((_, idx) => reportedDiagnostics[idx])
+                            .Select(GetRelativePath))}";
+                        diagnostics.Add(diagnostic);
                     }
                 }
+
+                ivtUsages.AddRange(
+                    allResults.SelectMany(r => r.ivtUsages)
+                    .DistinctBy(ivt => (ivt.ExposingAssembly, ivt.ConsumingAssembly, ivt.Member)));
+            }
+            else
+            {
+                Check(fileQueue, appConfigFilePaths);
             }
 
             List<string> reportLines = new();
@@ -407,7 +304,7 @@ Report file: {checkResult.ReportFile}");
 
             if (File.Exists(baselineFile))
             {
-                var baseline = File.ReadLines(baselineFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+                var baseline = File.ReadAllLines(baselineFile);
                 if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
                 {
                     if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
@@ -506,6 +403,167 @@ Report file: {reportFile}");
             ((CustomAssemblyResolver)resolver).Clear();
 
             return result;
+        }
+
+        private void Check(Queue<string> fileQueue, IEnumerable<string> appConfigFilePaths)
+        {
+            foreach (var appConfigFilePath in appConfigFilePaths)
+            {
+                bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
+
+                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
+                {
+                    lock (Console.Out)
+                    {
+                        Write(appConfigFilePath, ConsoleColor.Magenta);
+                        if (ignoreVersionMismatch)
+                        {
+                            Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+                        }
+
+                        WriteLine();
+                    }
+                }
+
+                var appConfigFileName = Path.GetFileName(appConfigFilePath);
+                var appConfigFile = AppConfigFile.Read(appConfigFilePath);
+                if (ignoreVersionMismatch)
+                {
+                    appConfigFile.IgnoreVersionMismatch = true;
+                }
+
+                if (appConfigFile.Errors.Any())
+                {
+                    foreach (var error in appConfigFile.Errors)
+                    {
+                        diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
+                    }
+                }
+
+                appConfigFiles.Add(appConfigFile);
+            }
+
+            Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
+
+            while (fileQueue.Count != 0)
+            {
+                string file = fileQueue.Dequeue();
+                if (!visitedFiles.Add(file))
+                {
+                    continue;
+                }
+
+                var assemblyDefinition = Load(file);
+                if (assemblyDefinition == null)
+                {
+                    continue;
+                }
+
+                string targetFramework = GetTargetFramework(assemblyDefinition);
+
+                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
+                {
+                    lock (Console.Out)
+                    {
+                        Write(file);
+                        Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
+                        if (targetFramework != null)
+                        {
+                            Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
+                        }
+
+                        WriteLine();
+                    }
+                }
+
+                if (Framework.IsNetFrameworkAssembly(assemblyDefinition))
+                {
+                    if (Framework.IsFacadeAssembly(assemblyDefinition) && commandLine.ReportFacade)
+                    {
+                        var relativePath = GetRelativePath(file);
+                        diagnostics.Add($"Facade assembly: {relativePath}");
+                    }
+
+                    if (!commandLine.AnalyzeFrameworkAssemblies)
+                    {
+                        continue;
+                    }
+                }
+
+                // var relativePath = file.Substring(rootDirectory.Length + 1);
+                // Log($"Assembly: {relativePath}: {assemblyDefinition.FullName}");
+
+                var references = assemblyDefinition.MainModule.AssemblyReferences;
+                List<string> referencePaths = new();
+                foreach (var reference in references)
+                {
+                    currentResolveDirectory = Path.GetDirectoryName(file);
+                    var resolvedAssemblyDefinition = Resolve(reference);
+                    if (resolvedAssemblyDefinition == null)
+                    {
+                        unresolvedAssemblies.Add(reference.Name);
+                        if (commandLine.ReportMissingAssemblies)
+                        {
+                            diagnostics.Add($"In assembly '{assemblyDefinition.Name.FullName}': Failed to resolve assembly reference to '{reference.FullName}'");
+                        }
+
+                        continue;
+                    }
+
+                    string referenceFilePath = resolvedAssemblyDefinition.MainModule.FileName;
+                    referencePaths.Add(referenceFilePath);
+
+                    CheckAssemblyReferenceVersion(assemblyDefinition, resolvedAssemblyDefinition, reference);
+
+                    if (Framework.IsNetFrameworkAssembly(resolvedAssemblyDefinition))
+                    {
+                        continue;
+                    }
+
+                    if (commandLine.ClosureOnlyMode)
+                    {
+                        fileQueue.Enqueue(referenceFilePath);
+                    }
+
+                    CheckTypes(assemblyDefinition, resolvedAssemblyDefinition);
+                }
+
+                referenceMap[file] = referencePaths;
+
+                CheckMembers(assemblyDefinition);
+            }
+
+            CheckAppConfigFiles(appConfigFiles);
+
+            if (commandLine.ReportUnreferencedAssemblies)
+            {
+                HashSet<string> closure = new(CommandLine.PathComparer);
+                BuildClosure(commandLine.ClosureRootFiles);
+
+                void BuildClosure(IEnumerable<string> assemblies)
+                {
+                    foreach (var assembly in assemblies)
+                    {
+                        if (closure.Add(assembly) && referenceMap.TryGetValue(assembly, out var references))
+                        {
+                            BuildClosure(references);
+                        }
+                    }
+                }
+
+                foreach (var file in commandLine.Files)
+                {
+                    if (file.EndsWith(".config", CommandLine.PathComparison))
+                    {
+                        continue;
+                    }
+
+                    if (!closure.Contains(file))
+                    {
+                        diagnostics.Add("Unreferenced assembly: " + GetRelativePath(file));
+                    }
+                }
+            }
         }
 
         public void CheckAssemblyReferenceVersion(
