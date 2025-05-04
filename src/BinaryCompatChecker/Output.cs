@@ -8,8 +8,11 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
-    private void ReportResults(CheckResult result, string baselineFile, string reportFile)
+    private void ReportResults(CheckResult result)
     {
+        var baselineFile = result.BaselineFile;
+        var reportFile = result.ReportFile;
+
         List<string> reportLines = new();
 
         foreach (var diagnostic in diagnostics.OrderBy(s => s))

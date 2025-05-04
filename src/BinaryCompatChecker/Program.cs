@@ -157,12 +157,8 @@ Report file: {checkResult.ReportFile}");
             resolver = new CustomAssemblyResolver(this);
         }
 
-        public CheckResult Check()
+        private void ComputeBaselineAndReportFile(CheckResult result)
         {
-            var result = new CheckResult();
-            result.Success = true;
-            result.CommandLine = commandLine;
-
             string reportFile = commandLine.ReportFile;
             if (reportFile == null && commandLine.BaselineFile != null)
             {
@@ -196,14 +192,27 @@ Report file: {checkResult.ReportFile}");
                 baselineFile = Path.GetFullPath(baselineFile);
                 if (!File.Exists(baselineFile))
                 {
-                    WriteError($"Baseline file doesn't exist: {baselineFile}");
                     result.Success = false;
-                    return result;
+                    result.ErrorMessage = $"Baseline file doesn't exist: {baselineFile}";
                 }
             }
 
             result.BaselineFile = baselineFile;
             result.ReportFile = reportFile;
+        }
+
+        public CheckResult Check()
+        {
+            var result = new CheckResult();
+            result.Success = true;
+            result.CommandLine = commandLine;
+
+            ComputeBaselineAndReportFile(result);
+            if (!result.Success)
+            {
+                WriteError(result.ErrorMessage);
+                return result;
+            }
 
             var appConfigFilePaths = new List<string>();
 
@@ -396,7 +405,7 @@ Report file: {checkResult.ReportFile}");
                 }
             }
 
-            ReportResults(result, baselineFile, reportFile);
+            ReportResults(result);
 
             privateAssemblyCache?.Clear();
             ((CustomAssemblyResolver)resolver).Clear();
@@ -424,6 +433,7 @@ Report file: {checkResult.ReportFile}");
     public class CheckResult
     {
         public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
         public IReadOnlyList<string> BaselineDiagnostics { get; set; }
         public IReadOnlyList<string> ActualDiagnostics { get; set; }
         public string BaselineFile { get; internal set; }
