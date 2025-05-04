@@ -249,35 +249,7 @@ Report file: {checkResult.ReportFile}");
 
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
-                bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(Path.GetFileName(appConfigFilePath), StringComparer.OrdinalIgnoreCase);
-
-                if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
-                {
-                    Write(appConfigFilePath, ConsoleColor.Magenta);
-                    if (ignoreVersionMismatch)
-                    {
-                        Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
-                    }
-
-                    WriteLine();
-                }
-
-                var appConfigFileName = Path.GetFileName(appConfigFilePath);
-                var appConfigFile = AppConfigFile.Read(appConfigFilePath);
-                if (ignoreVersionMismatch)
-                {
-                    appConfigFile.IgnoreVersionMismatch = true;
-                }
-
-                if (appConfigFile.Errors.Any())
-                {
-                    foreach (var error in appConfigFile.Errors)
-                    {
-                        diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
-                    }
-                }
-
-                appConfigFiles.Add(appConfigFile);
+                AddAppConfigFile(appConfigFilePath);
             }
 
             Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
@@ -377,6 +349,43 @@ Report file: {checkResult.ReportFile}");
             ((CustomAssemblyResolver)resolver).Clear();
 
             return result;
+        }
+
+        private void AddAppConfigFile(string appConfigFilePath)
+        {
+            var appConfigFileName = Path.GetFileName(appConfigFilePath);
+            bool ignoreVersionMismatch = commandLine.IgnoreVersionMismatchForAppConfigs.Contains(
+                appConfigFileName, StringComparer.OrdinalIgnoreCase);
+
+            if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
+            {
+                lock (Console.Out)
+                {
+                    Write(appConfigFilePath, ConsoleColor.Magenta);
+                    if (ignoreVersionMismatch)
+                    {
+                        Write(" - ignoring version mismatches", ConsoleColor.DarkMagenta);
+                    }
+
+                    WriteLine();
+                }
+            }
+
+            var appConfigFile = AppConfigFile.Read(appConfigFilePath);
+            if (ignoreVersionMismatch)
+            {
+                appConfigFile.IgnoreVersionMismatch = true;
+            }
+
+            if (appConfigFile.Errors.Any())
+            {
+                foreach (var error in appConfigFile.Errors)
+                {
+                    diagnostics.Add($"App.config: '{appConfigFileName}': {error}");
+                }
+            }
+
+            appConfigFiles.Add(appConfigFile);
         }
 
         private void ReportUnreferencedAssemblies(Dictionary<string, IEnumerable<string>> referenceMap)
