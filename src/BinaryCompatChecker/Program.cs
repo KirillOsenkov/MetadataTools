@@ -221,6 +221,22 @@ Report file: {checkResult.ReportFile}");
                 AddAppConfigFile(appConfigFilePath);
             }
 
+            Process();
+
+            CheckAppConfigFiles();
+
+            ReportUnreferencedAssemblies();
+
+            ReportResults(result);
+
+            privateAssemblyCache?.Clear();
+            ((CustomAssemblyResolver)resolver).Clear();
+
+            return result;
+        }
+
+        private void Process()
+        {
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
             foreach (var file in commandLine.Files)
             {
@@ -247,14 +263,17 @@ Report file: {checkResult.ReportFile}");
 
                 if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
                 {
-                    Write(file);
-                    Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
-                    if (targetFramework != null)
+                    lock (Console.Out)
                     {
-                        Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
-                    }
+                        Write(file);
+                        Write($" {assemblyDefinition.Name.Version}", color: ConsoleColor.DarkCyan);
+                        if (targetFramework != null)
+                        {
+                            Write($" {targetFramework}", color: ConsoleColor.DarkGreen);
+                        }
 
-                    WriteLine();
+                        WriteLine();
+                    }
                 }
 
                 if (Framework.IsNetFrameworkAssembly(assemblyDefinition))
@@ -313,17 +332,6 @@ Report file: {checkResult.ReportFile}");
 
                 CheckMembers(assemblyDefinition);
             }
-
-            CheckAppConfigFiles();
-
-            ReportUnreferencedAssemblies();
-
-            ReportResults(result);
-
-            privateAssemblyCache?.Clear();
-            ((CustomAssemblyResolver)resolver).Clear();
-
-            return result;
         }
 
         private void AddAppConfigFile(string appConfigFilePath)
