@@ -375,35 +375,7 @@ Report file: {checkResult.ReportFile}");
 
             CheckAppConfigFiles(appConfigFiles);
 
-            if (commandLine.ReportUnreferencedAssemblies)
-            {
-                HashSet<string> closure = new(CommandLine.PathComparer);
-                BuildClosure(commandLine.ClosureRootFiles);
-
-                void BuildClosure(IEnumerable<string> assemblies)
-                {
-                    foreach (var assembly in assemblies)
-                    {
-                        if (closure.Add(assembly) && referenceMap.TryGetValue(assembly, out var references))
-                        {
-                            BuildClosure(references);
-                        }
-                    }
-                }
-
-                foreach (var file in commandLine.Files)
-                {
-                    if (file.EndsWith(".config", CommandLine.PathComparison))
-                    {
-                        continue;
-                    }
-
-                    if (!closure.Contains(file))
-                    {
-                        diagnostics.Add("Unreferenced assembly: " + GetRelativePath(file));
-                    }
-                }
-            }
+            ReportUnreferencedAssemblies(referenceMap);
 
             ReportResults(result);
 
@@ -411,6 +383,41 @@ Report file: {checkResult.ReportFile}");
             ((CustomAssemblyResolver)resolver).Clear();
 
             return result;
+        }
+
+        private void ReportUnreferencedAssemblies(Dictionary<string, IEnumerable<string>> referenceMap)
+        {
+            if (!commandLine.ReportUnreferencedAssemblies)
+            {
+                return;
+            }
+
+            HashSet<string> closure = new(CommandLine.PathComparer);
+            BuildClosure(commandLine.ClosureRootFiles);
+
+            void BuildClosure(IEnumerable<string> assemblies)
+            {
+                foreach (var assembly in assemblies)
+                {
+                    if (closure.Add(assembly) && referenceMap.TryGetValue(assembly, out var references))
+                    {
+                        BuildClosure(references);
+                    }
+                }
+            }
+
+            foreach (var file in commandLine.Files)
+            {
+                if (file.EndsWith(".config", CommandLine.PathComparison))
+                {
+                    continue;
+                }
+
+                if (!closure.Contains(file))
+                {
+                    diagnostics.Add("Unreferenced assembly: " + GetRelativePath(file));
+                }
+            }
         }
 
         public void CheckAssemblyReferenceVersion(
