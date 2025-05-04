@@ -236,16 +236,10 @@ Report file: {checkResult.ReportFile}");
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
             foreach (var file in commandLine.Files)
             {
-                if (file.EndsWith(".config", CommandLine.PathComparison))
+                if (AppConfigFile.IsAppConfigFile(file))
                 {
-                    if (file.EndsWith(".exe.config", CommandLine.PathComparison) ||
-                        file.EndsWith(".dll.config", CommandLine.PathComparison) ||
-                        string.Equals(Path.GetFileName(file), "web.config", CommandLine.PathComparison) ||
-                        string.Equals(Path.GetFileName(file), "app.config", CommandLine.PathComparison))
-                    {
-                        appConfigFilePaths.Add(file);
-                        continue;
-                    }
+                    appConfigFilePaths.Add(file);
+                    continue;
                 }
 
                 fileQueue.Enqueue(file);
