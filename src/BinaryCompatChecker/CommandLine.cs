@@ -179,6 +179,7 @@ public class CommandLine
     }
 
     public IEnumerable<string> Files => files;
+    public IEnumerable<string> AppConfigFiles => appConfigFiles;
     public IEnumerable<string> ClosureRootFiles => closureRootFiles;
     public IEnumerable<string> AllDirectories => allDirectories;
     public bool ClosureOnlyMode => closureRootFiles.Count > 0 && files.Count == 0;
@@ -216,11 +217,6 @@ public class CommandLine
 
     public bool IsClosureRoot(string filePath)
     {
-        if (filePath.EndsWith(".config", PathComparison))
-        {
-            return false;
-        }
-
         foreach (var root in closureRootPatterns)
         {
             if (filePath.Contains(root, PathComparison))
@@ -240,6 +236,7 @@ public class CommandLine
     HashSet<string> inclusions = new(PathComparer);
     HashSet<string> exclusions = new(PathComparer);
     HashSet<string> files = new(PathComparer);
+    HashSet<string> appConfigFiles = new(PathComparer);
     HashSet<string> patterns = new();
     HashSet<string> closureRootPatterns = new(PathComparer);
     HashSet<string> allDirectories = new(PathComparer);
@@ -679,6 +676,26 @@ public class CommandLine
             }
         }
 
+        if (ClosureOnlyMode)
+        {
+            foreach (var closureRoot in ClosureRootFiles)
+            {
+                if (!closureRoot.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string candidateConfig = closureRoot + ".config";
+                if (File.Exists(candidateConfig))
+                {
+                    if (!appConfigFiles.Contains(candidateConfig))
+                    {
+                        appConfigFiles.Add(candidateConfig);
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
@@ -905,7 +922,11 @@ public class CommandLine
 
     private void AddFile(string filePath)
     {
-        if (IsClosureRoot(filePath))
+        if (AppConfigFile.IsAppConfigFile(filePath))
+        {
+            appConfigFiles.Add(filePath);
+        }
+        else if (IsClosureRoot(filePath))
         {
             closureRootFiles.Add(filePath);
         }

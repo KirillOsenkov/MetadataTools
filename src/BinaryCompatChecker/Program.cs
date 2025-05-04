@@ -214,43 +214,19 @@ Report file: {checkResult.ReportFile}");
                 return result;
             }
 
-            var appConfigFilePaths = new List<string>();
-
-            if (commandLine.ClosureOnlyMode)
+            var appConfigFilePaths = commandLine.AppConfigFiles;
+            foreach (var appConfigFilePath in appConfigFilePaths)
             {
-                foreach (var closureRoot in commandLine.ClosureRootFiles)
-                {
-                    if (!closureRoot.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    string candidateConfig = closureRoot + ".config";
-                    if (File.Exists(candidateConfig))
-                    {
-                        appConfigFilePaths.Add(candidateConfig);
-                    }
-                }
+                AddAppConfigFile(appConfigFilePath);
             }
 
             Queue<string> fileQueue = new(commandLine.ClosureRootFiles);
             foreach (var file in commandLine.Files)
             {
-                if (AppConfigFile.IsAppConfigFile(file))
-                {
-                    appConfigFilePaths.Add(file);
-                    continue;
-                }
-
                 fileQueue.Enqueue(file);
             }
 
             filesToVisit.UnionWith(fileQueue);
-
-            foreach (var appConfigFilePath in appConfigFilePaths)
-            {
-                AddAppConfigFile(appConfigFilePath);
-            }
 
             Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
 
