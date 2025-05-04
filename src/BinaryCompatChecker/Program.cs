@@ -19,6 +19,7 @@ namespace BinaryCompatChecker
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
         private readonly HashSet<string> filesToVisit = new(CommandLine.PathComparer);
+        private readonly Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
         private readonly AssemblyCache privateAssemblyCache;
 
         private CommandLine commandLine;
@@ -228,8 +229,6 @@ Report file: {checkResult.ReportFile}");
 
             filesToVisit.UnionWith(fileQueue);
 
-            Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
-
             while (fileQueue.Count != 0)
             {
                 string file = fileQueue.Dequeue();
@@ -315,9 +314,9 @@ Report file: {checkResult.ReportFile}");
                 CheckMembers(assemblyDefinition);
             }
 
-            CheckAppConfigFiles(appConfigFiles);
+            CheckAppConfigFiles();
 
-            ReportUnreferencedAssemblies(referenceMap);
+            ReportUnreferencedAssemblies();
 
             ReportResults(result);
 
@@ -364,7 +363,7 @@ Report file: {checkResult.ReportFile}");
             appConfigFiles.Add(appConfigFile);
         }
 
-        private void ReportUnreferencedAssemblies(Dictionary<string, IEnumerable<string>> referenceMap)
+        private void ReportUnreferencedAssemblies()
         {
             if (!commandLine.ReportUnreferencedAssemblies)
             {

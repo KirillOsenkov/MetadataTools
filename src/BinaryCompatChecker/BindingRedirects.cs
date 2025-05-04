@@ -7,7 +7,7 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
-    private void CheckAppConfigFiles(IReadOnlyList<AppConfigFile> appConfigFiles)
+    private void CheckAppConfigFiles()
     {
         var versionMismatchesByName = versionMismatches
             .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
