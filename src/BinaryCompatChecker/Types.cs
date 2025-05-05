@@ -190,12 +190,7 @@ public partial class Checker
             {
                 if (!isPublic)
                 {
-                    var ivtUsage = new IVTUsage
-                    {
-                        ConsumingAssembly = referencing.MainModule.FileName,
-                        ExposingAssembly = reference.MainModule.FileName,
-                        Member = referencedType.FullName
-                    };
+                    var ivtUsage = new IVTUsage(reference.MainModule.FileName, referencing.MainModule.FileName, referencedType.FullName);
                     AddIVTUsage(ivtUsage);
                 }
             }

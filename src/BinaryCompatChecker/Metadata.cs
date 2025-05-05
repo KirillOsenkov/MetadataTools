@@ -458,12 +458,7 @@ public partial class Checker
                 return null;
             }
 
-            return new IVTUsage
-            {
-                ExposingAssembly = definitionModule,
-                ConsumingAssembly = consumingModule,
-                Member = definition.ToString()
-            };
+            return new IVTUsage(definitionModule, consumingModule, definition.ToString());
         }
 
         return null;

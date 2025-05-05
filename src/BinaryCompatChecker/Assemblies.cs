@@ -22,12 +22,7 @@ public partial class Checker
         public List<string> HandledByAppConfigs { get; } = new();
     }
 
-    public class IVTUsage
-    {
-        public string ExposingAssembly { get; set; }
-        public string ConsumingAssembly { get; set; }
-        public string Member { get; set; }
-    }
+    public record IVTUsage(string ExposingAssembly, string ConsumingAssembly, string Member);
 
     private readonly List<VersionMismatch> versionMismatches = new List<VersionMismatch>();
 

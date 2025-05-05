@@ -8,14 +8,15 @@ namespace BinaryCompatChecker;
 
 public partial class Checker
 {
-    private void ReportResults(CheckResult result)
+    private static void ReportResults(CheckResult result)
     {
         var baselineFile = result.BaselineFile;
         var reportFile = result.ReportFile;
+        var commandLine = result.CommandLine;
 
         List<string> reportLines = new();
 
-        foreach (var diagnostic in diagnostics.OrderBy(s => s))
+        foreach (var diagnostic in result.ActualDiagnostics.OrderBy(s => s))
         {
             var text = diagnostic.Replace('\r', ' ').Replace('\n', ' ');
             text = text.Replace(", Culture=neutral", "");
@@ -107,13 +108,13 @@ Report file: {reportFile}");
             }
         }
 
-        ListExaminedAssemblies(reportFile);
+        ListExaminedAssemblies(result, reportFile);
 
         if (commandLine.ReportIVT)
         {
-            WriteIVTReport(reportFile);
+            WriteIVTReport(result, reportFile);
 
-            WriteIVTReport(
+            WriteIVTReport(result, 
                 reportFile,
                 ".ivt.roslyn.txt",
                 u => Framework.IsRoslynAssembly(u.ExposingAssembly) && !Framework.IsRoslynAssembly(u.ConsumingAssembly));
@@ -283,12 +284,14 @@ Report file: {reportFile}");
         }
     }
 
-    private void WriteIVTReport(string primaryReportFile, string fileName = ".ivt.txt", Func<IVTUsage, bool> usageFilter = null)
+    private static void WriteIVTReport(CheckResult result, string primaryReportFile, string fileName = ".ivt.txt", Func<IVTUsage, bool> usageFilter = null)
     {
+        var commandLine = result.CommandLine;
+
         string filePath = Path.ChangeExtension(primaryReportFile, fileName);
         var sb = new StringBuilder();
 
-        var usages = ivtUsages
+        var usages = result.IVTUsages
             .Where(u => !Framework.IsNetFrameworkAssembly(u.ConsumingAssembly) && !Framework.IsNetFrameworkAssembly(u.ExposingAssembly));
 
         if (usageFilter != null)
@@ -331,15 +334,17 @@ Report file: {reportFile}");
         }
     }
 
-    private void ListExaminedAssemblies(string reportFile)
+    private static void ListExaminedAssemblies(CheckResult result, string reportFile)
     {
+        var commandLine = result.CommandLine;
+
         if (!commandLine.ListAssemblies)
         {
             return;
         }
 
         string filePath = Path.ChangeExtension(reportFile, ".Assemblies.txt");
-        assembliesExamined.Sort();
+        var assembliesExamined = result.AssembliesExamined.OrderBy(s => s);
         File.WriteAllLines(filePath, assembliesExamined);
         if (commandLine.EnableDefaultOutput && !commandLine.IsBatchMode)
         {

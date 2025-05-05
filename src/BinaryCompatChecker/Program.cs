@@ -14,7 +14,7 @@ namespace BinaryCompatChecker
         private readonly List<string> assembliesExamined = new();
         private readonly HashSet<AssemblyDefinition> assemblyDefinitionsExamined = new();
         private readonly List<AppConfigFile> appConfigFiles = new();
-        private readonly List<IVTUsage> ivtUsages = new();
+        private readonly HashSet<IVTUsage> ivtUsages = new();
         private readonly HashSet<string> unresolvedAssemblies = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> visitedFiles = new(CommandLine.PathComparer);
@@ -158,8 +158,10 @@ Report file: {checkResult.ReportFile}");
             resolver = new CustomAssemblyResolver(this);
         }
 
-        private void ComputeBaselineAndReportFile(CheckResult result)
+        private static void ComputeBaselineAndReportFile(CheckResult result)
         {
+            var commandLine = result.CommandLine;
+
             string reportFile = commandLine.ReportFile;
             if (reportFile == null && commandLine.BaselineFile != null)
             {
@@ -205,7 +207,6 @@ Report file: {checkResult.ReportFile}");
         public CheckResult Check()
         {
             var result = new CheckResult();
-            result.Success = true;
             result.CommandLine = commandLine;
 
             ComputeBaselineAndReportFile(result);
@@ -215,7 +216,21 @@ Report file: {checkResult.ReportFile}");
                 return result;
             }
 
-            var appConfigFilePaths = commandLine.AppConfigFiles;
+            var subresult = CheckCore(commandLine.AppConfigFiles);
+            result.ActualDiagnostics = subresult.ActualDiagnostics;
+            result.AssembliesExamined = subresult.AssembliesExamined;
+            result.IVTUsages = subresult.IVTUsages;
+
+            ReportResults(result);
+
+            return result;
+        }
+
+        public CheckResult CheckCore(IEnumerable<string> appConfigFiles)
+        {
+            var result = new CheckResult();
+
+            var appConfigFilePaths = appConfigFiles;
             foreach (var appConfigFilePath in appConfigFilePaths)
             {
                 AddAppConfigFile(appConfigFilePath);
@@ -227,10 +242,12 @@ Report file: {checkResult.ReportFile}");
 
             ReportUnreferencedAssemblies();
 
-            ReportResults(result);
-
             privateAssemblyCache?.Clear();
             ((CustomAssemblyResolver)resolver).Clear();
+
+            result.ActualDiagnostics = diagnostics.ToArray();
+            result.AssembliesExamined = assembliesExamined;
+            result.IVTUsages = ivtUsages.ToArray();
 
             return result;
         }
@@ -425,12 +442,36 @@ Report file: {checkResult.ReportFile}");
 
     public class CheckResult
     {
-        public bool Success { get; set; }
-        public string ErrorMessage { get; set; }
-        public IReadOnlyList<string> BaselineDiagnostics { get; set; }
         public IReadOnlyList<string> ActualDiagnostics { get; set; }
-        public string BaselineFile { get; internal set; }
-        public string ReportFile { get; internal set; }
-        public CommandLine CommandLine { get; internal set; }
+        public IReadOnlyList<Checker.IVTUsage> IVTUsages { get; set; }
+        public IReadOnlyList<string> AssembliesExamined { get; set; }
+
+        public CommandLine CommandLine { get; set; }
+        public IReadOnlyList<string> BaselineDiagnostics { get; set; }
+        public string BaselineFile { get; set; }
+        public string ReportFile { get; set; }
+
+        public bool Success { get; set; } = true;
+        public string ErrorMessage { get; set; }
+
+        public void Combine(IEnumerable<CheckResult> results)
+        {
+            var mainResult = this;
+
+            var diagnostics = new HashSet<string>();
+            var ivts = new HashSet<Checker.IVTUsage>();
+            var assembliesExamined = new HashSet<string>();
+
+            foreach (var result in results)
+            {
+                diagnostics.UnionWith(result.ActualDiagnostics);
+                ivts.UnionWith(result.IVTUsages);
+                assembliesExamined.UnionWith(result.AssembliesExamined);
+            }
+
+            mainResult.ActualDiagnostics = diagnostics.OrderBy(d => d).ToArray();
+            mainResult.IVTUsages = ivts.ToArray();
+            mainResult.AssembliesExamined = assembliesExamined.ToArray();
+        }
     }
 }
