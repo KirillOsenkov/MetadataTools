@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Mono.Cecil;
 
@@ -27,7 +28,10 @@ public partial class Checker
 
         if (commandLine.ReportVersionMismatch)
         {
-            ReportVersionMismatches(appConfigFiles, versionMismatchesByName);
+            var allAppConfigNames =
+                AllAppConfigFiles?.Select(Path.GetFileName).ToArray()
+                ?? appConfigFiles.Select(f => f.FileName).ToArray();
+            ReportVersionMismatches(allAppConfigNames, versionMismatchesByName);
         }
     }
 

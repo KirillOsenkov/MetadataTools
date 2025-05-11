@@ -222,10 +222,9 @@ Report file: {reportFile}");
         }
     }
 
-    private void ReportVersionMismatches(IReadOnlyList<AppConfigFile> appConfigFiles, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
+    private void ReportVersionMismatches(IReadOnlyList<string> allAppConfigNames, Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
     {
         int appConfigCount = appConfigFiles.Count;
-        var allAppConfigNames = appConfigFiles.Select(f => f.FileName).ToArray();
 
         foreach (var versionMismatch in versionMismatchesByName.Values.SelectMany(list => list))
         {

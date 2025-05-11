@@ -22,6 +22,8 @@ namespace BinaryCompatChecker
         private readonly Dictionary<string, IEnumerable<string>> referenceMap = new(CommandLine.PathComparer);
         private readonly AssemblyCache privateAssemblyCache;
 
+        public IReadOnlyList<string> AllAppConfigFiles { get; set; }
+
         private CommandLine commandLine;
 
         [STAThread]
@@ -216,10 +218,33 @@ Report file: {checkResult.ReportFile}");
                 return result;
             }
 
-            var subresult = CheckCore(commandLine.AppConfigFiles);
-            result.ActualDiagnostics = subresult.ActualDiagnostics;
-            result.AssembliesExamined = subresult.AssembliesExamined;
-            result.IVTUsages = subresult.IVTUsages;
+            bool checkPerAppConfig = false;
+
+            if (checkPerAppConfig)
+            {
+                var tasks = new List<Task<CheckResult>>();
+                var allAppConfigFiles = commandLine.AppConfigFiles.ToArray();
+
+                foreach (var appConfig in allAppConfigFiles)
+                {
+                    var task = Task.Run(() =>
+                    {
+                        var checker = new Checker(commandLine);
+                        checker.AllAppConfigFiles = allAppConfigFiles;
+                        return checker.CheckCore([appConfig]);
+                    });
+                    tasks.Add(task);
+                }
+
+                result.Combine(tasks.Select(t => t.Result));
+            }
+            else
+            {
+                var subresult = CheckCore(commandLine.AppConfigFiles);
+                result.ActualDiagnostics = subresult.ActualDiagnostics;
+                result.AssembliesExamined = subresult.AssembliesExamined;
+                result.IVTUsages = subresult.IVTUsages;
+            }
 
             ReportResults(result);
 
