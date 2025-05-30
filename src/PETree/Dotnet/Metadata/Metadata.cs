@@ -476,17 +476,17 @@ public class CompressedMetadataTableStream : MetadataStream
         int guididx_size = 2;
         int blobidx_size = 2;
 
-        if (Metadata.StringsTableStream != null && (heapsizes & 1) == 1)
+        if (Metadata.StringsTableStream != null && (heapsizes & 1) != 0)
         {
             stridx_size = 4;
         }
 
-        if (Metadata.GuidTableStream != null && (heapsizes & 2) == 1)
+        if (Metadata.GuidTableStream != null && (heapsizes & 2) != 0)
         {
             guididx_size = 4;
         }
 
-        if (Metadata.BlobTableStream != null && (heapsizes & 4) == 1)
+        if (Metadata.BlobTableStream != null && (heapsizes & 4) != 0)
         {
             blobidx_size = 4;
         }
