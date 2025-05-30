@@ -135,8 +135,8 @@ public class PEFile : Node
         AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
 
         TextSection.AddRemainingPadding();
-        RsrcSection.AddRemainingPadding();
-        RelocSection.AddRemainingPadding();
+        RsrcSection?.AddRemainingPadding();
+        RelocSection?.AddRemainingPadding();
 
         Text = $"PE File ({Length:N0} bytes)";
     }
