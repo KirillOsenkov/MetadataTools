@@ -39,7 +39,16 @@ public class Node
     private string text;
     public string Text
     {
-        get => text ?? ToString();
+        get
+        {
+            if (text == null)
+            {
+                text = ToString();
+            }
+
+            return text;
+        }
+
         set => text = value;
     }
 
