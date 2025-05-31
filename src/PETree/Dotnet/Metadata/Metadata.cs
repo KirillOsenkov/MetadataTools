@@ -118,6 +118,8 @@ public class Metadata : Node
             var guidStream = GuidTableStream;
             var blobStream = BlobTableStream;
 
+            CompressedMetadataTableStream.ComputeTableInformations();
+
             var customDebugInfoTable = CompressedMetadataTableStream.Tables.FirstOrDefault(t => t.Name == Table.CustomDebugInformation);
             if (customDebugInfoTable != null && guidStream != null && blobStream != null)
             {
@@ -126,15 +128,24 @@ public class Metadata : Node
                     int guidHandle = row.GuidHandle.ReadInt16OrInt32();
                     int blobHandle = row.BlobHandle.ReadInt16OrInt32();
                     var customText = guidStream.GetCustomText(guidHandle);
-                    if (customText.Contains("CompilationOptions"))
+                    if (customText.Contains("CompilationOptions") ||
+                        customText.Contains("SourceLink"))
                     {
                         var blob = (Blob)blobStream.Children.Where(b => b.Start - blobStream.Start == blobHandle).FirstOrDefault();
                         var bytes = blob.Bytes;
                         int start = bytes.Start;
                         int length = bytes.Length;
                         blob.Children.Remove(bytes);
-                        blob.Bytes = blob.Add(new CompilationOptions { Length = length });
+                        var newNode = customText switch
+                        {
+                            "CompilationOptions" => new CompilationOptions { Length = length },
+                            "SourceLink" => new Utf8String { Length = length },
+                            _ => bytes
+                        };
+                        blob.Bytes = blob.Add(newNode);
                         blob.Text = customText;
+
+                        row.Text = customText;
                     }
                 }
             }
@@ -326,7 +337,7 @@ public class GuidMetadataStream : MetadataStream
             node.Text = guid.ToString("D").ToUpperInvariant();
             if (KnownGuids.TryGetValue(guid, out var text))
             {
-                customText = $"{text} ({guid.ToString("D").ToUpperInvariant()})";
+                customText = $"{text}";
                 node.Text = customText;
             }
 
@@ -428,8 +439,6 @@ public class CompressedMetadataTableStream : MetadataStream
         }
 
         PEFile = FindAncestor<PEFile>();
-
-        ComputeTableInformations();
     }
 
     public FourBytes ReservedZero { get; set; }
@@ -469,7 +478,7 @@ public class CompressedMetadataTableStream : MetadataStream
         return coded_index_sizes[index] = codedIndex.GetSize(t => TableInfos[(int)t].RowCount);
     }
 
-    void ComputeTableInformations()
+    public void ComputeTableInformations()
     {
         int heapsizes = HeapSizes.Value;
         int stridx_size = 2;
