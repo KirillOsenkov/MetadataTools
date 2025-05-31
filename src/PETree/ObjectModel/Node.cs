@@ -113,14 +113,17 @@ public class Node
         {
             for (int i = 0; i < Children.Count; i++)
             {
+                var nodeStart = node.Start;
+
                 var child = Children[i];
-                if (child.Start > node.Start)
+                var childStart = child.Start;
+                if (childStart > nodeStart)
                 {
                     Children.Insert(i, node);
                     inserted = true;
                     break;
                 }
-                else if (node.Start >= child.Start && node.Start < child.End)
+                else if (nodeStart >= childStart && nodeStart < childStart + child.Length)
                 {
                     var result = child.Add(node);
                     return result;
