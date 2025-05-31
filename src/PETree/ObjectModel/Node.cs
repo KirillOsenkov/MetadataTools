@@ -286,6 +286,6 @@ public class Node
             return $"{GetType().Name} {bytes.ToHexString()}";
         }
 
-        return $"{GetType().Name} {Start:x0} ({Length} bytes)";
+        return $"{GetType().Name} ({Length} bytes)";
     }
 }
