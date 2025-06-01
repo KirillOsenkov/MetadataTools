@@ -109,25 +109,61 @@ public class Node
     public virtual Node Add(Node node)
     {
         bool inserted = false;
-        if (node.Start != 0)
-        {
-            for (int i = 0; i < Children.Count; i++)
-            {
-                var nodeStart = node.Start;
+        int count = Children.Count;
+        int nodeStart = node.Start;
 
-                var child = Children[i];
+        if (nodeStart != 0 && count > 0)
+        {
+            Node childToInsertInto = null;
+            int insertAtIndex = 0;
+
+            int lo = 0;
+            int hi = count - 1;
+            while (true)
+            {
+                int index = (lo + hi) >> 1;
+                var child = Children[index];
                 var childStart = child.Start;
-                if (childStart > nodeStart)
+                if (nodeStart < childStart)
                 {
-                    Children.Insert(i, node);
-                    inserted = true;
-                    break;
+                    hi = index - 1;
+                    if (hi < lo)
+                    {
+                        inserted = true;
+                        insertAtIndex = index;
+                        break;
+                    }
                 }
-                else if (nodeStart >= childStart && nodeStart < childStart + child.Length)
+                else
                 {
-                    var result = child.Add(node);
-                    return result;
+                    if (nodeStart < childStart + child.Length)
+                    {
+                        childToInsertInto = child;
+                        break;
+                    }
+
+                    lo = index + 1;
+                    if (lo > hi)
+                    {
+                        if (lo < count)
+                        {
+                            inserted = true;
+                            insertAtIndex = lo;
+                        }
+
+                        break;
+                    }
                 }
+            }
+
+            if (childToInsertInto != null)
+            {
+                return childToInsertInto.Add(node);
+            }
+
+            if (inserted)
+            {
+                Children.Insert(insertAtIndex, node);
             }
         }
 
@@ -153,6 +189,11 @@ public class Node
         if (newLength > Length)
         {
             Length = newLength;
+        }
+
+        if (node.Start < Start || node.End > End || node.Length > Length)
+        {
+            throw new System.Exception("A child node is outside the parent node span");
         }
 
         return node;
