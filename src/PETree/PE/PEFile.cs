@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.IO;
+using System.Linq;
 using GuiLabs.FileFormat.PE.Dotnet;
 using GuiLabs.Utilities;
 
@@ -11,6 +12,24 @@ public class PEFile : Node
     public PEFile(ByteBuffer buffer)
     {
         Buffer = buffer;
+    }
+
+    public static PEFile ReadFromFile(string filePath, bool inMemory = true)
+    {
+        using var fileStream = new FileStream(filePath, FileMode.Open);
+        Stream stream = fileStream;
+        if (inMemory)
+        {
+            var memoryStream = new MemoryStream((int)fileStream.Length);
+            fileStream.CopyTo(memoryStream);
+            memoryStream.Position = 0;
+            stream = memoryStream;
+        }
+
+        var buffer = new StreamBuffer(stream);
+        var peFile = new PEFile(buffer);
+        peFile.Parse();
+        return peFile;
     }
 
     public override void Parse()
