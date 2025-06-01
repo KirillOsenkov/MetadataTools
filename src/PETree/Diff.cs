@@ -59,7 +59,11 @@ public class Difference
             return;
         }
 
-        var diff = new ListDiff<Node, Node>(leftChildren, rightChildren, (l, r) => StringComparer.Ordinal.Equals(l.Text, r.Text));
+        ListDiff<Node, Node> diff = SortedDiff.SortAndDiff(
+            leftChildren,
+            rightChildren,
+            NodeByTextComparer.Instance,
+            reportSame: true);
 
         foreach (var action in diff.Actions)
         {
@@ -75,6 +79,23 @@ public class Difference
             {
                 difference.RemovedNode(action.SourceItem);
             }
+        }
+    }
+
+    private class NodeByTextComparer : IComparer<Node>
+    {
+        public static NodeByTextComparer Instance { get; } = new NodeByTextComparer();
+
+        public int Compare(Node x, Node y)
+        {
+            int result = StringComparer.Ordinal.Compare(x.Text, y.Text);
+            if (result == 0)
+            {
+                return 0;
+            }
+
+            result = Math.Sign(x.Start - y.Start);
+            return result;
         }
     }
 

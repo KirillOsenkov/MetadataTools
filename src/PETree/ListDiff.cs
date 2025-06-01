@@ -112,13 +112,17 @@ namespace ListDiff
         /// <summary>
         /// The actions needed to transform a source list to a destination list.
         /// </summary>
-        public List<ListDiffAction<S, D>> Actions { get; private set; }
+        public List<ListDiffAction<S, D>> Actions { get; set; }
 
         /// <summary>
         /// Whether the <see cref="Actions"/> only contain Update actions
         /// (no Adds or Removes).
         /// </summary>
-        public bool ContainsOnlyUpdates { get; private set; }
+        public bool ContainsOnlyUpdates { get; set; }
+
+        public ListDiff()
+        {
+        }
 
         /// <summary>
         /// Construct a new diff that contains all the <see cref="Actions"/> needed to convert
