@@ -20,7 +20,7 @@ public class BytesNode : Node
     public override string ToString()
     {
         var bytes = Buffer.ReadBytes(Start, Length);
-        return $"{bytes.ToHexString()}";
+        return bytes.ToHexString();
     }
 }
 

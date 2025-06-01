@@ -327,7 +327,7 @@ public class Node
         if (Length <= 32)
         {
             var bytes = Buffer.ReadBytes(Start, Length);
-            return $"{GetType().Name} {bytes.ToHexString()}";
+            return GetType().Name + " " + bytes.ToHexString();
         }
 
         return $"{GetType().Name} ({Length} bytes)";
