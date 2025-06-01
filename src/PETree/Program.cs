@@ -20,16 +20,24 @@ class Program
             return;
         }
 
-        using var stream = new FileStream(filePath, FileMode.Open);
+        var peFile = PEFile.ReadFromFile(filePath);
 
-        var length = stream.Length;
-        var buffer = new StreamBuffer(stream);
+        if (args.Length == 2)
+        {
+            var filePath2 = args[1];
+            if (!File.Exists(filePath2))
+            {
+                return;
+            }
 
-        var peFile = new PEFile(buffer);
-        peFile.Parse();
-        peFile.Length = (int)length;
+            var peFile2 = PEFile.ReadFromFile(filePath2);
 
-        var uncovered = new List<(Span, string)>();
-        peFile.ComputeUncoveredSpans(s => uncovered.Add((s, buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
+            var diff = Difference.Diff(peFile, peFile2);
+        }
+        else
+        {
+            var uncovered = new List<(Span, string)>();
+            peFile.ComputeUncoveredSpans(s => uncovered.Add((s, peFile.Buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
+        }
     }
 }
