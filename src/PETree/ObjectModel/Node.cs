@@ -21,6 +21,7 @@ public class Node
     public int Start { get; set; }
     public int Length { get; set; }
     public int End => Start + Length;
+    internal Span Span => new Span(Start, Length);
 
     public int OffsetRelativeToParent
     {

@@ -49,6 +49,8 @@ public class PEFile : Node
         return sb.ToString();
     }
 
+    public bool IsPE32Plus => OptionalHeader.StandardFields.IsPE32Plus;
+
     public override void Parse()
     {
         DOSHeader = Add<DOSHeader>("DOS Header");
@@ -134,7 +136,10 @@ public class PEFile : Node
 
         ResourceTable = AddTable<ResourceTable>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
 
+        ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
         ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable, text: "Import table");
+
+        ParseImportTable();
 
         if (OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
             entrypointBytes.Value is int entrypointRVA &&
@@ -142,7 +147,7 @@ public class PEFile : Node
         {
             int entryPointOffset = ResolveVirtualAddress(entrypointRVA);
             RuntimeStartupStub runtimeStartupStub = null;
-            if (OptionalHeader.StandardFields.IsPE32Plus)
+            if (IsPE32Plus)
             {
                 entryPointOffset -= 6;
                 runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 16 };
@@ -168,7 +173,6 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.ExportTable, text: "Export table");
         AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable, text: "Load config table");
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
-        AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
 
         TextSection.AddRemainingPadding();
         RsrcSection?.AddRemainingPadding();
@@ -209,18 +213,7 @@ public class PEFile : Node
             Metadata = new Metadata { Start = metadata };
             TextSection.Add(Metadata);
 
-            il.ComputeUncoveredSpans(span =>
-            {
-                if (Buffer.IsZeroFilled(span))
-                {
-                    var padding = new Padding
-                    {
-                        Start = span.Start,
-                        Length = span.Length
-                    };
-                    il.Add(padding);
-                }
-            });
+            il.FillWithPadding();
         }
 
         AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
@@ -296,6 +289,54 @@ public class PEFile : Node
         return null;
     }
 
+    private void ParseImportTable()
+    {
+        var list = ImportTable.ImportsDirectories;
+
+        for (int i = 0; i < list.Count - 1; i++)
+        {
+            var directory = list[i];
+            var addressTableRva = directory.AddressTableRVA;
+            var dllNameRva = directory.DllNameRVA;
+            var lookupTableRva = directory.LookupTableRVA;
+
+            var lookupTable = ResolveVirtualAddress(lookupTableRva.Value);
+
+            var importLookupTable = new ImportLookupTable() { Start = lookupTable };
+            ImportTable.Add(importLookupTable);
+
+            for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+            {
+                var fourBytes = importLookupTable.Entries[i];
+
+                var rva = fourBytes.Value;
+                if (rva == 0)
+                {
+                    continue;
+                }
+
+                if (rva > 0)
+                {
+                    var resolved = ResolveVirtualAddress(rva);
+                    var imageImportByName = new ImageImportByName() { Start = resolved };
+                    ImportTable.Add(imageImportByName);
+                }
+            }
+
+            var addressTable = ResolveVirtualAddress(addressTableRva.Value);
+            var dllName = ResolveVirtualAddress(dllNameRva.Value);
+            if (dllName > 0)
+            {
+                var dllNameNode = new ZeroTerminatedString() { Start = dllName };
+                Add(dllNameNode);
+            }
+        }
+
+        this.FillWithPadding();
+
+        AddRemainingPadding();
+    }
+
     public DOSHeader DOSHeader { get; set; }
     public PEHeader PEHeader { get; set; }
     public OptionalHeader OptionalHeader { get; set; }
@@ -312,6 +353,7 @@ public class PEFile : Node
     public Node RsrcSection { get; set; }
     public Node RelocSection { get; set; }
     public ImportTable ImportTable { get; set; }
+    public IAT ImportAddressTable { get; set; }
 
     public int ResolveDataDirectory(DataDirectory dataDirectory)
     {

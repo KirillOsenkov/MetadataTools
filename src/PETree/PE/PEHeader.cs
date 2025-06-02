@@ -1,4 +1,6 @@
-﻿namespace GuiLabs.FileFormat.PE;
+﻿using System.Collections.Generic;
+
+namespace GuiLabs.FileFormat.PE;
 
 public class PEHeader : Node
 {
@@ -72,10 +74,18 @@ public class ImportTable : Node
 
     public override void Parse()
     {
-        ImportsDirectory = Add<ImportsDirectory>("Imports directory");
+        var list = new List<ImportsDirectory>();
+        ImportsDirectory importsDirectory;
+        do
+        {
+            importsDirectory = Add<ImportsDirectory>("Imports directory");
+            list.Add(importsDirectory);
+        } while (!Buffer.IsZeroFilled(importsDirectory.Span));
+
+        ImportsDirectories = list.ToArray();
     }
 
-    public ImportsDirectory ImportsDirectory { get; set; }
+    public IReadOnlyList<ImportsDirectory> ImportsDirectories { get; set; }
 }
 
 public class ImportsDirectory : Node
@@ -102,5 +112,59 @@ public class IAT : Node
     {
         Text = "Import Address Table";
     }
+
+    public override void Parse()
+    {
+        var list = new List<FourBytes>();
+        FourBytes entry;
+        do
+        {
+            entry = Add<FourBytes>("Entry");
+            list.Add(entry);
+        } while (!Buffer.IsZeroFilled(entry.Span));
+
+        Entries = list.ToArray();
+    }
+
+    public IReadOnlyList<FourBytes> Entries { get; set; }
 }
 
+public class ImageImportByName : Node
+{
+    public ImageImportByName()
+    {
+        Text = "IMAGE_IMPORT_BY_NAME";
+    }
+
+    public override void Parse()
+    {
+        Hint = AddTwoBytes("Hint");
+        Name = Add<ZeroTerminatedString>("Name");
+    }
+
+    public TwoBytes Hint { get; set; }
+    public ZeroTerminatedString Name { get; set; }
+}
+
+public class ImportLookupTable : Node
+{
+    public ImportLookupTable()
+    {
+        Text = "Import Lookup Table";
+    }
+
+    public override void Parse()
+    {
+        var list = new List<FourBytes>();
+        FourBytes entry;
+        do
+        {
+            entry = Add<FourBytes>("Entry");
+            list.Add(entry);
+        } while (!Buffer.IsZeroFilled(entry.Span));
+
+        Entries = list.ToArray();
+    }
+
+    public IReadOnlyList<FourBytes> Entries { get; set; }
+}

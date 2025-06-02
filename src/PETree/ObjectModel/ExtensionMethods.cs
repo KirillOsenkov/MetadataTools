@@ -32,6 +32,22 @@ internal static class ExtensionMethods
         }
     }
 
+    public static void FillWithPadding(this Node node)
+    {
+        node.ComputeUncoveredSpans(span =>
+        {
+            if (node.Buffer.IsZeroFilled(span))
+            {
+                var padding = new Padding
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                };
+                node.Add(padding);
+            }
+        });
+    }
+
     public static bool IsZeroFilled(this ByteBuffer buffer, Span span)
     {
         for (int i = span.Start; i < span.End; i++)
