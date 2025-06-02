@@ -32,6 +32,14 @@ public class Padding : Node
     }
 }
 
+public class Unknown : Node
+{
+    public Unknown()
+    {
+        Text = "Unknown";
+    }
+}
+
 public class OneByte : BytesNode
 {
     public OneByte()

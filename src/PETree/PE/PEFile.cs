@@ -174,6 +174,16 @@ public class PEFile : Node
         RsrcSection?.AddRemainingPadding();
         RelocSection?.AddRemainingPadding();
 
+        this.ComputeUncoveredSpans(span =>
+        {
+            var unknown = new Unknown
+            {
+                Start = span.Start,
+                Length = span.Length
+            };
+            this.Add(unknown);
+        });
+
         Text = $"PE File ({Length:N0} bytes)";
     }
 
