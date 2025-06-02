@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using GuiLabs.Utilities;
 
@@ -260,19 +261,35 @@ public class Node
     public string GetHexText(int columns = 4, int columnSize = 8, int byteSpacing = 1, int columnSpacing = 2)
     {
         var sb = new StringBuilder();
+        var writer = new StringWriter(sb);
 
+        WriteHexText(writer, columns, columnSize, byteSpacing, columnSpacing);
+
+        return sb.ToString();
+    }
+
+    private void WriteHexText(TextWriter writer, int columns = 4, int columnSize = 8, int byteSpacing = 1, int columnSpacing = 2, string prefix = null)
+    {
         var charsPerLine = columns * columnSize;
+        bool needsPrefix = true;
 
         for (int i = Start; i < End; i++)
         {
+            if (needsPrefix && prefix != null)
+            {
+                writer.Write(prefix);
+                needsPrefix = false;
+            }
+
             var b = Buffer.ReadByte(i);
             var chars = b.ToHexChars();
-            sb.Append(chars.upper);
-            sb.Append(chars.lower);
+            writer.Write(chars.upper);
+            writer.Write(chars.lower);
             int index = (i - Start) % charsPerLine;
             if (index == charsPerLine - 1)
             {
-                sb.AppendLine();
+                writer.WriteLine();
+                needsPrefix = true;
                 continue;
             }
 
@@ -288,11 +305,9 @@ public class Node
 
             for (int j = 0; j < spaces; j++)
             {
-                sb.Append(' ');
+                writer.Write(' ');
             }
         }
-
-        return sb.ToString();
     }
 
     public T Add<T>(string text = null) where T : Node, new()
@@ -319,6 +334,46 @@ public class Node
         else
         {
             return AddFourBytes();
+        }
+    }
+
+    public void Write(TextWriter writer, string indent)
+    {
+        writer.Write(indent);
+        writer.WriteLine(Text);
+
+        if (HasChildren)
+        {
+            indent += "    ";
+            foreach (var child in Children)
+            {
+                child.Write(writer, indent);
+            }
+        }
+        else
+        {
+            indent += "    ║ ";
+            WriteHexText(writer, prefix: indent);
+            writer.WriteLine();
+        }
+    }
+
+    public virtual void Write(Stream stream)
+    {
+        if (HasChildren)
+        {
+            foreach (var child in Children)
+            {
+                child.Write(stream);
+            }
+        }
+        else
+        {
+            for (int i = Start; i < End; i++)
+            {
+                var b = Buffer.ReadByte(i);
+                stream.WriteByte(b);
+            }
         }
     }
 

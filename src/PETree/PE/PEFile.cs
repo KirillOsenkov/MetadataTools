@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Linq;
+using System.Text;
 using GuiLabs.FileFormat.PE.Dotnet;
 using GuiLabs.Utilities;
 
@@ -30,6 +31,22 @@ public class PEFile : Node
         var peFile = new PEFile(buffer);
         peFile.Parse();
         return peFile;
+    }
+
+    public void WriteToFile(string filePath)
+    {
+        using var stream = new FileStream(filePath, FileMode.Create);
+        Write(stream);
+    }
+
+    public string GetText()
+    {
+        var sb = new StringBuilder();
+        var writer = new StringWriter(sb);
+
+        Write(writer, "");
+
+        return sb.ToString();
     }
 
     public override void Parse()
