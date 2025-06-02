@@ -9,6 +9,7 @@ public class ResourceTable : Node
     {
         var directory = Add<ResourceDirectory>("Root directory");
         Process(directory, isRoot: true);
+        AddRemainingPadding();
     }
 
     private void Process(ResourceDirectory directory, bool isRoot = false)

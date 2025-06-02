@@ -111,8 +111,6 @@ public class Metadata : Node
 
         StreamHeaders = list;
 
-        CompressedMetadataTableStream?.AddRemainingPadding();
-
         if (CompressedMetadataTableStream != null)
         {
             var guidStream = GuidTableStream;
@@ -149,6 +147,8 @@ public class Metadata : Node
                     }
                 }
             }
+
+            CompressedMetadataTableStream.AddRemainingPadding();
         }
     }
 
