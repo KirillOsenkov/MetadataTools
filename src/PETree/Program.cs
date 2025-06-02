@@ -34,10 +34,5 @@ class Program
 
             var diff = Difference.Diff(peFile, peFile2);
         }
-        else
-        {
-            var uncovered = new List<(Span, string)>();
-            peFile.ComputeUncoveredSpans(s => uncovered.Add((s, peFile.Buffer.ReadBytes(s.Start, s.Length).Take(32).ToArray().ToHexString())));
-        }
     }
 }

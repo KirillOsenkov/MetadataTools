@@ -44,7 +44,7 @@ static class SortedDiff
                 actions.Add(new ListDiffAction<T, T>(ListDiffActionType.Remove, r, default));
             },
             reportSame ?
-                l => actions.Add(new ListDiffAction<T, T>(ListDiffActionType.Update, l, l)) :
+                (l, r) => actions.Add(new ListDiffAction<T, T>(ListDiffActionType.Update, l, r)) :
                 null);
         difference.ContainsOnlyUpdates = actions.All(a => a.ActionType == ListDiffActionType.Update);
 
@@ -57,7 +57,7 @@ static class SortedDiff
         IComparer<T> comparer,
         Action<T> added = null,
         Action<T> removed = null,
-        Action<T> same = null)
+        Action<T, T> same = null)
     {
         left ??= Array.Empty<T>();
         right ??= Array.Empty<T>();
@@ -93,7 +93,7 @@ static class SortedDiff
             }
             else
             {
-                same?.Invoke(leftItem);
+                same?.Invoke(leftItem, rightItem);
                 l++;
                 r++;
             }
