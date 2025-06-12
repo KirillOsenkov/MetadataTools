@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using GuiLabs.Metadata;
 using Mono.Cecil;
 
 namespace BinaryCompatChecker
@@ -409,9 +410,16 @@ Report file: {checkResult.ReportFile}");
                 }
             }
 
-            foreach (var file in commandLine.Files)
+            var allFiles = commandLine.GetFilesInAllDirectories();
+
+            foreach (var file in allFiles)
             {
                 if (file.EndsWith(".config", CommandLine.PathComparison))
+                {
+                    continue;
+                }
+
+                if (!PEFile.IsManagedAssembly(file))
                 {
                     continue;
                 }

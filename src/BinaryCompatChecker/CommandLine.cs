@@ -637,8 +637,6 @@ public class CommandLine
                     return false;
                 }
             }
-
-            return true;
         }
 
         if (patterns.Count == 0)
@@ -918,6 +916,22 @@ public class CommandLine
                 AddFile(file);
             }
         }
+    }
+
+    public IEnumerable<string> GetFilesInAllDirectories()
+    {
+        var result = new List<string>();
+
+        foreach (var directory in AllDirectories)
+        {
+            foreach (var pattern in patterns)
+            {
+                var files = Directory.GetFiles(directory, pattern);
+                result.AddRange(files);
+            }
+        }
+
+        return result;
     }
 
     private void AddFile(string filePath)
