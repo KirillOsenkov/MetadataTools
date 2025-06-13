@@ -684,7 +684,7 @@ public class CommandLine
                 }
 
                 string candidateConfig = closureRoot + ".config";
-                if (File.Exists(candidateConfig))
+                if (File.Exists(candidateConfig) && !ShouldExclude(candidateConfig))
                 {
                     if (!appConfigFiles.Contains(candidateConfig))
                     {
@@ -908,7 +908,7 @@ public class CommandLine
             var filesInDirectory = Directory.GetFiles(root, pattern);
             foreach (var file in filesInDirectory)
             {
-                if (includeExclude != null && includeExclude.Excludes(file))
+                if (ShouldExclude(file))
                 {
                     continue;
                 }
@@ -916,6 +916,16 @@ public class CommandLine
                 AddFile(file);
             }
         }
+    }
+
+    public bool ShouldExclude(string filePath)
+    {
+        if (includeExclude != null && includeExclude.Excludes(filePath))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public IEnumerable<string> GetFilesInAllDirectories()
@@ -927,7 +937,15 @@ public class CommandLine
             foreach (var pattern in patterns)
             {
                 var files = Directory.GetFiles(directory, pattern);
-                result.AddRange(files);
+                foreach (var file in files)
+                {
+                    if (ShouldExclude(file))
+                    {
+                        continue;
+                    }
+
+                    result.Add(file);
+                }
             }
         }
 
