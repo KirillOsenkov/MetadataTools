@@ -101,13 +101,19 @@ public class VersionHeader : Node
         ValueLength = AddTwoBytes("Value length");
         Type = AddTwoBytes("Type");
         Key = Add<ZeroTerminatedUtf16String>("Key");
+        Text = Key.Text;
         AddAlignedPadding(4);
 
         if (ValueLength.Value > 0)
         {
-            if (Type.Value == 1)
+            if (Key.Text == "VS_VERSION_INFO" && ValueLength.Value == 52)
+            {
+                Value = Add<VSFixedFileInfo>("File info");
+            }
+            else if (Type.Value == 1)
             {
                 Value = Add<ZeroTerminatedUtf16String>("Value");
+                Text = $"{Key.Text} = {Value.Text}";
             }
             else
             {
@@ -128,6 +134,40 @@ public class VersionHeader : Node
     public TwoBytes Type { get; set; }
     public ZeroTerminatedUtf16String Key { get; set; }
     public Node Value { get; set; }
+}
+
+public class VSFixedFileInfo : Node
+{
+    public override void Parse()
+    {
+        Signature = AddFourBytes("Signature");
+        StrucVersion = AddFourBytes("StrucVersion");
+        FileVersionMS = AddFourBytes("FileVersionMS");
+        FileVersionLS = AddFourBytes("FileVersionLS");
+        ProductVersionMS = AddFourBytes("ProductVersionMS");
+        ProductVersionLS = AddFourBytes("ProductVersionLS");
+        FileFlagsMask = AddFourBytes("FileFlagsMask");
+        FileFlags = AddFourBytes("FileFlags");
+        FileOS = AddFourBytes("FileOS");
+        FileType = AddFourBytes("FileType");
+        FileSubType = AddFourBytes("FileSubType");
+        FileDateMS = AddFourBytes("FileDateMS");
+        FileDateLS = AddFourBytes("FileDateLS");
+    }
+
+    public FourBytes Signature { get; set; }
+    public FourBytes StrucVersion { get; set; }
+    public FourBytes FileVersionMS { get; set; }
+    public FourBytes FileVersionLS { get; set; }
+    public FourBytes ProductVersionMS { get; set; }
+    public FourBytes ProductVersionLS { get; set; }
+    public FourBytes FileFlagsMask { get; set; }
+    public FourBytes FileFlags { get; set; }
+    public FourBytes FileOS { get; set; }
+    public FourBytes FileType { get; set; }
+    public FourBytes FileSubType { get; set; }
+    public FourBytes FileDateMS { get; set; }
+    public FourBytes FileDateLS { get; set; }
 }
 
 public class ResourceDirectory : Node
