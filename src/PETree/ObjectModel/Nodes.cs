@@ -200,6 +200,32 @@ public class ZeroTerminatedString : Node
     public Node PaddingZeroes { get; set; }
 }
 
+public class ZeroTerminatedUtf16String : Node
+{
+    public override void Parse()
+    {
+        List<byte> bytes = new();
+
+        int offset = Start;
+        while (true)
+        {
+            byte b1 = Buffer.ReadByte(offset);
+            byte b2 = Buffer.ReadByte(offset + 1);
+            offset += 2;
+            if (b1 == 0 && b2 == 0)
+            {
+                break;
+            }
+
+            bytes.Add(b1);
+            bytes.Add(b2);
+        }
+
+        Length = offset - Start;
+        Text = Encoding.Unicode.GetString(bytes.ToArray());
+    }
+}
+
 public class Utf8String : Node
 {
     public Utf8String()

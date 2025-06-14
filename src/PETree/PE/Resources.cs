@@ -8,30 +8,47 @@ public class ResourceTable : Node
     public override void Parse()
     {
         var directory = Add<ResourceDirectory>("Root directory");
-        Process(directory, isRoot: true);
+        Process(directory);
         AddRemainingPadding();
     }
 
-    private void Process(ResourceDirectory directory, bool isRoot = false)
+    private void Process(ResourceDirectory directory, string resourceKind = null)
     {
         foreach (var idEntry in directory.Children.OfType<IdDirectoryEntry>())
         {
             var offset = idEntry.Offset.ReadUint32();
             if ((offset & 0x80000000) != 0)
             {
-                if (isRoot && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out var text))
+                if (resourceKind == null && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out resourceKind))
                 {
-                    idEntry.Text = text;
+                    idEntry.Text = resourceKind;
                 }
 
                 var directoryOffset = offset & ~0x80000000;
                 var subdirectory = new ResourceDirectory { Start = Start + (int)directoryOffset };
                 Add(subdirectory);
-                Process(subdirectory);
+                Process(subdirectory, resourceKind);
             }
             else
             {
-                var resource = new Resource { Start = Start + (int)offset };
+                Resource resource;
+                if (resourceKind == "Version")
+                {
+                    resource = new VersionResource();
+                }
+                else
+                {
+                    resource = new Resource();
+                }
+
+                resource.Start = Start + (int)offset;
+
+                if (resourceKind != null)
+                {
+                    resource.Text = resourceKind;
+                    resource.Type = resourceKind;
+                }
+
                 Add(resource);
                 AddAlignedPadding(4);
             }
@@ -47,6 +64,11 @@ public class Resource : Node
         Size = AddFourBytes("Size");
         Codepage = AddFourBytes("Codepage");
         Zero = AddFourBytes("Zero");
+        ParseBytes();
+    }
+
+    protected virtual void ParseBytes()
+    {
         Bytes = AddBytes(Size.Value, "Bytes");
     }
 
@@ -55,6 +77,57 @@ public class Resource : Node
     public FourBytes Codepage { get; set; }
     public FourBytes Zero { get; set; }
     public Node Bytes { get; set; }
+
+    public string Type { get; set; }
+}
+
+public class VersionResource : Resource
+{
+    protected override void ParseBytes()
+    {
+        Root = Add<VersionHeader>();
+    }
+
+    public VersionHeader Root { get; set; }
+}
+
+public class VersionHeader : Node
+{
+    public override void Parse()
+    {
+        Size = AddTwoBytes("Size");
+        Length = Size.Value;
+
+        ValueLength = AddTwoBytes("Value length");
+        Type = AddTwoBytes("Type");
+        Key = Add<ZeroTerminatedUtf16String>("Key");
+        AddAlignedPadding(4);
+
+        if (ValueLength.Value > 0)
+        {
+            if (Type.Value == 1)
+            {
+                Value = Add<ZeroTerminatedUtf16String>("Value");
+            }
+            else
+            {
+                Value = AddBytes(ValueLength.Value, "Value");
+            }
+
+            AddAlignedPadding(4);
+        }
+
+        while (this.LastChildEnd < End)
+        {
+            var child = Add<VersionHeader>();
+        }
+    }
+
+    public TwoBytes Size { get; set; }
+    public TwoBytes ValueLength { get; set; }
+    public TwoBytes Type { get; set; }
+    public ZeroTerminatedUtf16String Key { get; set; }
+    public Node Value { get; set; }
 }
 
 public class ResourceDirectory : Node
