@@ -159,11 +159,6 @@ public class PEFile : Node
             }
 
             Add(runtimeStartupStub);
-            var gap = new Span(ImportTable.End, runtimeStartupStub.Start - ImportTable.End);
-            if (gap.Length > 0 && Buffer.IsZeroFilled(gap))
-            {
-                Add(new Padding { Start = gap.Start, Length = gap.Length });
-            }
         }
 
         AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable, text: "Base reloc table");
@@ -291,6 +286,11 @@ public class PEFile : Node
 
     private void ParseImportTable()
     {
+        if (ImportTable == null)
+        {
+            return;
+        }
+
         var list = ImportTable.ImportsDirectories;
 
         for (int i = 0; i < list.Count - 1; i++)
