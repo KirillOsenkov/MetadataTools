@@ -183,6 +183,11 @@ public class PEFile : Node
             this.Add(unknown);
         });
 
+        this.ValidateOverlap(node =>
+        {
+            throw new System.Exception($"Node {node} overlaps with its successor");
+        });
+
         Text = $"PE File ({Length:N0} bytes)";
     }
 

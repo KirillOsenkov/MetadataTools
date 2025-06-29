@@ -5,6 +5,30 @@ namespace GuiLabs.FileFormat;
 
 internal static class ExtensionMethods
 {
+    public static void ValidateOverlap(this Node node, Action<Node> callback)
+    {
+        if (!node.HasChildren)
+        {
+            return;
+        }
+
+        int index = node.Start;
+        Node previousChild = null;
+        for (int i = 0; i < node.Children.Count; i++)
+        {
+            var child = node.Children[i];
+            if (child.Start < index)
+            {
+                callback(previousChild);
+            }
+
+            ValidateOverlap(child, callback);
+
+            index = child.End;
+            previousChild = child;
+        }
+    }
+
     public static void ComputeUncoveredSpans(this Node node, Action<Span> collector)
     {
         if (!node.HasChildren)

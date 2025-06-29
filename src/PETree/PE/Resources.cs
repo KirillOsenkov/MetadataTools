@@ -12,14 +12,15 @@ public class ResourceTable : Node
         AddRemainingPadding();
     }
 
-    private void Process(ResourceDirectory directory, string resourceKind = null)
+    private void Process(ResourceDirectory directory, string parentResourceKind = null)
     {
         foreach (var idEntry in directory.Children.OfType<IdDirectoryEntry>())
         {
             var offset = idEntry.Offset.ReadUint32();
             if ((offset & 0x80000000) != 0)
             {
-                if (resourceKind == null && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out resourceKind))
+                string resourceKind = parentResourceKind;
+                if (parentResourceKind == null && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out resourceKind))
                 {
                     idEntry.Text = resourceKind;
                 }
@@ -32,9 +33,13 @@ public class ResourceTable : Node
             else
             {
                 Resource resource;
-                if (resourceKind == "Version")
+                if (parentResourceKind == "Version")
                 {
                     resource = new VersionResource();
+                }
+                else if (parentResourceKind == "Manifest")
+                {
+                    resource = new ManifestResource();
                 }
                 else
                 {
@@ -43,10 +48,10 @@ public class ResourceTable : Node
 
                 resource.Start = Start + (int)offset;
 
-                if (resourceKind != null)
+                if (parentResourceKind != null)
                 {
-                    resource.Text = resourceKind;
-                    resource.Type = resourceKind;
+                    resource.Text = parentResourceKind;
+                    resource.Type = parentResourceKind;
                 }
 
                 Add(resource);
@@ -89,6 +94,20 @@ public class VersionResource : Resource
     }
 
     public VersionHeader Root { get; set; }
+}
+
+public class ManifestResource : Resource
+{
+    protected override void ParseBytes()
+    {
+        Xml = new Utf8String
+        {
+            Length = Size.Value
+        };
+        Add(Xml);
+    }
+
+    public Utf8String Xml { get; set; }
 }
 
 public class VersionHeader : Node
