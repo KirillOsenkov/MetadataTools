@@ -39,7 +39,7 @@ public class ResourceTable : Node
                 }
                 else if (parentResourceKind == "Manifest")
                 {
-                    resource = new ManifestResource();
+                    resource = new NativeManifestResource();
                 }
                 else
                 {
@@ -96,7 +96,7 @@ public class VersionResource : Resource
     public VersionHeader Root { get; set; }
 }
 
-public class ManifestResource : Resource
+public class NativeManifestResource : Resource
 {
     protected override void ParseBytes()
     {

@@ -811,6 +811,22 @@ public class CompressedMetadataTableStream : MetadataStream
                         }
                     };
                 }
+                else if (tableKind == Table.ManifestResource)
+                {
+                    BytesNode nameNode = stridx_size == 2 ? new TwoBytes() : new FourBytes();
+                    nameNode.Text = "Name";
+                    var implementationNode = new BytesNode
+                    {
+                        Text = "Implementation",
+                        Length = GetCodedIndexSize(CodedIndex.Implementation)
+                    };
+                    tableRow = new ManifestResourceTableRow
+                    {
+                        Length = size,
+                        Name = nameNode,
+                        Implementation = implementationNode
+                    };
+                }
                 else
                 {
                     tableRow = new TableRow
@@ -822,8 +838,7 @@ public class CompressedMetadataTableStream : MetadataStream
                 table.Add(tableRow);
                 if (tableRow is MethodTableRow methodTableRow)
                 {
-                    var nameBytes = methodTableRow.Name;
-                    int nameOffset = nameBytes.ReadInt16OrInt32();
+                    int nameOffset = methodTableRow.Name.ReadInt16OrInt32();
                     var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
                     FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
                 }
@@ -831,12 +846,49 @@ public class CompressedMetadataTableStream : MetadataStream
                 {
                     FindField(fieldRVATableRow.RVA.Value);
                 }
+                else if (tableRow is ManifestResourceTableRow manifestResourceTableRow)
+                {
+                    FindManagedResource(manifestResourceTableRow);
+                }
             }
 
             tables.Add(table);
         }
 
         Tables = tables;
+    }
+
+    private void FindManagedResource(ManifestResourceTableRow manifestResourceTableRow)
+    {
+        int offset = manifestResourceTableRow.Offset.Value;
+        int flags = manifestResourceTableRow.Flags.Value;
+        uint nameOffset = manifestResourceTableRow.Name.ReadUInt16OrUInt32();
+        var zeroTerminatedString = Metadata.StringsTableStream.FindString((int)nameOffset);
+        manifestResourceTableRow.Text = $"{offset} {zeroTerminatedString}";
+        uint implementation = manifestResourceTableRow.Implementation.ReadUInt16OrUInt32();
+        uint rid = implementation >> 2;
+        switch (implementation & 3)
+        {
+            case 0: // File
+                break;
+            case 1: // AssemblyRef
+                break;
+            default: // ExportedType
+                break;
+        }
+
+        if (rid == 0)
+        {
+            var peFile = PEFile;
+            var resourceRVA = PEFile.CLIHeader.Resources.RVA.Value;
+            var resourceOffset = peFile.ResolveVirtualAddress(resourceRVA + offset);
+            var managedResource = new ManagedResource
+            {
+                Start = resourceOffset,
+                Text = zeroTerminatedString
+            };
+            peFile.Add(managedResource);
+        }
     }
 
     private void FindMethod(int rva, string text)
@@ -981,6 +1033,27 @@ public class CustomDebugInformationTableRow : TableRow
     public BytesNode BlobHandle { get; set; }
 }
 
+public class ManifestResourceTableRow : TableRow
+{
+    public ManifestResourceTableRow()
+    {
+        Text = "Manifest resource table row";
+    }
+
+    public override void Parse()
+    {
+        Offset = AddFourBytes("Offset");
+        Flags = AddFourBytes("Flags");
+        Add(Name);
+        Add(Implementation);
+    }
+
+    public FourBytes Offset { get; set; }
+    public FourBytes Flags { get; set; }
+    public BytesNode Name { get; set; }
+    public BytesNode Implementation { get; set; }
+}
+
 public class MetadataTable : Sequence
 {
     public Table Name { get; set; }
@@ -1000,4 +1073,22 @@ public class RuntimeStartupStub : Node
     {
         Text = "Runtime startup stub";
     }
+}
+
+public class ManagedResource : Node
+{
+    public ManagedResource()
+    {
+        Text = "Managed Resource";
+    }
+
+    public override void Parse()
+    {
+        Size = AddFourBytes("Size");
+        int size = Size.Value;
+        Bytes = AddBytes(size, "Bytes");
+    }
+
+    public FourBytes Size { get; set; }
+    public Node Bytes { get; set; }
 }
