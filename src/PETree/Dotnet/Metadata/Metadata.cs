@@ -129,7 +129,7 @@ public class Metadata : Node
                     if (customText.Contains("CompilationOptions") ||
                         customText.Contains("SourceLink"))
                     {
-                        var blob = (Blob)blobStream.Children.Where(b => b.Start - blobStream.Start == blobHandle).FirstOrDefault();
+                        var blob = blobStream.GetBlob(blobHandle);
                         var bytes = blob.Bytes;
                         int start = bytes.Start;
                         int length = bytes.Length;
@@ -385,6 +385,11 @@ public class BlobMetadataStream : MetadataStream
 
             Add<Blob>();
         }
+    }
+
+    public Blob GetBlob(int offset)
+    {
+        return Children.Where(b => b.Start - Start == offset).FirstOrDefault() as Blob;
     }
 
     public Padding Padding { get; set; }
@@ -757,7 +762,39 @@ public class CompressedMetadataTableStream : MetadataStream
             for (int row = 0; row < TableInfos[i].RowCount; row++)
             {
                 TableRow tableRow = null;
-                if (tableKind == Table.Method)
+                if (tableKind == Table.TypeDef)
+                {
+                    tableRow = new TypeDefTableRow
+                    {
+                        Length = size,
+                        Name = new BytesNode
+                        {
+                            Length = stridx_size,
+                            Text = "Name"
+                        },
+                        Namespace = new BytesNode
+                        {
+                            Length = stridx_size,
+                            Text = "Namespace"
+                        },
+                        Extends = new BytesNode
+                        {
+                            Length = GetCodedIndexSize(CodedIndex.TypeDefOrRef),
+                            Text = "Extends"
+                        },
+                        FieldList = new BytesNode
+                        {
+                            Length = GetTableIndexSize(Table.Field),
+                            Text = "FieldList"
+                        },
+                        MethodList = new BytesNode
+                        {
+                            Length = GetTableIndexSize(Table.Method),
+                            Text = "MethodList"
+                        }
+                    };
+                }
+                else if (tableKind == Table.Method)
                 {
                     BytesNode nameNode = stridx_size == 2 ? new TwoBytes() : new FourBytes();
                     nameNode.Text = "Name";
@@ -765,7 +802,7 @@ public class CompressedMetadataTableStream : MetadataStream
                     {
                         Length = size,
                         Name = nameNode,
-                        Signature = new Node
+                        Signature = new BytesNode
                         {
                             Length = blobidx_size,
                             Text = "Signature"
@@ -777,12 +814,29 @@ public class CompressedMetadataTableStream : MetadataStream
                         }
                     };
                 }
+                else if (tableKind == Table.Field)
+                {
+                    tableRow = new FieldTableRow
+                    {
+                        Length = size,
+                        Name = new BytesNode
+                        {
+                            Length = stridx_size,
+                            Text = "Name"
+                        },
+                        Signature = new BytesNode
+                        {
+                            Length = blobidx_size,
+                            Text = "Signature"
+                        }
+                    };
+                }
                 else if (tableKind == Table.FieldRVA)
                 {
                     tableRow = new FieldRVATableRow
                     {
                         Length = size,
-                        FieldIndex = new Node
+                        FieldIndex = new BytesNode
                         {
                             Length = GetTableIndexSize(Table.Field),
                             Text = "Field index"
@@ -842,10 +896,6 @@ public class CompressedMetadataTableStream : MetadataStream
                     var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
                     FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
                 }
-                else if (tableRow is FieldRVATableRow fieldRVATableRow)
-                {
-                    FindField(fieldRVATableRow.RVA.Value);
-                }
                 else if (tableRow is ManifestResourceTableRow manifestResourceTableRow)
                 {
                     FindManagedResource(manifestResourceTableRow);
@@ -856,6 +906,65 @@ public class CompressedMetadataTableStream : MetadataStream
         }
 
         Tables = tables;
+
+        FindMappedFields();
+    }
+
+    private MetadataTable GetTable(Table kind) => Tables.FirstOrDefault(t => t.Name == kind);
+
+    private void FindMappedFields()
+    {
+        var peFile = PEFile;
+        var blobTableStream = Metadata.BlobTableStream;
+        var typeDefTable = GetTable(Table.TypeDef);
+        var fieldRvaTable = GetTable(Table.FieldRVA);
+        var fieldTable = GetTable(Table.Field);
+
+        if (fieldRvaTable == null)
+        {
+            return;
+        }
+
+        foreach (var fieldRvaRow in fieldRvaTable.Children.OfType<FieldRVATableRow>())
+        {
+            var mappedFieldDataSize = 8;
+
+            var rva = fieldRvaRow.RVA.Value;
+            var fieldIndex = fieldRvaRow.FieldIndex.ReadUInt16OrUInt32();
+            var fieldRow = (FieldTableRow)fieldTable.Children[(int)fieldIndex - 1];
+            var signatureBlob = fieldRow.Signature.ReadUInt16OrUInt32();
+            var fieldName = fieldRow.Name.ReadUInt16OrUInt32();
+            var fieldNameString = Metadata.StringsTableStream.FindString((int)fieldName);
+            var blob = blobTableStream.GetBlob((int)signatureBlob);
+            var bytes = blob.Bytes;
+            if (bytes.Length == 4)
+            {
+                bytes.AddOneByte("Kind");
+                bytes.AddOneByte("ClassOrStruct");
+                var compressedInteger = bytes.Add<CompressedInteger>("TypeIndex");
+                var typeCodedIndex = compressedInteger.Value;
+                var typeIndex = typeCodedIndex >> 2;
+                var typeDefRow = typeDefTable.Children[typeIndex - 1] as TypeDefTableRow;
+                var nameOffset = typeDefRow.Name.ReadUInt16OrUInt32();
+                var zeroTerminatedString = Metadata.StringsTableStream.FindString((int)nameOffset);
+                var equals = zeroTerminatedString.IndexOf('=');
+                var sizeString = zeroTerminatedString.Substring(equals + 1);
+                if (int.TryParse(sizeString, out int size))
+                {
+                    mappedFieldDataSize = size;
+                }
+            }
+
+            var offset = peFile.ResolveVirtualAddress(rva);
+
+            var mappedFieldData = new MappedFieldData
+            {
+                Start = offset,
+                Length = mappedFieldDataSize,
+                Text = $"Mapped field {fieldNameString}"
+            };
+            PEFile.Add(mappedFieldData);
+        }
     }
 
     private void FindManagedResource(ManifestResourceTableRow manifestResourceTableRow)
@@ -944,24 +1053,6 @@ public class CompressedMetadataTableStream : MetadataStream
         PEFile.Add(tinyMethod);
         return tinyMethod;
     }
-
-    private void FindField(int rva)
-    {
-        if (rva == 0)
-        {
-            return;
-        }
-
-        var peFile = PEFile;
-        var offset = peFile.ResolveVirtualAddress(rva);
-
-        var mappedFieldData = new MappedFieldData
-        {
-            Start = offset,
-            Length = 8
-        };
-        PEFile.Add(mappedFieldData);
-    }
 }
 
 public class UncompressedMetadataTableStream : MetadataStream
@@ -970,6 +1061,31 @@ public class UncompressedMetadataTableStream : MetadataStream
 
 public class TableRow : Node
 {
+}
+
+public class TypeDefTableRow : TableRow
+{
+    public TypeDefTableRow()
+    {
+        Text = "TypeDef table row";
+    }
+
+    public override void Parse()
+    {
+        Flags = AddFourBytes("Flags");
+        Add(Name);
+        Add(Namespace);
+        Add(Extends);
+        Add(FieldList);
+        Add(MethodList);
+    }
+
+    public FourBytes Flags { get; set; }
+    public BytesNode Name { get; set; }
+    public BytesNode Namespace { get; set; }
+    public BytesNode Extends { get; set; }
+    public BytesNode FieldList { get; set; }
+    public BytesNode MethodList { get; set; }
 }
 
 public class MethodTableRow : TableRow
@@ -993,8 +1109,27 @@ public class MethodTableRow : TableRow
     public TwoBytes ImplFlags { get; set; }
     public TwoBytes Flags { get; set; }
     public BytesNode Name { get; set; }
-    public Node Signature { get; set; }
+    public BytesNode Signature { get; set; }
     public Node ParamList { get; set; }
+}
+
+public class FieldTableRow : TableRow
+{
+    public FieldTableRow()
+    {
+        Text = "Field table row";
+    }
+
+    public override void Parse()
+    {
+        Flags = AddTwoBytes("Flags");
+        Add(Name);
+        Add(Signature);
+    }
+
+    public TwoBytes Flags { get; set; }
+    public BytesNode Name { get; set; }
+    public BytesNode Signature { get; set; }
 }
 
 public class FieldRVATableRow : TableRow
@@ -1011,7 +1146,7 @@ public class FieldRVATableRow : TableRow
     }
 
     public FourBytes RVA { get; set; }
-    public Node FieldIndex { get; set; }
+    public BytesNode FieldIndex { get; set; }
 }
 
 public class CustomDebugInformationTableRow : TableRow

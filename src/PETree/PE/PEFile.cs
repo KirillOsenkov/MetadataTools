@@ -175,12 +175,24 @@ public class PEFile : Node
 
         this.ComputeUncoveredSpans(span =>
         {
-            var unknown = new Unknown
+            if (Buffer.IsZeroFilled(span))
             {
-                Start = span.Start,
-                Length = span.Length
-            };
-            this.Add(unknown);
+                var padding = new Padding
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                };
+                Add(padding);
+            }
+            else
+            {
+                var unknown = new Unknown
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                };
+                this.Add(unknown);
+            }
         });
 
         this.ValidateOverlap(node =>
@@ -333,13 +345,9 @@ public class PEFile : Node
             if (dllName > 0)
             {
                 var dllNameNode = new ZeroTerminatedString() { Start = dllName };
-                Add(dllNameNode);
+                ImportTable.Add(dllNameNode);
             }
         }
-
-        this.FillWithPadding();
-
-        AddRemainingPadding();
     }
 
     public DOSHeader DOSHeader { get; set; }
