@@ -200,7 +200,7 @@ public class PEFile : Node
             throw new System.Exception($"Node {node} overlaps with its successor");
         });
 
-        Text = $"PE File ({Length:N0} bytes)";
+        Text = $"PE File";
     }
 
     private void ReadDotnetMetadata(int cliHeader)

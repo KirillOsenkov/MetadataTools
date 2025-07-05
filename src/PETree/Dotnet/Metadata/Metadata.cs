@@ -1029,7 +1029,7 @@ public class CompressedMetadataTableStream : MetadataStream
             TinyMethod t => t.CodeSize,
             _ => 0
         };
-        method.Text = $"{method.Text}: {text} ({codeSize} bytes)";
+        method.Text = $"{method.Text}: {text}";
     }
 
     private FatMethod ReadFatMethod(byte header, int offset)
