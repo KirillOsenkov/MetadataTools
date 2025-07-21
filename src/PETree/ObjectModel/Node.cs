@@ -38,6 +38,20 @@ public class Node
 
     public Node Parent { get; set; }
 
+    public Node Root
+    {
+        get
+        {
+            var current = this;
+            while (current.Parent != null)
+            {
+                current = current.Parent;
+            }
+
+            return current;
+        }
+    }
+
     private string text;
     public string Text
     {
@@ -195,7 +209,12 @@ public class Node
 
         if (node.Start < Start || node.End > End || node.Length > Length)
         {
-            throw new System.Exception("A child node is outside the parent node span");
+            throw new System.Exception($"Child node {node.Text} span {node.Span} is outside the parent node ({this.Text}) span ({this.Span})");
+        }
+
+        if (node.End > Buffer.Length)
+        {
+            throw new System.Exception($"Node {node.Text} end {node.End} is outside the underlying buffer ({Buffer.Length})");
         }
 
         return node;

@@ -4,6 +4,8 @@ namespace GuiLabs.FileFormat;
 
 public class ByteBuffer
 {
+    public virtual long Length => 0;
+
     public virtual ushort ReadUInt16(int offset) => 0;
     public virtual short ReadInt16(int offset) => 0;
     public virtual uint ReadUInt32(int offset) => 0;
@@ -23,6 +25,8 @@ public class StreamBuffer : ByteBuffer
         this.stream = stream;
         this.binaryReader = new BinaryReader(stream);
     }
+
+    public override long Length => stream.Length;
 
     public override uint ReadUInt32(int offset)
     {

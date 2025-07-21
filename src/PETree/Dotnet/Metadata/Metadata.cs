@@ -894,6 +894,7 @@ public class CompressedMetadataTableStream : MetadataStream
                 {
                     int nameOffset = methodTableRow.Name.ReadInt16OrInt32();
                     var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
+                    methodTableRow.Text = $"Method row: {zeroTerminatedString}";
                     FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
                 }
                 else if (tableRow is ManifestResourceTableRow manifestResourceTableRow)

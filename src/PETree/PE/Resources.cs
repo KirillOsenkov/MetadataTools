@@ -69,12 +69,20 @@ public class Resource : Node
         Size = AddFourBytes("Size");
         Codepage = AddFourBytes("Codepage");
         Zero = AddFourBytes("Zero");
-        ParseBytes();
+        var peFile = Root as PEFile;
+        var start = peFile.ResolveVirtualAddress(RVA.Value);
+        ParseBytes(start);
     }
 
-    protected virtual void ParseBytes()
+    protected virtual void ParseBytes(int start)
     {
-        Bytes = AddBytes(Size.Value, "Bytes");
+        Bytes = new BytesNode()
+        {
+            Start = start,
+            Length = Size.Value,
+            Text = $"{Type} bytes"
+        };
+        this.Root.Add(Bytes);
     }
 
     public FourBytes RVA { get; set; }
@@ -88,23 +96,26 @@ public class Resource : Node
 
 public class VersionResource : Resource
 {
-    protected override void ParseBytes()
+    protected override void ParseBytes(int start)
     {
-        Root = Add<VersionHeader>();
+        VersionHeader = new VersionHeader { Start = start };
+        Root.Add(VersionHeader);
     }
 
-    public VersionHeader Root { get; set; }
+    public VersionHeader VersionHeader { get; set; }
 }
 
 public class NativeManifestResource : Resource
 {
-    protected override void ParseBytes()
+    protected override void ParseBytes(int start)
     {
         Xml = new Utf8String
         {
-            Length = Size.Value
+            Start = start,
+            Length = Size.Value,
+            Text = "Native manifest XML"
         };
-        Add(Xml);
+        Root.Add(Xml);
     }
 
     public Utf8String Xml { get; set; }
@@ -144,7 +155,7 @@ public class VersionHeader : Node
 
         while (this.LastChildEnd < End)
         {
-            var child = Add<VersionHeader>();
+            Add<VersionHeader>();
         }
     }
 

@@ -173,6 +173,11 @@ public class PEFile : Node
         RsrcSection?.AddRemainingPadding();
         RelocSection?.AddRemainingPadding();
 
+        this.ValidateOverlap(node =>
+        {
+            throw new System.Exception($"Node {node} overlaps with its successor");
+        });
+
         this.ComputeUncoveredSpans(span =>
         {
             if (Buffer.IsZeroFilled(span))
@@ -193,11 +198,6 @@ public class PEFile : Node
                 };
                 this.Add(unknown);
             }
-        });
-
-        this.ValidateOverlap(node =>
-        {
-            throw new System.Exception($"Node {node} overlaps with its successor");
         });
 
         Text = $"PE File";
@@ -324,7 +324,7 @@ public class PEFile : Node
 
             for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
             {
-                var fourBytes = importLookupTable.Entries[i];
+                var fourBytes = importLookupTable.Entries[j];
 
                 var rva = fourBytes.Value;
                 if (rva == 0)
