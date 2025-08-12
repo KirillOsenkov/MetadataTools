@@ -189,6 +189,11 @@ public partial class Checker
             string candidate = Path.Combine(directory, reference.Name + ".dll");
             if (File.Exists(candidate))
             {
+                if (commandLine.ShouldExclude(candidate))
+                {
+                    continue;
+                }
+
                 return candidate;
             }
         }
