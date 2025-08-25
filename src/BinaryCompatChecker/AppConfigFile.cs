@@ -104,7 +104,10 @@ namespace BinaryCompatChecker
                     AssemblyIdentityElement.SetAttributeValue("culture", Culture);
                 }
 
-                AssemblyIdentityElement.SetAttributeValue("publicKeyToken", PublicKeyToken);
+                if (!string.IsNullOrEmpty(PublicKeyToken))
+                {
+                    AssemblyIdentityElement.SetAttributeValue("publicKeyToken", PublicKeyToken);
+                }
 
                 if (BindingRedirectElement == null)
                 {
@@ -231,12 +234,13 @@ namespace BinaryCompatChecker
 
         public void AddBindingRedirect(BindingRedirect bindingRedirect)
         {
-            var existing = bindingRedirects.FirstOrDefault(b => b.Name.Equals(bindingRedirect.Name, StringComparison.OrdinalIgnoreCase));
+            var existing = bindingRedirects.FirstOrDefault(b =>
+                b.Name.Equals(bindingRedirect.Name, StringComparison.OrdinalIgnoreCase) &&
+                b.PublicKeyToken.Equals(bindingRedirect.PublicKeyToken, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
                 existing.Name = bindingRedirect.Name;
                 existing.Culture = bindingRedirect.Culture;
-                existing.PublicKeyToken = bindingRedirect.PublicKeyToken;
                 existing.OldVersionRangeStart = bindingRedirect.OldVersionRangeStart;
 
                 // if the existing version is something like 100.0.0.0, don't touch it
@@ -280,6 +284,7 @@ namespace BinaryCompatChecker
             var dependentAssemblyElements = assemblyBindingElements.Elements(Xmlns("dependentAssembly"));
             foreach (var dependentAssembly in dependentAssemblyElements)
             {
+                // https://learn.microsoft.com/en-us/dotnet/framework/configure-apps/file-schema/runtime/assemblyidentity-element-for-runtime
                 var assemblyIdentity = dependentAssembly.Element(Xmlns("assemblyIdentity"));
                 if (assemblyIdentity == null)
                 {
@@ -297,11 +302,6 @@ namespace BinaryCompatChecker
                 var culture = GetAttributeValue(assemblyIdentity, "culture");
 
                 var publicKeyToken = GetAttributeValue(assemblyIdentity, "publicKeyToken");
-                if (publicKeyToken == null)
-                {
-                    Error($"assemblyIdentity {name} is missing the 'publicKeyToken' attribute");
-                    publicKeyToken = "<missing>";
-                }
 
                 var bindingRedirect = dependentAssembly.Element(Xmlns("bindingRedirect"));
                 var codeBases = dependentAssembly.Elements(Xmlns("codeBase"));
@@ -417,7 +417,9 @@ namespace BinaryCompatChecker
                     CodeBases = codeBaseList
                 };
 
-                if (bindingRedirects.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                if (bindingRedirects.Any(b =>
+                    b.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                    b.PublicKeyToken.Equals(publicKeyToken, StringComparison.OrdinalIgnoreCase)))
                 {
                     Error($"Duplicate binding redirect: {name}");
                     continue;

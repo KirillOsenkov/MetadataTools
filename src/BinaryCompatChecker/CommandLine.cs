@@ -538,7 +538,7 @@ public class CommandLine
                     continue;
                 }
 
-                if ((argName.StartsWith("p:", StringComparison.OrdinalIgnoreCase)) && arg.Length > 3)
+                if (argName.StartsWith("p:", StringComparison.OrdinalIgnoreCase) && arg.Length > 3)
                 {
                     string pattern = arg.Substring(3);
                     pattern = pattern.Trim('"');
@@ -633,7 +633,7 @@ public class CommandLine
             {
                 if (!AddInclusion(closureRootPattern, currentDirectory))
                 {
-                    WriteError($"Expected directory, file glob or pattern: {closureRootPattern}");
+                    WriteError($"Expected directory, file, file glob or pattern: {closureRootPattern}");
                     return false;
                 }
             }
@@ -657,7 +657,7 @@ public class CommandLine
         {
             if (!AddInclusion(arg, currentDirectory))
             {
-                WriteError($"Expected directory, file glob or pattern: {arg}");
+                WriteError($"Expected directory, file, file glob or pattern: {arg}");
                 return false;
             }
         }
@@ -825,8 +825,7 @@ public class CommandLine
                 }
             }
 
-            AddFilesInDirectory(root, patterns);
-            return true;
+            return AddFilesInDirectory(root, patterns);
         }
 
         if (parts[0] == "..")
@@ -837,8 +836,7 @@ public class CommandLine
                 return false;
             }
 
-            AddFilesInDirectory(root, parts.Skip(1).ToArray());
-            return true;
+            return AddFilesInDirectory(root, parts.Skip(1).ToArray());
         }
 
         var subdirectories = Directory.GetDirectories(root);
@@ -882,7 +880,7 @@ public class CommandLine
 
         if (parts.Length != 1)
         {
-            return true;
+            return false;
         }
 
         string[] localPatterns = null;
@@ -896,13 +894,18 @@ public class CommandLine
             localPatterns = new[] { first };
         }
 
-        AddFilesInDirectory(root, localPatterns);
+        if (!AddFilesInDirectory(root, localPatterns))
+        {
+            return false;
+        }
 
         return true;
     }
 
-    private void AddFilesInDirectory(string root, IEnumerable<string> patterns)
+    private bool AddFilesInDirectory(string root, IEnumerable<string> patterns)
     {
+        bool added = false;
+
         foreach (var pattern in patterns)
         {
             var filesInDirectory = Directory.GetFiles(root, pattern);
@@ -914,8 +917,11 @@ public class CommandLine
                 }
 
                 AddFile(file);
+                added = true;
             }
         }
+
+        return added;
     }
 
     public bool ShouldExclude(string filePath)

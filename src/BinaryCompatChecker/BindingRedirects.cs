@@ -9,8 +9,8 @@ public partial class Checker
 {
     private void CheckAppConfigFiles()
     {
-        var versionMismatchesByName = versionMismatches
-            .ToLookup(mismatch => mismatch.ExpectedReference.Name, StringComparer.OrdinalIgnoreCase)
+        var versionMismatchesByNameAndPublicKeyToken = versionMismatches
+            .ToLookup(mismatch => mismatch.ExpectedReference.Name + "," + mismatch.ExpectedReference.GetToken(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.ToList(), StringComparer.OrdinalIgnoreCase);
 
         foreach (var appConfigFile in appConfigFiles)
@@ -21,13 +21,13 @@ public partial class Checker
                     appConfigFile,
                     bindingRedirect,
                     assemblyDefinitionsExamined,
-                    versionMismatchesByName);
+                    versionMismatchesByNameAndPublicKeyToken);
             }
         }
 
         if (commandLine.ReportVersionMismatch)
         {
-            ReportVersionMismatches(appConfigFiles, versionMismatchesByName);
+            ReportVersionMismatches(appConfigFiles, versionMismatchesByNameAndPublicKeyToken);
         }
     }
 
@@ -35,10 +35,10 @@ public partial class Checker
         AppConfigFile appConfigFile,
         AppConfigFile.BindingRedirect bindingRedirect,
         IEnumerable<AssemblyDefinition> assemblies,
-        Dictionary<string, List<VersionMismatch>> versionMismatchesByName)
+        Dictionary<string, List<VersionMismatch>> versionMismatchesByNameAndPublicKeyToken)
     {
         string name = bindingRedirect.Name;
-        string publicKeyToken = bindingRedirect.PublicKeyToken;
+        string publicKeyToken = bindingRedirect.PublicKeyToken ?? "null";
         Version oldVersionStart = bindingRedirect.OldVersionRangeStart;
         Version oldVersionEnd = bindingRedirect.OldVersionRangeEnd;
         Version newVersion = bindingRedirect.NewVersion;
@@ -57,6 +57,11 @@ public partial class Checker
             }
 
             if (!string.Equals(assemblyName.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals(assemblyName.GetToken(), publicKeyToken, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -96,7 +101,7 @@ public partial class Checker
             }
         }
 
-        if (versionMismatchesByName.TryGetValue(name, out List<VersionMismatch> mismatches))
+        if (versionMismatchesByNameAndPublicKeyToken.TryGetValue(name + "," + publicKeyToken, out List<VersionMismatch> mismatches))
         {
             for (int i = mismatches.Count - 1; i >= 0; i--)
             {
@@ -108,7 +113,7 @@ public partial class Checker
                 string actualPublicKeyToken = versionMismatch.ActualAssembly.Name.GetToken();
                 if (!string.Equals(actualPublicKeyToken, publicKeyToken, StringComparison.OrdinalIgnoreCase))
                 {
-                    diagnostics.Add($"App.config: '{appConfigFileName}': publicKeyToken '{publicKeyToken}' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualPublicKeyToken}'");
+                    diagnostics.Add($"App.config: '{appConfigFileName}': publicKeyToken '{publicKeyToken ?? "null" }' from bindingRedirect for {name} doesn't match one from the actual assembly: '{actualPublicKeyToken}'");
                 }
 
                 var actualVersion = versionMismatch.ActualAssembly.Name.Version;

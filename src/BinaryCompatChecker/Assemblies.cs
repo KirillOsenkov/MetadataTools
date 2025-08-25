@@ -189,10 +189,13 @@ public partial class Checker
             string candidate = Path.Combine(directory, reference.Name + ".dll");
             if (File.Exists(candidate))
             {
-                if (commandLine.ShouldExclude(candidate))
-                {
-                    continue;
-                }
+                // This is helpful to avoid resolving references to files that were explicitly excluded from command line.
+                // However if we enable this, additional diagnostics will appear because the file that's physically there
+                // will no longer be found. We need to brainstorm what's the right thing to do here.
+                //if (commandLine.ShouldExclude(candidate))
+                //{
+                //    continue;
+                //}
 
                 return candidate;
             }
@@ -218,6 +221,11 @@ public partial class Checker
             foreach (var bindingRedirect in appConfig.BindingRedirects)
             {
                 if (!string.Equals(bindingRedirect.Name, reference.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(bindingRedirect.PublicKeyToken, reference.GetToken(), StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -498,7 +506,7 @@ public static class VersionExtensions
         return result;
     }
 
-    public static string GetToken(this AssemblyNameDefinition assemblyName)
+    public static string GetToken(this AssemblyNameReference assemblyName)
     {
         string result = assemblyName.PublicKeyToken.GetString();
         if (string.IsNullOrEmpty(result))
