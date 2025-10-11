@@ -391,7 +391,7 @@ Report file: {checkResult.ReportFile}");
 
         private void ReportUnreferencedAssemblies()
         {
-            if (!commandLine.ReportUnreferencedAssemblies)
+            if (!commandLine.ReportUnreferencedAssemblies || commandLine.IgnoreUnreferencedAssemblies)
             {
                 return;
             }

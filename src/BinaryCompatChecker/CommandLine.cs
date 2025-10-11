@@ -118,6 +118,7 @@ public class CommandLine
     public bool ReportVersionMismatch { get; set; } = true;
     public bool ReportIntPtrConstructors { get; set; }
     public bool ReportUnreferencedAssemblies { get; set; }
+    public bool IgnoreUnreferencedAssemblies { get; set; }
     public bool ReportFacade { get; set; } = true;
     public bool ReportMissingAssemblies { get; set; } = true;
     public bool ReportMissingTypes { get; set; } = true;
@@ -353,6 +354,13 @@ public class CommandLine
                 if (argName.Equals("ignoreInterfaces", StringComparison.OrdinalIgnoreCase))
                 {
                     ReportInterfaceMismatch = false;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreUnreferenced", StringComparison.OrdinalIgnoreCase))
+                {
+                    IgnoreUnreferencedAssemblies = true;
                     arguments.Remove(arg);
                     continue;
                 }
@@ -1116,6 +1124,7 @@ Options:", ConsoleColor.White);
     -ignoreMissingTypes        Do not report missing types.
     -ignoreMissingMembers      Do not report missing members.
     -ignoreInterfaces          Do not report missing interface implementations.
+    -ignoreUnreferenced        Do not report unreferenced assemblies when in closure mode.
     -doNotResolveFromGAC       Do not resolve assemblies from GAC.
     -doNotResolveFromNetCore   Do not resolve assemblies from .NET runtime directories.
     -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
