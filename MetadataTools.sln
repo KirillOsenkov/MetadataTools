@@ -13,8 +13,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PEFile.Tests", "src\PEFile.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RefDump", "src\RefDump\RefDump.csproj", "{D914402D-04ED-478E-B8E3-5A225681AEAB}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AssemblyBindingFixer", "src\AssemblyBindingFixer\AssemblyBindingFixer.csproj", "{7D5AB2ED-8CFF-4C9A-9C24-7E0424F041F7}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Corflags", "src\Corflags\Corflags.csproj", "{0FDE9438-641B-407D-9376-0E57F350F453}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DumpAssembly", "src\DumpAssembly\DumpAssembly.csproj", "{91713E48-FD78-4AD3-A744-EDF66195261F}"
@@ -51,10 +49,6 @@ Global
 		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D914402D-04ED-478E-B8E3-5A225681AEAB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7D5AB2ED-8CFF-4C9A-9C24-7E0424F041F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7D5AB2ED-8CFF-4C9A-9C24-7E0424F041F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7D5AB2ED-8CFF-4C9A-9C24-7E0424F041F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7D5AB2ED-8CFF-4C9A-9C24-7E0424F041F7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0FDE9438-641B-407D-9376-0E57F350F453}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0FDE9438-641B-407D-9376-0E57F350F453}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0FDE9438-641B-407D-9376-0E57F350F453}.Release|Any CPU.ActiveCfg = Release|Any CPU
