@@ -27,6 +27,7 @@ lbi.exe [<pattern>]
         [-p]
         [-v]
         [-fv]
+        [-fs]
         [-iv]
         [-tf]
         [@response.rsp]
@@ -47,6 +48,7 @@ lbi.exe [<pattern>]
     -p      Print assembly platform.
     -v      Print assembly version.
     -fv     Print assembly file version.
+    -fs     Print file size.
     -iv     Print assembly informational version.
     -tf     Print assembly target framework.
 
@@ -84,6 +86,7 @@ Examples:
     private static bool printInformationalVersion;
     private static bool printTargetFramework;
     private static bool managedOnly = false;
+    private static bool fileSize;
 
     static void Main(string[] args)
     {
@@ -136,6 +139,13 @@ Examples:
         {
             arguments.Remove(managedOnlyArgument);
             managedOnly = true;
+        }
+
+        var fileSizeArgument = arguments.FirstOrDefault(a => a == "-fs" || a == "/fs");
+        if (fileSizeArgument != null)
+        {
+            arguments.Remove(fileSizeArgument);
+            fileSize = true;
         }
 
         var listArgument = arguments.FirstOrDefault(a => a.StartsWith("-l"));
@@ -442,7 +452,15 @@ Examples:
             string relativePath = ComputeRelativePath(rootDirectories, filePath);
 
             var fileInfo = FileInfo.Get(filePath, isConfirmedManagedAssembly: managedOnly);
-            fileInfo.Text = relativePath;
+
+            var fileText = relativePath;
+
+            if (fileSize)
+            {
+                fileText += "," + fileInfo.FileSize.ToString();
+            }
+
+            fileInfo.Text = fileText;
 
             infos.Add(fileInfo);
         }
