@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>1.0.16</Version>
+    <Version>1.0.17</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>lbi</ToolCommandName>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
