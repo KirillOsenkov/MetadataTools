@@ -529,6 +529,12 @@ Examples:
             sb.Append(",");
         }
 
+        if (printFileVersion && !string.IsNullOrWhiteSpace(fileInfo.FileVersion))
+        {
+            AppendSeparator();
+            sb.Append(fileInfo.FileVersion);
+        }
+
         if (fileInfo.IsManagedAssembly)
         {
             if (printVersion)
@@ -561,12 +567,6 @@ Examples:
                     AppendSeparator();
                     sb.Append(platformText);
                 }
-            }
-
-            if (printFileVersion && !string.IsNullOrWhiteSpace(fileInfo.FileVersion))
-            {
-                AppendSeparator();
-                sb.Append(fileInfo.FileVersion);
             }
 
             if (printInformationalVersion && !string.IsNullOrWhiteSpace(fileInfo.InformationalVersion))
@@ -640,6 +640,11 @@ Examples:
 
                 Highlight(" " + shaGroup.First().FileSize.ToString("N0"), ConsoleColor.Gray, newLineAtEnd: false);
 
+                if (printFileVersion && !string.IsNullOrWhiteSpace(fileInfo.FileVersion))
+                {
+                    Highlight(" " + fileInfo.FileVersion, ConsoleColor.DarkYellow, newLineAtEnd: false);
+                }
+
                 if (fileInfo.AssemblyName != null)
                 {
                     if (printTargetFramework && !string.IsNullOrWhiteSpace(fileInfo.TargetFramework))
@@ -683,11 +688,6 @@ Examples:
                     if (printVersion && !string.IsNullOrWhiteSpace(fileInfo.Version))
                     {
                         Highlight(" " + fileInfo.Version, ConsoleColor.DarkCyan, newLineAtEnd: false);
-                    }
-
-                    if (printFileVersion && !string.IsNullOrWhiteSpace(fileInfo.FileVersion))
-                    {
-                        Highlight(" " + fileInfo.FileVersion, ConsoleColor.DarkYellow, newLineAtEnd: false);
                     }
 
                     if (printInformationalVersion && !string.IsNullOrWhiteSpace(fileInfo.InformationalVersion))

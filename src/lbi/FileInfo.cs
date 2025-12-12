@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -192,12 +193,21 @@ public class FileInfo
 
     private void ReadModuleInfo()
     {
+        string filePath = FilePath;
+
         if (!IsManagedAssembly)
         {
+            try
+            {
+                var versionInfo = FileVersionInfo.GetVersionInfo(filePath);
+                fileVersion = versionInfo.FileVersion;
+            }
+            catch
+            {
+            }
+
             return;
         }
-
-        string filePath = FilePath;
 
         var parameters = new ReaderParameters(ReadingMode.Deferred);
         using (var module = ModuleDefinition.ReadModule(filePath, parameters))
