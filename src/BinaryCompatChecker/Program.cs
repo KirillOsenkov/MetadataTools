@@ -8,7 +8,7 @@ using Mono.Cecil;
 
 namespace BinaryCompatChecker
 {
-    public partial class Checker
+    public partial class Checker : IDisposable
     {
         private readonly Dictionary<string, AssemblyDefinition> resolveCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -45,7 +45,8 @@ namespace BinaryCompatChecker
                 return 0;
             }
 
-            var result = new Checker(commandLine).Check();
+            using var checker = new Checker(commandLine);
+            var result = checker.Check();
             return result.Success ? 0 : 1;
         }
 
@@ -84,7 +85,8 @@ namespace BinaryCompatChecker
                     }
 
                     line.IsBatchMode = true;
-                    var result = new Checker(line).Check();
+                    using var checker = new Checker(line);
+                    var result = checker.Check();
                     return result;
                 });
                 tasks.Add(task);
@@ -157,6 +159,12 @@ Report file: {checkResult.ReportFile}");
             this.commandLine = commandLine;
             this.privateAssemblyCache = new AssemblyCache();
             resolver = new CustomAssemblyResolver(this);
+        }
+
+        public void Dispose()
+        {
+            privateAssemblyCache?.Clear();
+            (resolver as IDisposable)?.Dispose();
         }
 
         private static void ComputeBaselineAndReportFile(CheckResult result)
@@ -244,7 +252,6 @@ Report file: {checkResult.ReportFile}");
             ReportUnreferencedAssemblies();
 
             privateAssemblyCache?.Clear();
-            ((CustomAssemblyResolver)resolver).Clear();
 
             result.ActualDiagnostics = diagnostics.ToArray();
             result.AssembliesExamined = assembliesExamined;
