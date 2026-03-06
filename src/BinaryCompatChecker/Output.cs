@@ -3,11 +3,31 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace BinaryCompatChecker;
 
 public partial class Checker
 {
+    /// <summary>
+    /// When /ignoreSourceVersions is set, strips ", Version=x.x.x.x" from the source
+    /// assembly name in diagnostic lines so baselines are version-agnostic.
+    /// Matches patterns like:
+    ///   In assembly 'Foo, Version=1.2.3.4, PublicKeyToken=...'
+    ///   Assembly `Foo, Version=1.2.3.4, PublicKeyToken=...`
+    /// Only strips the version from the source (reporting) assembly, not from the
+    /// referenced (target) assembly.
+    /// </summary>
+    private static readonly Regex SourceVersionPattern = new(
+        @"(?<=In assembly '[^']*?), Version=[\d]+\.[\d]+\.[\d]+\.[\d]+(?=[^']*?':)|" +
+        @"(?<=Assembly `[^`]*?), Version=[\d]+\.[\d]+\.[\d]+\.[\d]+(?=[^`]*?`)",
+        RegexOptions.Compiled);
+
+    private static string StripSourceVersion(string line)
+    {
+        return SourceVersionPattern.Replace(line, "");
+    }
+
     private static void ReportResults(CheckResult result)
     {
         var baselineFile = result.BaselineFile;
@@ -26,7 +46,33 @@ public partial class Checker
         if (File.Exists(baselineFile))
         {
             var baseline = File.ReadLines(baselineFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
-            if (!Enumerable.SequenceEqual(baseline, reportLines, StringComparer.OrdinalIgnoreCase))
+
+            // When ignoreSourceVersions is set, normalize both sides by stripping
+            // source assembly versions before comparison. This allows a single baseline
+            // to work across builds that produce different assembly versions.
+            IEnumerable<string> baselineForCompare = baseline;
+            IEnumerable<string> reportForCompare = reportLines;
+            if (commandLine.IgnoreSourceVersions)
+            {
+                baselineForCompare = baseline.Select(StripSourceVersion);
+                reportForCompare = reportLines.Select(StripSourceVersion);
+            }
+
+            // Determine if there is a mismatch.
+            // In ignoreExtraBaselineEntries mode, only new lines (in report but not in baseline) count.
+            // Missing expected lines are OK — assemblies may not be present in every build config.
+            bool hasMismatch;
+            if (commandLine.IgnoreExtraBaselineEntries)
+            {
+                var added = reportForCompare.Except(baselineForCompare, StringComparer.OrdinalIgnoreCase);
+                hasMismatch = added.Any();
+            }
+            else
+            {
+                hasMismatch = !Enumerable.SequenceEqual(baselineForCompare, reportForCompare, StringComparer.OrdinalIgnoreCase);
+            }
+
+            if (hasMismatch)
             {
                 if (commandLine.EnableDefaultOutput || commandLine.OutputSummary)
                 {
@@ -47,7 +93,16 @@ Report file: {reportFile}");
                 }
                 else
                 {
-                    OutputDiff(commandLine, baseline, reportLines);
+                    if (commandLine.IgnoreSourceVersions)
+                    {
+                        OutputDiff(commandLine,
+                            baseline.Select(StripSourceVersion),
+                            reportLines.Select(StripSourceVersion));
+                    }
+                    else
+                    {
+                        OutputDiff(commandLine, baseline, reportLines);
+                    }
                 }
 
                 try

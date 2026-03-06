@@ -130,6 +130,9 @@ public class CommandLine
 
     public bool ResolveFromFramework => ResolveFromGac || ResolveFromNetCore;
 
+    public bool IgnoreSourceVersions { get; set; }
+    public bool IgnoreExtraBaselineEntries { get; set; }
+
     public bool OutputExpectedWarnings { get; set; }
     public bool OutputNewWarnings { get; set; }
     public bool OutputSummary { get; set; }
@@ -202,6 +205,8 @@ public class CommandLine
             AnalyzeFrameworkAssemblies = AnalyzeFrameworkAssemblies,
             ResolveFromNetCore = ResolveFromNetCore,
             ResolveFromGac = ResolveFromGac,
+            IgnoreSourceVersions = IgnoreSourceVersions,
+            IgnoreExtraBaselineEntries = IgnoreExtraBaselineEntries,
             OutputExpectedWarnings = OutputExpectedWarnings,
             OutputNewWarnings = OutputNewWarnings,
             OutputSummary = OutputSummary,
@@ -361,6 +366,20 @@ public class CommandLine
                 if (argName.Equals("ignoreUnreferenced", StringComparison.OrdinalIgnoreCase))
                 {
                     IgnoreUnreferencedAssemblies = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreSourceVersions", StringComparison.OrdinalIgnoreCase))
+                {
+                    IgnoreSourceVersions = true;
+                    arguments.Remove(arg);
+                    continue;
+                }
+
+                if (argName.Equals("ignoreExtraBaselineEntries", StringComparison.OrdinalIgnoreCase))
+                {
+                    IgnoreExtraBaselineEntries = true;
                     arguments.Remove(arg);
                     continue;
                 }
@@ -1125,6 +1144,10 @@ Options:", ConsoleColor.White);
     -ignoreMissingMembers      Do not report missing members.
     -ignoreInterfaces          Do not report missing interface implementations.
     -ignoreUnreferenced        Do not report unreferenced assemblies when in closure mode.
+    -ignoreSourceVersions      Strip source assembly versions before baseline comparison.
+                               Useful when the same baseline is used across builds with different versions.
+    -ignoreExtraBaselineEntries Only NEW issues (in the report but not in the baseline) cause failure.
+                               Entries in the baseline but not in the report are ignored.
     -doNotResolveFromGAC       Do not resolve assemblies from GAC.
     -doNotResolveFromNetCore   Do not resolve assemblies from .NET runtime directories.
     -ivt                       Report internal API surface area consumed via InternalsVisibleTo.
