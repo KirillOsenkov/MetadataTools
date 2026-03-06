@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>1.0.43</Version>
+    <Version>1.0.44</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>checkbinarycompat</ToolCommandName>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
