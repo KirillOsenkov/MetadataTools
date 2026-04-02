@@ -944,16 +944,31 @@ public class CompressedMetadataTableStream : MetadataStream
                 bytes.AddOneByte("ClassOrStruct");
                 var compressedInteger = bytes.Add<CompressedInteger>("TypeIndex");
                 var typeCodedIndex = compressedInteger.Value;
+
+                // TypeDefOrRef coded index: low 2 bits are the table tag
+                var tableTag = typeCodedIndex & 0x03;  // 0=TypeDef, 1=TypeRef, 2=TypeSpec
                 var typeIndex = typeCodedIndex >> 2;
-                var typeDefRow = typeDefTable.Children[typeIndex - 1] as TypeDefTableRow;
-                var nameOffset = typeDefRow.Name.ReadUInt16OrUInt32();
-                var zeroTerminatedString = Metadata.StringsTableStream.FindString((int)nameOffset);
-                var equals = zeroTerminatedString.IndexOf('=');
-                var sizeString = zeroTerminatedString.Substring(equals + 1);
-                if (int.TryParse(sizeString, out int size))
+
+                if (tableTag == 0 && typeIndex > 0 && typeIndex <= typeDefTable.Children.Count)
                 {
-                    mappedFieldDataSize = size;
+                    var typeDefRow = typeDefTable.Children[(int)typeIndex - 1] as TypeDefTableRow;
+                    if (typeDefRow != null)
+                    {
+                        var nameOffset = typeDefRow.Name.ReadUInt16OrUInt32();
+                        var zeroTerminatedString = Metadata.StringsTableStream.FindString((int)nameOffset);
+                        var equals = zeroTerminatedString.IndexOf('=');
+                        if (equals >= 0)
+                        {
+                            var sizeString = zeroTerminatedString.Substring(equals + 1);
+                            if (int.TryParse(sizeString, out int size))
+                            {
+                                mappedFieldDataSize = size;
+                            }
+                        }
+                    }
                 }
+                // For tableTag == 1 (TypeRef) or tableTag == 2 (TypeSpec),
+                // fall through with the default mappedFieldDataSize
             }
 
             var offset = peFile.ResolveVirtualAddress(rva);
