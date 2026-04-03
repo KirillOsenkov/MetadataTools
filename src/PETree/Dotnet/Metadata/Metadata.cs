@@ -794,6 +794,40 @@ public class CompressedMetadataTableStream : MetadataStream
                         }
                     };
                 }
+                else if (tableKind == Table.TypeRef)
+                {
+                    tableRow = new TypeRefTableRow
+                    {
+                        Length = size,
+                        ResolutionScope = new BytesNode
+                        {
+                            Length = GetCodedIndexSize(CodedIndex.ResolutionScope),
+                            Text = "ResolutionScope"
+                        },
+                        Name = new BytesNode
+                        {
+                            Length = stridx_size,
+                            Text = "Name"
+                        },
+                        Namespace = new BytesNode
+                        {
+                            Length = stridx_size,
+                            Text = "Namespace"
+                        }
+                    };
+                }
+                else if (tableKind == Table.ClassLayout)
+                {
+                    tableRow = new ClassLayoutTableRow
+                    {
+                        Length = size,
+                        ParentIndex = new BytesNode
+                        {
+                            Length = GetTableIndexSize(Table.TypeDef),
+                            Text = "Parent"
+                        }
+                    };
+                }
                 else if (tableKind == Table.Method)
                 {
                     BytesNode nameNode = stridx_size == 2 ? new TwoBytes() : new FourBytes();
@@ -918,12 +952,26 @@ public class CompressedMetadataTableStream : MetadataStream
         var peFile = PEFile;
         var blobTableStream = Metadata.BlobTableStream;
         var typeDefTable = GetTable(Table.TypeDef);
+        var typeRefTable = GetTable(Table.TypeRef);
+        var classLayoutTable = GetTable(Table.ClassLayout);
         var fieldRvaTable = GetTable(Table.FieldRVA);
         var fieldTable = GetTable(Table.Field);
 
         if (fieldRvaTable == null)
         {
             return;
+        }
+
+        // Build ClassLayout lookup: TypeDef row index (1-based) → ClassSize
+        var classLayoutSizes = new Dictionary<int, int>();
+        if (classLayoutTable != null)
+        {
+            foreach (var classLayoutRow in classLayoutTable.Children.OfType<ClassLayoutTableRow>())
+            {
+                int parentIndex = (int)classLayoutRow.ParentIndex.ReadUInt16OrUInt32();
+                int classSize = classLayoutRow.ClassSize.Value;
+                classLayoutSizes[parentIndex] = classSize;
+            }
         }
 
         foreach (var fieldRvaRow in fieldRvaTable.Children.OfType<FieldRVATableRow>())
@@ -938,37 +986,48 @@ public class CompressedMetadataTableStream : MetadataStream
             var fieldNameString = Metadata.StringsTableStream.FindString((int)fieldName);
             var blob = blobTableStream.GetBlob((int)signatureBlob);
             var bytes = blob.Bytes;
-            if (bytes.Length == 4)
+            var rawBytes = Buffer.ReadBytes(bytes.Start, bytes.Length);
+
+            // Decode the field signature from raw bytes to avoid issues with shared blobs
+            // FieldSig = FIELD CustomMod* Type
+            // Type = VALUETYPE TypeDefOrRefOrSpecEncoded | ...
+            int sigOffset = 0;
+            if (rawBytes.Length >= 3 && rawBytes[sigOffset] == 0x06) // FIELD
+            {
+                sigOffset++;
+                byte elementType = rawBytes[sigOffset];
+                sigOffset++;
+                if (elementType == 0x11 || elementType == 0x12) // VALUETYPE or CLASS
+                {
+                    // Read compressed TypeDefOrRefOrSpecEncoded
+                    int typeCodedIndex = ReadCompressedInt(rawBytes, ref sigOffset);
+                    var tableTag = typeCodedIndex & 0x03;  // 0=TypeDef, 1=TypeRef, 2=TypeSpec
+                    var typeIndex = typeCodedIndex >> 2;
+
+                    if (tableTag == 0 && typeIndex > 0) // TypeDef
+                    {
+                        // First try ClassLayout table for exact size
+                        if (classLayoutSizes.TryGetValue(typeIndex, out int classSize) && classSize > 0)
+                        {
+                            mappedFieldDataSize = classSize;
+                        }
+                        else if (typeIndex <= typeDefTable.Children.Count)
+                        {
+                            mappedFieldDataSize = GetSizeFromTypeName(typeDefTable, typeIndex);
+                        }
+                    }
+                    else if (tableTag == 1 && typeIndex > 0 && typeRefTable != null) // TypeRef
+                    {
+                        mappedFieldDataSize = GetSizeFromTypeRefName(typeRefTable, typeIndex);
+                    }
+                }
+            }
+
+            if (!bytes.HasChildren && bytes.Length >= 4)
             {
                 bytes.AddOneByte("Kind");
                 bytes.AddOneByte("ClassOrStruct");
-                var compressedInteger = bytes.Add<CompressedInteger>("TypeIndex");
-                var typeCodedIndex = compressedInteger.Value;
-
-                // TypeDefOrRef coded index: low 2 bits are the table tag
-                var tableTag = typeCodedIndex & 0x03;  // 0=TypeDef, 1=TypeRef, 2=TypeSpec
-                var typeIndex = typeCodedIndex >> 2;
-
-                if (tableTag == 0 && typeIndex > 0 && typeIndex <= typeDefTable.Children.Count)
-                {
-                    var typeDefRow = typeDefTable.Children[(int)typeIndex - 1] as TypeDefTableRow;
-                    if (typeDefRow != null)
-                    {
-                        var nameOffset = typeDefRow.Name.ReadUInt16OrUInt32();
-                        var zeroTerminatedString = Metadata.StringsTableStream.FindString((int)nameOffset);
-                        var equals = zeroTerminatedString.IndexOf('=');
-                        if (equals >= 0)
-                        {
-                            var sizeString = zeroTerminatedString.Substring(equals + 1);
-                            if (int.TryParse(sizeString, out int size))
-                            {
-                                mappedFieldDataSize = size;
-                            }
-                        }
-                    }
-                }
-                // For tableTag == 1 (TypeRef) or tableTag == 2 (TypeSpec),
-                // fall through with the default mappedFieldDataSize
+                bytes.Add<CompressedInteger>("TypeIndex");
             }
 
             var offset = peFile.ResolveVirtualAddress(rva);
@@ -981,6 +1040,75 @@ public class CompressedMetadataTableStream : MetadataStream
             };
             PEFile.Add(mappedFieldData);
         }
+    }
+
+    private static int ReadCompressedInt(byte[] bytes, ref int offset)
+    {
+        byte b = bytes[offset];
+        if ((b & 0x80) == 0)
+        {
+            offset += 1;
+            return b;
+        }
+        else if ((b & 0x40) == 0)
+        {
+            byte b2 = bytes[offset + 1];
+            offset += 2;
+            return (b & ~0x80) << 8 | b2;
+        }
+        else
+        {
+            byte b2 = bytes[offset + 1];
+            byte b3 = bytes[offset + 2];
+            byte b4 = bytes[offset + 3];
+            offset += 4;
+            return (b & ~0xc0) << 24 | b2 << 16 | b3 << 8 | b4;
+        }
+    }
+
+    private int GetSizeFromTypeName(MetadataTable typeDefTable, int typeIndex)
+    {
+        if (typeIndex > 0 && typeIndex <= typeDefTable.Children.Count)
+        {
+            var typeDefRow = typeDefTable.Children[typeIndex - 1] as TypeDefTableRow;
+            if (typeDefRow != null)
+            {
+                var nameOffset = typeDefRow.Name.ReadUInt16OrUInt32();
+                return ParseSizeFromName(Metadata.StringsTableStream.FindString((int)nameOffset));
+            }
+        }
+
+        return 8;
+    }
+
+    private int GetSizeFromTypeRefName(MetadataTable typeRefTable, int typeIndex)
+    {
+        if (typeIndex > 0 && typeIndex <= typeRefTable.Children.Count)
+        {
+            var typeRefRow = typeRefTable.Children[typeIndex - 1] as TypeRefTableRow;
+            if (typeRefRow != null)
+            {
+                var nameOffset = typeRefRow.Name.ReadUInt16OrUInt32();
+                return ParseSizeFromName(Metadata.StringsTableStream.FindString((int)nameOffset));
+            }
+        }
+
+        return 8;
+    }
+
+    private static int ParseSizeFromName(string name)
+    {
+        var equals = name.IndexOf('=');
+        if (equals >= 0)
+        {
+            var sizeString = name.Substring(equals + 1);
+            if (int.TryParse(sizeString, out int size))
+            {
+                return size;
+            }
+        }
+
+        return 8;
     }
 
     private void FindManagedResource(ManifestResourceTableRow manifestResourceTableRow)
@@ -1102,6 +1230,44 @@ public class TypeDefTableRow : TableRow
     public BytesNode Extends { get; set; }
     public BytesNode FieldList { get; set; }
     public BytesNode MethodList { get; set; }
+}
+
+public class TypeRefTableRow : TableRow
+{
+    public TypeRefTableRow()
+    {
+        Text = "TypeRef table row";
+    }
+
+    public override void Parse()
+    {
+        Add(ResolutionScope);
+        Add(Name);
+        Add(Namespace);
+    }
+
+    public BytesNode ResolutionScope { get; set; }
+    public BytesNode Name { get; set; }
+    public BytesNode Namespace { get; set; }
+}
+
+public class ClassLayoutTableRow : TableRow
+{
+    public ClassLayoutTableRow()
+    {
+        Text = "ClassLayout table row";
+    }
+
+    public override void Parse()
+    {
+        PackingSize = AddTwoBytes("PackingSize");
+        ClassSize = AddFourBytes("ClassSize");
+        Add(ParentIndex);
+    }
+
+    public TwoBytes PackingSize { get; set; }
+    public FourBytes ClassSize { get; set; }
+    public BytesNode ParentIndex { get; set; }
 }
 
 public class MethodTableRow : TableRow
