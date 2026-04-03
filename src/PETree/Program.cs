@@ -22,6 +22,11 @@ class Program
 
         var peFile = PEFile.ReadFromFile(filePath);
 
+        var textFile = Path.ChangeExtension(filePath, ".txt");
+
+        var text = peFile.GetText();
+        File.WriteAllText(textFile, text);
+
         if (args.Length == 2)
         {
             var filePath2 = args[1];
