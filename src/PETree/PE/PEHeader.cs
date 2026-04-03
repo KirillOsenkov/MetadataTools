@@ -49,14 +49,6 @@ public class DataDirectory : EightBytes
     public FourBytes Size { get; set; }
 }
 
-public class CertificateTable : Node
-{
-    public CertificateTable()
-    {
-        Text = "Certificate table";
-    }
-}
-
 public class BoundImport : Node
 {
     public BoundImport()
