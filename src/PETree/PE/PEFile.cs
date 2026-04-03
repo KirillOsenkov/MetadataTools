@@ -180,7 +180,7 @@ public class PEFile : Node
 
         this.ComputeUncoveredSpans(span =>
         {
-            if (Buffer.IsZeroFilled(span))
+            if (Buffer.IsZeroFilled(span) || IsPaddingFilled(span))
             {
                 var padding = new Padding
                 {
@@ -201,6 +201,27 @@ public class PEFile : Node
         });
 
         Text = $"PE File";
+    }
+
+    private static readonly byte[] PaddingPattern = "PADDINGXXPADDING"u8.ToArray();
+
+    private bool IsPaddingFilled(Span span)
+    {
+        if (span.Length < PaddingPattern.Length)
+        {
+            return false;
+        }
+
+        var bytes = Buffer.ReadBytes(span.Start, System.Math.Min(span.Length, PaddingPattern.Length));
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            if (bytes[i] != PaddingPattern[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void ReadDotnetMetadata(int cliHeader)

@@ -14,17 +14,43 @@ public class ResourceTable : Node
 
     private void Process(ResourceDirectory directory, string parentResourceKind = null)
     {
-        foreach (var idEntry in directory.Children.OfType<IdDirectoryEntry>())
+        foreach (var entry in directory.Children)
         {
-            var offset = idEntry.Offset.ReadUint32();
+            uint offset;
+            string resourceKind = parentResourceKind;
+
+            if (entry is IdDirectoryEntry idEntry)
+            {
+                offset = idEntry.Offset.ReadUint32();
+                if (parentResourceKind == null && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out var kind))
+                {
+                    resourceKind = kind;
+                    idEntry.Text = kind;
+                }
+            }
+            else if (entry is NameDirectoryEntry nameEntry)
+            {
+                offset = nameEntry.Offset.ReadUint32();
+
+                uint nameOffset = nameEntry.NameOffset.ReadUint32() & ~0x80000000;
+                int nameStart = Start + (int)nameOffset;
+                int nameLength = Buffer.ReadInt16(nameStart);
+                var nameNode = new ResourceNameString
+                {
+                    Start = nameStart,
+                    Length = 2 + nameLength * 2
+                };
+                Add(nameNode);
+                resourceKind = nameNode.Text;
+                nameEntry.Text = resourceKind;
+            }
+            else
+            {
+                continue;
+            }
+
             if ((offset & 0x80000000) != 0)
             {
-                string resourceKind = parentResourceKind;
-                if (parentResourceKind == null && IdDirectoryEntry.ResourceTypes.TryGetValue(idEntry.Id.Value, out resourceKind))
-                {
-                    idEntry.Text = resourceKind;
-                }
-
                 var directoryOffset = offset & ~0x80000000;
                 var subdirectory = new ResourceDirectory { Start = Start + (int)directoryOffset };
                 Add(subdirectory);
@@ -33,11 +59,11 @@ public class ResourceTable : Node
             else
             {
                 Resource resource;
-                if (parentResourceKind == "Version")
+                if (resourceKind == "Version")
                 {
                     resource = new VersionResource();
                 }
-                else if (parentResourceKind == "Manifest")
+                else if (resourceKind == "Manifest")
                 {
                     resource = new NativeManifestResource();
                 }
@@ -48,10 +74,10 @@ public class ResourceTable : Node
 
                 resource.Start = Start + (int)offset;
 
-                if (parentResourceKind != null)
+                if (resourceKind != null)
                 {
-                    resource.Text = parentResourceKind;
-                    resource.Type = parentResourceKind;
+                    resource.Text = resourceKind;
+                    resource.Type = resourceKind;
                 }
 
                 Add(resource);
@@ -207,15 +233,16 @@ public class ResourceDirectory : Node
         ResourceDirectoryTable = Add<ResourceDirectoryTable>("Resource directory table");
         int nameCount = ResourceDirectoryTable.NameEntriesAmount.Value;
         int idCount = ResourceDirectoryTable.IdEntriesAmount.Value;
-        int count = nameCount + idCount;
 
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < nameCount; i++)
+        {
+            Add<NameDirectoryEntry>();
+        }
+
+        for (int i = 0; i < idCount; i++)
         {
             uint id = Buffer.ReadUInt32(LastChildEnd);
-            if ((id & 0x80000000) == 0)
-            {
-                var idEntry = Add<IdDirectoryEntry>($"Id: {id}");
-            }
+            Add<IdDirectoryEntry>($"Id: {id}");
         }
     }
 
@@ -240,6 +267,23 @@ public class ResourceDirectoryTable : Node
     public TwoBytes MinorVersion { get; set; }
     public TwoBytes NameEntriesAmount { get; set; }
     public TwoBytes IdEntriesAmount { get; set; }
+}
+
+public class ResourceNameString : Node
+{
+    public override void Parse()
+    {
+        LengthField = AddTwoBytes("Length");
+        int length = LengthField.Value;
+        if (length > 0)
+        {
+            var bytes = Buffer.ReadBytes(LengthField.End, length * 2);
+            Text = System.Text.Encoding.Unicode.GetString(bytes);
+            AddBytes(length * 2, Text);
+        }
+    }
+
+    public TwoBytes LengthField { get; set; }
 }
 
 public class IdDirectoryEntry : Node
@@ -267,5 +311,17 @@ public class IdDirectoryEntry : Node
     }
 
     public FourBytes Id { get; set; }
+    public FourBytes Offset { get; set; }
+}
+
+public class NameDirectoryEntry : Node
+{
+    public override void Parse()
+    {
+        NameOffset = AddFourBytes("Name offset");
+        Offset = AddFourBytes("Offset");
+    }
+
+    public FourBytes NameOffset { get; set; }
     public FourBytes Offset { get; set; }
 }
