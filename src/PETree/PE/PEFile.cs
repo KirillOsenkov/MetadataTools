@@ -137,10 +137,11 @@ public class PEFile : Node
 
         ResourceTable = AddTable<ResourceTable>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
 
-        ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT, configure: iat => iat.IsPE32Plus = IsPE32Plus);
         ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable, text: "Import table");
 
         ParseImportTable();
+
+        ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT, configure: iat => iat.IsPE32Plus = IsPE32Plus);
 
         if (OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
             entrypointBytes.Value is int entrypointRVA &&
