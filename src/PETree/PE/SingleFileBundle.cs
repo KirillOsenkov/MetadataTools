@@ -136,13 +136,13 @@ public class BundleMarker : Node
     public BundleMarker()
     {
         Text = "Bundle marker";
-        Length = 8 + 16; // 8-byte offset + 16-byte signature
+        Length = 8 + 32; // 8-byte offset + 32-byte signature
     }
 
     public override void Parse()
     {
         HeaderOffset = AddEightBytes("Header offset");
-        Signature = AddBytes(16, "Bundle signature");
+        Signature = AddBytes(32, "Bundle signature");
     }
 
     public EightBytes HeaderOffset { get; set; }
