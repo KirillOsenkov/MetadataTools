@@ -173,6 +173,8 @@ public class PEFile : Node
         RsrcSection?.AddRemainingPadding();
         RelocSection?.AddRemainingPadding();
 
+        ReadSingleFileBundle();
+
         this.ValidateOverlap(node =>
         {
             throw new System.Exception($"Node {node} overlaps with its successor");
@@ -204,6 +206,81 @@ public class PEFile : Node
     }
 
     private static readonly byte[] PaddingPattern = "PADDINGXXPADDING"u8.ToArray();
+
+    private static readonly byte[] BundleSignature = new byte[]
+    {
+        0x8b, 0x12, 0x02, 0xb9, 0x6a, 0x61, 0x20, 0x38,
+        0x72, 0x7b, 0x93, 0x02, 0x14, 0xd7, 0xa0, 0x32
+    };
+
+    private void ReadSingleFileBundle()
+    {
+        int fileLength = (int)Buffer.Length;
+
+        // The bundle signature is embedded in the apphost, typically in the .text section
+        // Search the PE portion of the file for it
+        int searchEnd = System.Math.Min(fileLength - BundleSignature.Length, 1024 * 1024);
+
+        int markerOffset = -1;
+        for (int i = searchEnd; i >= 0; i--)
+        {
+            bool match = true;
+            for (int j = 0; j < BundleSignature.Length; j++)
+            {
+                if (Buffer.ReadByte(i + j) != BundleSignature[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                markerOffset = i;
+                break;
+            }
+        }
+
+        if (markerOffset < 0)
+        {
+            return;
+        }
+
+        // Extend PEFile to cover the entire file
+        Length = fileLength;
+
+        // The 8-byte header offset is right before the signature
+        int markerStart = markerOffset - 8;
+        var bundleMarker = new BundleMarker
+        {
+            Start = markerStart
+        };
+        Add(bundleMarker);
+
+        long headerOffset = (long)bundleMarker.HeaderOffset.ReadUInt64();
+        var bundle = new SingleFileBundle
+        {
+            Start = (int)headerOffset
+        };
+        Add(bundle);
+
+        // Add nodes for each bundled file's data
+        foreach (var entry in bundle.Entries)
+        {
+            long entryOffset = (long)entry.Offset.ReadUInt64();
+            long entrySize = (long)entry.Size.ReadUInt64();
+            if (entrySize > 0 && entryOffset > 0)
+            {
+                var bundledFile = new BundledFile
+                {
+                    Start = (int)entryOffset,
+                    Length = (int)entrySize,
+                    Text = entry.Text
+                };
+                Add(bundledFile);
+            }
+        }
+    }
 
     private bool IsPaddingFilled(Span span)
     {
