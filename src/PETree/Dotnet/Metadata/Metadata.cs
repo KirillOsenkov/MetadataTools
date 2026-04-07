@@ -1040,37 +1040,71 @@ public class CompressedMetadataTableStream : MetadataStream
 
             var rawBytes = Buffer.ReadBytes(bytes.Start, bytes.Length);
 
-            // Decode the field signature from raw bytes to avoid issues with shared blobs
-            // FieldSig = FIELD CustomMod* Type
-            // Type = VALUETYPE TypeDefOrRefOrSpecEncoded | ...
+            // Decode the field signature to determine the mapped data size.
+            // FieldSig = FIELD (0x06) CustomMod* Type
             int sigOffset = 0;
-            if (rawBytes.Length >= 3 && rawBytes[sigOffset] == 0x06) // FIELD
+            if (rawBytes.Length >= 2 && rawBytes[sigOffset] == 0x06) // FIELD
             {
                 sigOffset++;
-                byte elementType = rawBytes[sigOffset];
-                sigOffset++;
-                if (elementType == 0x11 || elementType == 0x12) // VALUETYPE or CLASS
-                {
-                    // Read compressed TypeDefOrRefOrSpecEncoded
-                    int typeCodedIndex = ReadCompressedInt(rawBytes, ref sigOffset);
-                    var tableTag = typeCodedIndex & 0x03;  // 0=TypeDef, 1=TypeRef, 2=TypeSpec
-                    var typeIndex = typeCodedIndex >> 2;
 
-                    if (tableTag == 0 && typeIndex > 0) // TypeDef
+                // Skip CMOD_OPT (0x20) and CMOD_REQD (0x1F) modifiers
+                while (sigOffset < rawBytes.Length && (rawBytes[sigOffset] == 0x20 || rawBytes[sigOffset] == 0x1F))
+                {
+                    sigOffset++;
+                    if (sigOffset < rawBytes.Length)
                     {
-                        // First try ClassLayout table for exact size
-                        if (classLayoutSizes.TryGetValue(typeIndex, out int classSize) && classSize > 0)
-                        {
-                            mappedFieldDataSize = classSize;
-                        }
-                        else if (typeIndex <= typeDefTable.Children.Count)
-                        {
-                            mappedFieldDataSize = GetSizeFromTypeName(typeDefTable, typeIndex);
-                        }
+                        ReadCompressedInt(rawBytes, ref sigOffset); // skip the modifier type token
                     }
-                    else if (tableTag == 1 && typeIndex > 0 && typeRefTable != null) // TypeRef
+                }
+
+                if (sigOffset < rawBytes.Length)
+                {
+                    byte elementType = rawBytes[sigOffset];
+                    sigOffset++;
+
+                    // Primitive element types (ECMA-335 §II.23.1.16)
+                    mappedFieldDataSize = elementType switch
                     {
-                        mappedFieldDataSize = GetSizeFromTypeRefName(typeRefTable, typeIndex);
+                        0x02 => 1,  // BOOLEAN
+                        0x03 => 2,  // CHAR (Unicode)
+                        0x04 => 1,  // I1
+                        0x05 => 1,  // U1
+                        0x06 => 2,  // I2
+                        0x07 => 2,  // U2
+                        0x08 => 4,  // I4
+                        0x09 => 4,  // U4
+                        0x0A => 8,  // I8
+                        0x0B => 8,  // U8
+                        0x0C => 4,  // R4
+                        0x0D => 8,  // R8
+                        0x18 => PEFile.IsPE32Plus ? 8 : 4,  // I (native int)
+                        0x19 => PEFile.IsPE32Plus ? 8 : 4,  // U (native uint)
+                        0x0F => PEFile.IsPE32Plus ? 8 : 4,  // PTR
+                        0x1B => PEFile.IsPE32Plus ? 8 : 4,  // FNPTR
+                        _ => 0
+                    };
+
+                    if (elementType == 0x11 || elementType == 0x12) // VALUETYPE or CLASS
+                    {
+                        int typeCodedIndex = ReadCompressedInt(rawBytes, ref sigOffset);
+                        var tableTag = typeCodedIndex & 0x03;  // 0=TypeDef, 1=TypeRef, 2=TypeSpec
+                        var typeIndex = typeCodedIndex >> 2;
+
+                        if (tableTag == 0 && typeIndex > 0) // TypeDef
+                        {
+                            if (classLayoutSizes.TryGetValue(typeIndex, out int classSize) && classSize > 0)
+                            {
+                                mappedFieldDataSize = classSize;
+                            }
+                            else if (typeIndex <= typeDefTable.Children.Count)
+                            {
+                                mappedFieldDataSize = GetSizeFromTypeName(typeDefTable, typeIndex);
+                            }
+                        }
+                        else if (tableTag == 1 && typeIndex > 0 && typeRefTable != null) // TypeRef
+                        {
+                            mappedFieldDataSize = GetSizeFromTypeRefName(typeRefTable, typeIndex);
+                        }
                     }
                 }
             }
@@ -1112,41 +1146,6 @@ public class CompressedMetadataTableStream : MetadataStream
             if (offset + size > bufferLength)
             {
                 size = bufferLength - offset;
-            }
-
-            // Check if this offset is already deeply claimed by an existing node
-            // (e.g. inside method bodies). The Add method uses binary search and
-            // would route the new node deep into existing subtrees, corrupting them.
-            var found = PEFile.Find(offset);
-            if (found != null && found != PEFile && found.Parent != PEFile)
-            {
-                continue;
-            }
-
-            // Cap against existing sibling nodes in the containing section
-            // (e.g. CLIHeader, Metadata) to avoid overlaps.
-            foreach (var section in PEFile.Children)
-            {
-                if (offset < section.Start || offset >= section.End || !section.HasChildren)
-                {
-                    continue;
-                }
-
-                foreach (var existing in section.Children)
-                {
-                    if (existing.Start > offset && existing.Start < offset + size)
-                    {
-                        size = existing.Start - offset;
-                        break;
-                    }
-
-                    if (existing.Start >= offset + size)
-                    {
-                        break;
-                    }
-                }
-
-                break;
             }
 
             if (size <= 0)
@@ -1288,15 +1287,6 @@ public class CompressedMetadataTableStream : MetadataStream
             return;
         }
 
-        // In mixed-mode (C++/CLI) assemblies, a method parsed earlier may have
-        // expanded to cover a large range (e.g. from garbage exception sections
-        // in native code). Skip if this offset is already deeply claimed.
-        var found = peFile.Find(offset);
-        if (found != null && found != peFile && found.Parent != peFile)
-        {
-            return;
-        }
-
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
 
@@ -1341,15 +1331,6 @@ public class CompressedMetadataTableStream : MetadataStream
 
         int codeSize = peFile.Buffer.ReadInt32(offset + 4);
         if (codeSize <= 0 || offset + 12 + codeSize > (int)peFile.Buffer.Length)
-        {
-            return null;
-        }
-
-        // Also validate against the containing section bounds.
-        // In mixed-mode (C++/CLI) assemblies, native methods may have bytes
-        // that look like a fat IL header but aren't actually IL.
-        var section = peFile.TextSection;
-        if (section != null && offset + 12 + codeSize > section.End)
         {
             return null;
         }

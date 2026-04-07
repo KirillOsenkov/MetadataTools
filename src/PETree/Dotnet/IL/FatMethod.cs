@@ -46,8 +46,6 @@ public class FatMethod : Node
         var flags = AddOneByte("Flags");
 
         // Per ECMA-335, the Kind field (bits 0-5) must be 1 (EHTable).
-        // If it's not, this isn't a valid exception section — likely native
-        // code being misinterpreted as IL.
         if ((flags.Value & 0x3F) != eh_table)
         {
             return;
