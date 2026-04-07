@@ -149,6 +149,8 @@ public class BundleMarker : Node
 
 public class BundledFile : Node
 {
+    public BundleFileEntry Entry { get; set; }
+
     public override void Parse()
     {
     }

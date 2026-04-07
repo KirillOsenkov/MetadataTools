@@ -79,3 +79,54 @@ public class StreamBuffer : ByteBuffer
         }
     }
 }
+
+public class ByteBufferSlice : ByteBuffer
+{
+    public ByteBuffer Inner { get; }
+    public int Start { get; }
+    private int length;
+
+    public ByteBufferSlice(ByteBuffer inner, int start, int length)
+    {
+        Inner = inner;
+        Start = start;
+        this.length = length;
+    }
+
+    public override long Length => length;
+
+    public override byte ReadByte(int offset)
+    {
+        return Inner.ReadByte(Start + offset);
+    }
+
+    public override byte[] ReadBytes(int offset, int count)
+    {
+        return Inner.ReadBytes(Start + offset, count);
+    }
+
+    public override short ReadInt16(int offset)
+    {
+        return Inner.ReadInt16(Start + offset);
+    }
+
+    public override int ReadInt32(int offset)
+    {
+        return Inner.ReadInt32(Start + offset);
+    }
+
+    public override ushort ReadUInt16(int offset)
+    {
+        return Inner.ReadUInt16(Start + offset);
+    }
+
+    public override uint ReadUInt32(int offset)
+    {
+        return Inner.ReadUInt32(Start + offset);
+    }
+
+    public override ulong ReadUInt64(int offset)
+    {
+        return Inner.ReadUInt64(Start + offset);
+    }
+}

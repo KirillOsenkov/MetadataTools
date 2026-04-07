@@ -43,6 +43,7 @@ public class EmbeddedPdb : Node
     public FourBytes MPDB { get; set; }
     public FourBytes DecompressedSize { get; set; }
     public CompressedDeflateStream CompressedStream { get; set; }
+
     public MemoryStream DecompressedStream { get; set; }
     public Metadata Metadata { get; set; }
 }

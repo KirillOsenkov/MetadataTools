@@ -275,7 +275,8 @@ public class PEFile : Node
                 {
                     Start = (int)entryOffset,
                     Length = (int)entrySize,
-                    Text = entry.Text
+                    Text = entry.Text,
+                    Entry = entry
                 };
                 Add(bundledFile);
             }
