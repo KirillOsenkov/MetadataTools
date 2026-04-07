@@ -15,6 +15,25 @@ class Program
         }
 
         var filePath = args[0];
+        if (Directory.Exists(filePath))
+        {
+            var dlls = Directory.GetFiles(filePath, "*.dll", SearchOption.AllDirectories);
+            foreach (var dll in dlls)
+            {
+                try
+                {
+                    System.Console.WriteLine($"Reading {dll}");
+                    var file = PEFile.ReadFromFile(dll);
+                }
+                catch (System.Exception ex)
+                {
+                    System.Console.WriteLine($"Exception when reading {dll}: {ex.ToString()}");
+                }
+            }
+
+            return;
+        }
+
         if (!File.Exists(filePath))
         {
             return;
