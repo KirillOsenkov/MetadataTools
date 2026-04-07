@@ -123,13 +123,13 @@ public class Metadata : Node
             {
                 foreach (var row in customDebugInfoTable.Children.OfType<CustomDebugInformationTableRow>())
                 {
-                    int guidHandle = row.GuidHandle.ReadInt16OrInt32();
+                    int guidHandle = (int)row.GuidHandle.ReadUInt16OrUInt32();
                     if (guidHandle == 0)
                     {
                         continue;
                     }
 
-                    int blobHandle = row.BlobHandle.ReadInt16OrInt32();
+                    int blobHandle = (int)row.BlobHandle.ReadUInt16OrUInt32();
                     var customText = guidStream.GetCustomText(guidHandle);
                     if (customText != null && (customText.Contains("CompilationOptions") ||
                         customText.Contains("SourceLink")))
@@ -959,7 +959,7 @@ public class CompressedMetadataTableStream : MetadataStream
                 table.Add(tableRow);
                 if (tableRow is MethodTableRow methodTableRow)
                 {
-                    int nameOffset = methodTableRow.Name.ReadInt16OrInt32();
+                    int nameOffset = (int)methodTableRow.Name.ReadUInt16OrUInt32();
                     var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
                     methodTableRow.Text = $"Method row: {zeroTerminatedString}";
                     FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
