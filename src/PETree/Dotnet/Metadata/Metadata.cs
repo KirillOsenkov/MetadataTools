@@ -1082,9 +1082,16 @@ public class CompressedMetadataTableStream : MetadataStream
 
         // Sort by offset and cap sizes to avoid overlaps with the next field
         mappedFields.Sort((a, b) => a.offset.CompareTo(b.offset));
+        var bufferLength = (int)PEFile.Buffer.Length;
+
         for (int i = 0; i < mappedFields.Count; i++)
         {
             var (offset, size, name) = mappedFields[i];
+            if (offset <= 0 || offset >= bufferLength)
+            {
+                continue;
+            }
+
             if (i + 1 < mappedFields.Count)
             {
                 int maxSize = mappedFields[i + 1].offset - offset;
@@ -1092,6 +1099,17 @@ public class CompressedMetadataTableStream : MetadataStream
                 {
                     size = maxSize;
                 }
+            }
+
+            // Clamp to buffer bounds
+            if (offset + size > bufferLength)
+            {
+                size = bufferLength - offset;
+            }
+
+            if (size <= 0)
+            {
+                continue;
             }
 
             var mappedFieldData = new MappedFieldData
@@ -1216,6 +1234,11 @@ public class CompressedMetadataTableStream : MetadataStream
         var peFile = PEFile;
         var offset = peFile.ResolveVirtualAddress(rva);
 
+        if (offset <= 0 || offset >= peFile.Buffer.Length)
+        {
+            return;
+        }
+
         // Multiple methods can share the same RVA (e.g. interface stubs).
         // Skip if we already created a method node at this offset.
         if (!methodOffsets.Add(offset))
@@ -1231,9 +1254,19 @@ public class CompressedMetadataTableStream : MetadataStream
         {
             method = ReadTinyMethod(headerByte, offset);
         }
-        else
+        else if (twoBits == 3)
         {
             method = ReadFatMethod(headerByte, offset);
+        }
+        else
+        {
+            // Not a valid IL method header (could be native code)
+            return;
+        }
+
+        if (method == null)
+        {
+            return;
         }
 
         var codeSize = method switch
@@ -1247,11 +1280,25 @@ public class CompressedMetadataTableStream : MetadataStream
 
     private FatMethod ReadFatMethod(byte header, int offset)
     {
+        var peFile = PEFile;
+        // Pre-validate: fat header is 12 bytes (2 flags + 2 maxstack + 4 codesize + 4 localvar)
+        // Code size is at offset+4
+        if (offset + 12 > (int)peFile.Buffer.Length)
+        {
+            return null;
+        }
+
+        int codeSize = peFile.Buffer.ReadInt32(offset + 4);
+        if (codeSize <= 0 || offset + 12 + codeSize > (int)peFile.Buffer.Length)
+        {
+            return null;
+        }
+
         var fatMethod = new FatMethod
         {
             Start = offset,
         };
-        PEFile.Add(fatMethod);
+        peFile.Add(fatMethod);
         return fatMethod;
     }
 
