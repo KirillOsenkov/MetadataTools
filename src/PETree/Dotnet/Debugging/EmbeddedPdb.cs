@@ -40,9 +40,13 @@ public class EmbeddedPdb : Node
         };
         Metadata.Parse();
 
-        Metadata.ValidateOverlap(node =>
+        Metadata.ValidateOverlap((prev, current, parent) =>
         {
-            throw new System.Exception($"Embedded PDB: Node {node} overlaps with its successor");
+            throw new System.Exception(
+                $"Embedded PDB overlap in {parent.Describe()}:\n" +
+                $"  Previous: {prev.Describe()}\n" +
+                $"  Current:  {current.Describe()}\n" +
+                $"  Overlap:  {prev.End - current.Start} bytes");
         });
 
         Metadata.ComputeUncoveredSpans(span =>

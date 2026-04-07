@@ -175,9 +175,13 @@ public class PEFile : Node
 
         ReadSingleFileBundle();
 
-        this.ValidateOverlap(node =>
+        this.ValidateOverlap((prev, current, parent) =>
         {
-            throw new System.Exception($"Node {node} overlaps with its successor");
+            throw new System.Exception(
+                $"Overlap in {parent.Describe()}:\n" +
+                $"  Previous: {prev.Describe()}\n" +
+                $"  Current:  {current.Describe()}\n" +
+                $"  Overlap:  {prev.End - current.Start} bytes");
         });
 
         this.ComputeUncoveredSpans(span =>
