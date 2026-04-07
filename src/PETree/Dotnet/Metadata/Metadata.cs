@@ -497,6 +497,22 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public void ComputeTableInformations()
     {
+        // Merge external table row counts from the #Pdb stream.
+        // The Portable PDB format stores row counts for main assembly tables
+        // (MethodDef, TypeDef, etc.) in the #Pdb stream, which are needed
+        // for correct coded index size computation.
+        var pdbStream = Metadata?.PdbStream;
+        if (pdbStream != null)
+        {
+            for (int i = 0; i < Math.Min(MaxTables, pdbStream.TableInfos.Length); i++)
+            {
+                if (TableInfos[i].RowCount == 0 && pdbStream.TableInfos[i].RowCount > 0)
+                {
+                    TableInfos[i].RowCount = pdbStream.TableInfos[i].RowCount;
+                }
+            }
+        }
+
         int heapsizes = HeapSizes.Value;
         int stridx_size = 2;
         int guididx_size = 2;
