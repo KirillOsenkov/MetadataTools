@@ -962,7 +962,14 @@ public class CompressedMetadataTableStream : MetadataStream
                     int nameOffset = (int)methodTableRow.Name.ReadUInt16OrUInt32();
                     var zeroTerminatedString = Metadata.StringsTableStream.FindString(nameOffset);
                     methodTableRow.Text = $"Method row: {zeroTerminatedString}";
-                    FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
+
+                    // Only parse methods with IL code (ImplFlags CodeType == IL).
+                    // Native and Runtime methods have non-IL code at the RVA.
+                    int implFlags = methodTableRow.ImplFlags.Value;
+                    if ((implFlags & 0x0003) == 0)
+                    {
+                        FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
+                    }
                 }
                 else if (tableRow is ManifestResourceTableRow manifestResourceTableRow)
                 {
@@ -1107,8 +1114,17 @@ public class CompressedMetadataTableStream : MetadataStream
                 size = bufferLength - offset;
             }
 
-            // Cap against existing nodes already in the tree (e.g. CLIHeader, Metadata)
-            // to avoid overlaps with structures parsed earlier
+            // Check if this offset is already deeply claimed by an existing node
+            // (e.g. inside method bodies). The Add method uses binary search and
+            // would route the new node deep into existing subtrees, corrupting them.
+            var found = PEFile.Find(offset);
+            if (found != null && found != PEFile && found.Parent != PEFile)
+            {
+                continue;
+            }
+
+            // Cap against existing sibling nodes in the containing section
+            // (e.g. CLIHeader, Metadata) to avoid overlaps.
             foreach (var section in PEFile.Children)
             {
                 if (offset < section.Start || offset >= section.End || !section.HasChildren)
@@ -1118,19 +1134,9 @@ public class CompressedMetadataTableStream : MetadataStream
 
                 foreach (var existing in section.Children)
                 {
-                    if (existing.Start < offset + size && existing.End > offset)
+                    if (existing.Start > offset && existing.Start < offset + size)
                     {
-                        if (existing.Start <= offset)
-                        {
-                            // Field starts inside an existing node - skip entirely
-                            size = 0;
-                        }
-                        else
-                        {
-                            // Cap size to not extend into existing node
-                            size = existing.Start - offset;
-                        }
-
+                        size = existing.Start - offset;
                         break;
                     }
 
@@ -1282,6 +1288,15 @@ public class CompressedMetadataTableStream : MetadataStream
             return;
         }
 
+        // In mixed-mode (C++/CLI) assemblies, a method parsed earlier may have
+        // expanded to cover a large range (e.g. from garbage exception sections
+        // in native code). Skip if this offset is already deeply claimed.
+        var found = peFile.Find(offset);
+        if (found != null && found != peFile && found.Parent != peFile)
+        {
+            return;
+        }
+
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
 
@@ -1326,6 +1341,15 @@ public class CompressedMetadataTableStream : MetadataStream
 
         int codeSize = peFile.Buffer.ReadInt32(offset + 4);
         if (codeSize <= 0 || offset + 12 + codeSize > (int)peFile.Buffer.Length)
+        {
+            return null;
+        }
+
+        // Also validate against the containing section bounds.
+        // In mixed-mode (C++/CLI) assemblies, native methods may have bytes
+        // that look like a fat IL header but aren't actually IL.
+        var section = peFile.TextSection;
+        if (section != null && offset + 12 + codeSize > section.End)
         {
             return null;
         }

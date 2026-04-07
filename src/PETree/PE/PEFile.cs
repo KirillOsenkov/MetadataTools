@@ -217,19 +217,29 @@ public class PEFile : Node
             entrypointRVA != 0)
         {
             int entryPointOffset = ResolveVirtualAddress(entrypointRVA);
-            RuntimeStartupStub runtimeStartupStub = null;
-            if (IsPE32Plus)
+            if (entryPointOffset > 0)
             {
-                entryPointOffset -= 6;
-                runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 16 };
-            }
-            else
-            {
-                entryPointOffset -= 2;
-                runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 8 };
-            }
+                RuntimeStartupStub runtimeStartupStub = null;
+                if (IsPE32Plus)
+                {
+                    entryPointOffset -= 6;
+                    runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 16 };
+                }
+                else
+                {
+                    entryPointOffset -= 2;
+                    runtimeStartupStub = new RuntimeStartupStub { Start = entryPointOffset, Length = 8 };
+                }
 
-            Add(runtimeStartupStub);
+                // In mixed-mode (C++/CLI) assemblies, the entry point may resolve
+                // to an offset already claimed by a parsed method body. Only add
+                // the stub if the location is not already deeply occupied.
+                var found = Find(entryPointOffset);
+                if (found == null || found == this || found.Parent == this)
+                {
+                    Add(runtimeStartupStub);
+                }
+            }
         }
 
         AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable, text: "Base reloc table");
