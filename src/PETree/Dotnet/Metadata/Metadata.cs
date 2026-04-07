@@ -1107,6 +1107,42 @@ public class CompressedMetadataTableStream : MetadataStream
                 size = bufferLength - offset;
             }
 
+            // Cap against existing nodes already in the tree (e.g. CLIHeader, Metadata)
+            // to avoid overlaps with structures parsed earlier
+            foreach (var section in PEFile.Children)
+            {
+                if (offset < section.Start || offset >= section.End || !section.HasChildren)
+                {
+                    continue;
+                }
+
+                foreach (var existing in section.Children)
+                {
+                    if (existing.Start < offset + size && existing.End > offset)
+                    {
+                        if (existing.Start <= offset)
+                        {
+                            // Field starts inside an existing node - skip entirely
+                            size = 0;
+                        }
+                        else
+                        {
+                            // Cap size to not extend into existing node
+                            size = existing.Start - offset;
+                        }
+
+                        break;
+                    }
+
+                    if (existing.Start >= offset + size)
+                    {
+                        break;
+                    }
+                }
+
+                break;
+            }
+
             if (size <= 0)
             {
                 continue;
