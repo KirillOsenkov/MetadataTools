@@ -124,10 +124,15 @@ public class Metadata : Node
                 foreach (var row in customDebugInfoTable.Children.OfType<CustomDebugInformationTableRow>())
                 {
                     int guidHandle = row.GuidHandle.ReadInt16OrInt32();
+                    if (guidHandle == 0)
+                    {
+                        continue;
+                    }
+
                     int blobHandle = row.BlobHandle.ReadInt16OrInt32();
                     var customText = guidStream.GetCustomText(guidHandle);
-                    if (customText.Contains("CompilationOptions") ||
-                        customText.Contains("SourceLink"))
+                    if (customText != null && (customText.Contains("CompilationOptions") ||
+                        customText.Contains("SourceLink")))
                     {
                         var blob = blobStream.GetBlob(blobHandle);
                         var bytes = blob.Bytes;
@@ -349,6 +354,11 @@ public class GuidMetadataStream : MetadataStream
 
     public string GetCustomText(int indexOneBased)
     {
+        if (indexOneBased < 1 || indexOneBased > guidText.Count)
+        {
+            return null;
+        }
+
         return guidText[indexOneBased - 1];
     }
 
