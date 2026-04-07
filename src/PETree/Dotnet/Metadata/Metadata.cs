@@ -467,6 +467,8 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public PEFile PEFile { get; set; }
 
+    private readonly HashSet<int> methodOffsets = new();
+
     int GetTableIndexSize(Table table) => TableInfos[(int)table].RowCount < 65536 ? 2 : 4;
 
     readonly int[] coded_index_sizes = new int[14];
@@ -1153,6 +1155,13 @@ public class CompressedMetadataTableStream : MetadataStream
 
         var peFile = PEFile;
         var offset = peFile.ResolveVirtualAddress(rva);
+
+        // Multiple methods can share the same RVA (e.g. interface stubs).
+        // Skip if we already created a method node at this offset.
+        if (!methodOffsets.Add(offset))
+        {
+            return;
+        }
 
         byte headerByte = peFile.Buffer.ReadByte(offset);
         byte twoBits = (byte)(headerByte & 3);
