@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -56,13 +57,55 @@ public class PEFile : Node
     {
         DOSHeader = Add<DOSHeader>("DOS Header");
 
-        var DOSStub = new Node { Length = 0x40, Text = "DOS Stub" };
-        Add(DOSStub);
-
         int peHeaderPointer = DOSHeader.CoffHeaderPointer.Value;
         if (peHeaderPointer == 0)
         {
             peHeaderPointer = 0x80;
+        }
+
+        // Find and parse Rich header between DOS header and PE header
+        int richHeaderStart = -1;
+        int richHeaderEnd = -1;
+        for (int i = DOSHeader.End; i < peHeaderPointer - 7; i++)
+        {
+            if (Buffer.ReadByte(i) == 0x52 && // 'R'
+                Buffer.ReadByte(i + 1) == 0x69 && // 'i'
+                Buffer.ReadByte(i + 2) == 0x63 && // 'c'
+                Buffer.ReadByte(i + 3) == 0x68)    // 'h'
+            {
+                richHeaderEnd = i + 8; // "Rich" + 4-byte XOR key
+                uint xorKey = Buffer.ReadUInt32(i + 4);
+                uint dansXored = 0x536E6144 ^ xorKey; // "DanS" XOR'd
+                for (int j = i - 4; j >= DOSHeader.End; j -= 4)
+                {
+                    if (Buffer.ReadUInt32(j) == dansXored)
+                    {
+                        richHeaderStart = j;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        // DOS stub fills the gap between DOS header and Rich header (or PE header)
+        int dosStubEnd = richHeaderStart > 0 ? richHeaderStart : peHeaderPointer;
+        if (dosStubEnd > DOSHeader.End)
+        {
+            var DOSStub = new Node { Length = dosStubEnd - DOSHeader.End, Text = "DOS Stub" };
+            Add(DOSStub);
+        }
+
+        // Add Rich header if found
+        if (richHeaderStart > 0 && richHeaderEnd > richHeaderStart)
+        {
+            var richHeader = new Node
+            {
+                Start = richHeaderStart,
+                Length = richHeaderEnd - richHeaderStart,
+                Text = "Rich Header"
+            };
+            Add(richHeader);
         }
 
         PEHeader = new PEHeader { Start = peHeaderPointer, Text = "PE Header" };
@@ -78,9 +121,32 @@ public class PEFile : Node
         RsrcSection = AddSection(".rsrc");
         RelocSection = AddSection(".reloc");
 
-        if (TextSection != null)
+        // Add remaining sections that weren't explicitly added
+        var allSections = new List<Node>();
+        if (TextSection != null) allSections.Add(TextSection);
+        if (RsrcSection != null) allSections.Add(RsrcSection);
+        if (RelocSection != null) allSections.Add(RelocSection);
+        foreach (var sectionHeader in SectionTable.SectionHeaders)
         {
-            var sectionGap = new Span(SectionTable.End, TextSection.Start - SectionTable.End);
+            var name = sectionHeader.Name.Text;
+            if (name == ".text" || name == ".rsrc" || name == ".reloc")
+                continue;
+            if (sectionHeader.PointerToRawData.Value == 0 || sectionHeader.SizeOfRawData.Value == 0)
+                continue;
+            var section = new Section
+            {
+                Start = sectionHeader.PointerToRawData.Value,
+                Length = sectionHeader.SizeOfRawData.Value,
+                Text = name
+            };
+            Add(section);
+            allSections.Add(section);
+        }
+
+        var firstSection = allSections.OrderBy(s => s.Start).FirstOrDefault();
+        if (firstSection != null)
+        {
+            var sectionGap = new Span(SectionTable.End, firstSection.Start - SectionTable.End);
             if (sectionGap.Length > 0)
             {
                 if (Buffer.IsZeroFilled(sectionGap))
@@ -101,7 +167,7 @@ public class PEFile : Node
         {
             int offset = ResolveDataDirectory(debugDirectoryAddress);
             DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
-            (TextSection ?? (Node)this).Add(DebugDirectories);
+            Add(DebugDirectories);
 
             foreach (var debugDirectory in DebugDirectories.Directories)
             {
@@ -133,7 +199,7 @@ public class PEFile : Node
                         };
                     }
 
-                    (TextSection ?? (Node)this).Add(entry);
+                    Add(entry);
                 }
             }
         }
@@ -174,11 +240,12 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable, text: "Load config table");
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
 
-        TextSection?.AddRemainingPadding();
-        RsrcSection?.AddRemainingPadding();
-        RelocSection?.AddRemainingPadding();
-
         ReadSingleFileBundle();
+
+        foreach (var section in allSections)
+        {
+            section.AddRemainingPadding();
+        }
 
         this.ValidateOverlap((prev, current, parent) =>
         {
@@ -329,7 +396,7 @@ public class PEFile : Node
     private void ReadDotnetMetadata(int cliHeader)
     {
         CLIHeader = new CLIHeader { Start = cliHeader };
-        (TextSection ?? (Node)this).Add(CLIHeader);
+        Add(CLIHeader);
 
         var metadataDirectory = CLIHeader.Metadata;
         MetadataRVA = metadataDirectory.RVA.Value;
@@ -343,10 +410,10 @@ public class PEFile : Node
                 Start = CLIHeader.End,
                 Length = metadata - CLIHeader.End
             };
-            (TextSection ?? (Node)this).Add(il);
+            Add(il);
 
             Metadata = new Metadata { Start = metadata };
-            (TextSection ?? (Node)this).Add(Metadata);
+            Add(Metadata);
 
             il.FillWithPadding();
         }

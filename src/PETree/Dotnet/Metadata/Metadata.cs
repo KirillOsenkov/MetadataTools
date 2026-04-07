@@ -101,7 +101,7 @@ public class Metadata : Node
         metadataStreams.Reverse();
         foreach (var metadataStream in metadataStreams)
         {
-            peFile.TextSection.Add(metadataStream);
+            peFile.Add(metadataStream);
         }
 
         for (int i = 0; i < embeddedPdbStreams.Count; i++)
