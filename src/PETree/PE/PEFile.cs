@@ -278,6 +278,7 @@ public class PEFile : Node
                     Text = entry.Text,
                     Entry = entry
                 };
+                entry.BundledFile = bundledFile;
                 Add(bundledFile);
             }
         }

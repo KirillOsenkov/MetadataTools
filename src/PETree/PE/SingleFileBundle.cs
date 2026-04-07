@@ -55,6 +55,8 @@ public class BundleFileEntry : Node
 {
     public int MajorVersion { get; set; }
 
+    public BundledFile BundledFile { get; set; }
+
     public override void Parse()
     {
         Offset = AddEightBytes("Offset");
