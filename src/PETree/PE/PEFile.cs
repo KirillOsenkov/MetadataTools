@@ -78,12 +78,15 @@ public class PEFile : Node
         RsrcSection = AddSection(".rsrc");
         RelocSection = AddSection(".reloc");
 
-        var sectionGap = new Span(SectionTable.End, TextSection.Start - SectionTable.End);
-        if (sectionGap.Length > 0)
+        if (TextSection != null)
         {
-            if (Buffer.IsZeroFilled(sectionGap))
+            var sectionGap = new Span(SectionTable.End, TextSection.Start - SectionTable.End);
+            if (sectionGap.Length > 0)
             {
-                SectionTable.AddPadding(sectionGap.Length);
+                if (Buffer.IsZeroFilled(sectionGap))
+                {
+                    SectionTable.AddPadding(sectionGap.Length);
+                }
             }
         }
 
@@ -98,7 +101,7 @@ public class PEFile : Node
         {
             int offset = ResolveDataDirectory(debugDirectoryAddress);
             DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
-            TextSection.Add(DebugDirectories);
+            (TextSection ?? (Node)this).Add(DebugDirectories);
 
             foreach (var debugDirectory in DebugDirectories.Directories)
             {
@@ -130,7 +133,7 @@ public class PEFile : Node
                         };
                     }
 
-                    TextSection.Add(entry);
+                    (TextSection ?? (Node)this).Add(entry);
                 }
             }
         }
@@ -171,7 +174,7 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable, text: "Load config table");
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
 
-        TextSection.AddRemainingPadding();
+        TextSection?.AddRemainingPadding();
         RsrcSection?.AddRemainingPadding();
         RelocSection?.AddRemainingPadding();
 
@@ -326,7 +329,7 @@ public class PEFile : Node
     private void ReadDotnetMetadata(int cliHeader)
     {
         CLIHeader = new CLIHeader { Start = cliHeader };
-        TextSection.Add(CLIHeader);
+        (TextSection ?? (Node)this).Add(CLIHeader);
 
         var metadataDirectory = CLIHeader.Metadata;
         MetadataRVA = metadataDirectory.RVA.Value;
@@ -340,10 +343,10 @@ public class PEFile : Node
                 Start = CLIHeader.End,
                 Length = metadata - CLIHeader.End
             };
-            TextSection.Add(il);
+            (TextSection ?? (Node)this).Add(il);
 
             Metadata = new Metadata { Start = metadata };
-            TextSection.Add(Metadata);
+            (TextSection ?? (Node)this).Add(Metadata);
 
             il.FillWithPadding();
         }
