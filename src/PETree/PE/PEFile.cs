@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using GuiLabs.FileFormat.PE.Dotnet;
@@ -136,7 +137,7 @@ public class PEFile : Node
 
         ResourceTable = AddTable<ResourceTable>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
 
-        ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT);
+        ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT, configure: iat => iat.IsPE32Plus = IsPE32Plus);
         ImportTable = AddTable<ImportTable>(OptionalHeader.DataDirectories.ImportTable, text: "Import table");
 
         ParseImportTable();
@@ -373,7 +374,7 @@ public class PEFile : Node
         return null;
     }
 
-    private T AddTable<T>(DataDirectory dataDirectory, bool isRVA = true, string text = null) where T : Node, new()
+    private T AddTable<T>(DataDirectory dataDirectory, bool isRVA = true, string text = null, Action<T> configure = null) where T : Node, new()
     {
         if (dataDirectory.Size.Value > 0)
         {
@@ -393,6 +394,8 @@ public class PEFile : Node
             {
                 node.Text = text;
             }
+
+            configure?.Invoke(node);
 
             Add(node);
             return node;
@@ -437,21 +440,27 @@ public class PEFile : Node
 
             var lookupTable = ResolveVirtualAddress(lookupTableRva.Value);
 
-            var importLookupTable = new ImportLookupTable() { Start = lookupTable };
+            var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
             ImportTable.Add(importLookupTable);
 
             for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
             {
-                var fourBytes = importLookupTable.Entries[j];
+                var entry = importLookupTable.Entries[j];
 
-                var rva = fourBytes.Value;
-                if (rva == 0)
+                // For PE32+, the ordinal flag is bit 63; for PE32 it's bit 31
+                long value = IsPE32Plus
+                    ? (long)Buffer.ReadUInt64(entry.Start)
+                    : (long)Buffer.ReadUInt32(entry.Start);
+                if (value == 0)
                 {
                     continue;
                 }
 
-                if (rva > 0)
+                // High bit set means import by ordinal, not by name
+                bool isOrdinal = IsPE32Plus ? (value & unchecked((long)0x8000000000000000)) != 0 : (value & 0x80000000) != 0;
+                if (!isOrdinal)
                 {
+                    int rva = (int)(value & 0x7FFFFFFF);
                     var resolved = ResolveVirtualAddress(rva);
                     var imageImportByName = new ImageImportByName() { Start = resolved };
                     ImportTable.Add(imageImportByName);

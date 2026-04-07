@@ -105,20 +105,22 @@ public class IAT : Node
         Text = "Import Address Table";
     }
 
+    public bool IsPE32Plus { get; set; }
+
     public override void Parse()
     {
-        var list = new List<FourBytes>();
-        FourBytes entry;
+        var list = new List<BytesNode>();
+        BytesNode entry;
         do
         {
-            entry = Add<FourBytes>("Entry");
+            entry = IsPE32Plus ? AddEightBytes("Entry") : AddFourBytes("Entry");
             list.Add(entry);
         } while (!Buffer.IsZeroFilled(entry.Span));
 
         Entries = list.ToArray();
     }
 
-    public IReadOnlyList<FourBytes> Entries { get; set; }
+    public IReadOnlyList<BytesNode> Entries { get; set; }
 }
 
 public class ImageImportByName : Node
@@ -145,18 +147,20 @@ public class ImportLookupTable : Node
         Text = "Import Lookup Table";
     }
 
+    public bool IsPE32Plus { get; set; }
+
     public override void Parse()
     {
-        var list = new List<FourBytes>();
-        FourBytes entry;
+        var list = new List<BytesNode>();
+        BytesNode entry;
         do
         {
-            entry = Add<FourBytes>("Entry");
+            entry = IsPE32Plus ? AddEightBytes("Entry") : AddFourBytes("Entry");
             list.Add(entry);
         } while (!Buffer.IsZeroFilled(entry.Span));
 
         Entries = list.ToArray();
     }
 
-    public IReadOnlyList<FourBytes> Entries { get; set; }
+    public IReadOnlyList<BytesNode> Entries { get; set; }
 }
