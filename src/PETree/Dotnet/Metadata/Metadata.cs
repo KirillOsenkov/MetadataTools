@@ -135,6 +135,11 @@ public class Metadata : Node
                         customText.Contains("SourceLink")))
                     {
                         var blob = blobStream.GetBlob(blobHandle);
+                        if (blob?.Bytes == null)
+                        {
+                            continue;
+                        }
+
                         var bytes = blob.Bytes;
                         int start = bytes.Start;
                         int length = bytes.Length;
