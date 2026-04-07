@@ -207,10 +207,13 @@ public class PEFile : Node
 
     private static readonly byte[] PaddingPattern = "PADDINGXXPADDING"u8.ToArray();
 
+    // SHA-256 of ".net core bundle" (32 bytes)
     private static readonly byte[] BundleSignature = new byte[]
     {
         0x8b, 0x12, 0x02, 0xb9, 0x6a, 0x61, 0x20, 0x38,
-        0x72, 0x7b, 0x93, 0x02, 0x14, 0xd7, 0xa0, 0x32
+        0x72, 0x7b, 0x93, 0x02, 0x14, 0xd7, 0xa0, 0x32,
+        0x13, 0xf5, 0xb9, 0xe6, 0xef, 0xae, 0x33, 0x18,
+        0xee, 0x3b, 0x2d, 0xce, 0x24, 0xb3, 0x6a, 0xae
     };
 
     private void ReadSingleFileBundle()
@@ -246,18 +249,29 @@ public class PEFile : Node
             return;
         }
 
-        // Extend PEFile to cover the entire file
-        Length = fileLength;
-
         // The 8-byte header offset is right before the signature
         int markerStart = markerOffset - 8;
+        if (markerStart < 0)
+        {
+            return;
+        }
+
+        // Validate the header offset: must be non-zero and within the file.
+        // Non-bundle apphosts have zero here (the placeholder is all zeros).
+        long headerOffset = (long)Buffer.ReadUInt64(markerStart);
+        if (headerOffset <= 0 || headerOffset >= fileLength)
+        {
+            return;
+        }
+
+        // Extend PEFile to cover the entire file
+        Length = fileLength;
         var bundleMarker = new BundleMarker
         {
             Start = markerStart
         };
         Add(bundleMarker);
 
-        long headerOffset = (long)bundleMarker.HeaderOffset.ReadUInt64();
         var bundle = new SingleFileBundle
         {
             Start = (int)headerOffset
