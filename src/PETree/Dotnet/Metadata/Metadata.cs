@@ -1007,6 +1007,8 @@ public class CompressedMetadataTableStream : MetadataStream
             }
         }
 
+        var mappedFields = new List<(int offset, int size, string name)>();
+
         foreach (var fieldRvaRow in fieldRvaTable.Children.OfType<FieldRVATableRow>())
         {
             var mappedFieldDataSize = 8;
@@ -1018,7 +1020,17 @@ public class CompressedMetadataTableStream : MetadataStream
             var fieldName = fieldRow.Name.ReadUInt16OrUInt32();
             var fieldNameString = Metadata.StringsTableStream.FindString((int)fieldName);
             var blob = blobTableStream.GetBlob((int)signatureBlob);
+            if (blob == null)
+            {
+                continue;
+            }
+
             var bytes = blob.Bytes;
+            if (bytes == null)
+            {
+                continue;
+            }
+
             var rawBytes = Buffer.ReadBytes(bytes.Start, bytes.Length);
 
             // Decode the field signature from raw bytes to avoid issues with shared blobs
@@ -1065,11 +1077,28 @@ public class CompressedMetadataTableStream : MetadataStream
 
             var offset = peFile.ResolveVirtualAddress(rva);
 
+            mappedFields.Add((offset, mappedFieldDataSize, fieldNameString));
+        }
+
+        // Sort by offset and cap sizes to avoid overlaps with the next field
+        mappedFields.Sort((a, b) => a.offset.CompareTo(b.offset));
+        for (int i = 0; i < mappedFields.Count; i++)
+        {
+            var (offset, size, name) = mappedFields[i];
+            if (i + 1 < mappedFields.Count)
+            {
+                int maxSize = mappedFields[i + 1].offset - offset;
+                if (maxSize > 0 && size > maxSize)
+                {
+                    size = maxSize;
+                }
+            }
+
             var mappedFieldData = new MappedFieldData
             {
                 Start = offset,
-                Length = mappedFieldDataSize,
-                Text = $"Mapped field {fieldNameString}"
+                Length = size,
+                Text = $"Mapped field {name}"
             };
             PEFile.Add(mappedFieldData);
         }
