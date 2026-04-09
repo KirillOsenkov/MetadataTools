@@ -24,6 +24,32 @@ public class ExceptionTable : Node
         {
             var entry = Add<RuntimeFunction>("RUNTIME_FUNCTION");
             entry.PEFile = PEFile;
+
+            if (PEFile != null)
+            {
+                int beginRva = entry.BeginAddress.Value;
+                int endRva = entry.EndAddress.Value;
+                int beginOffset = PEFile.ResolveVirtualAddress(beginRva);
+                int endOffset = PEFile.ResolveVirtualAddress(endRva);
+                if (beginOffset > 0 && endOffset > beginOffset)
+                {
+                    // Check if this range overlaps existing nodes (e.g. RuntimeStartupStub)
+                    var atStart = PEFile.Find(beginOffset);
+                    var atEnd = PEFile.Find(endOffset - 1);
+                    bool startOccupied = atStart != null && atStart != PEFile && !(atStart is Section);
+                    bool endOccupied = atEnd != null && atEnd != PEFile && !(atEnd is Section);
+                    if (!startOccupied && !endOccupied)
+                    {
+                        var nativeCode = new Node
+                        {
+                            Start = beginOffset,
+                            Length = endOffset - beginOffset,
+                            Text = $"Native code (0x{beginRva:X}-0x{endRva:X})"
+                        };
+                        PEFile.Add(nativeCode);
+                    }
+                }
+            }
         }
     }
 }
