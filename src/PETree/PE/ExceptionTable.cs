@@ -10,6 +10,7 @@ public class ExceptionTable : Node
     }
 
     public bool IsPE32Plus { get; set; }
+    public int MachineType { get; set; }
     public PEFile PEFile { get; set; }
 
     public override void Parse()
@@ -63,8 +64,8 @@ public class ExceptionTable : Node
             }
         }
 
-        // Add unwind info nodes for unique UnwindInfoAddress values
-        if (PEFile != null)
+        // Add unwind info nodes for unique UnwindInfoAddress values (x64 only)
+        if (PEFile != null && MachineType == 0x8664)
         {
             AddUnwindInfoNodes();
         }

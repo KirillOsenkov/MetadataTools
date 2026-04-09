@@ -248,6 +248,7 @@ public class PEFile : Node
         AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
         {
             et.IsPE32Plus = IsPE32Plus;
+            et.MachineType = PEHeader.Platform.Value;
             et.PEFile = this;
         });
         AddTable<Node>(OptionalHeader.DataDirectories.ExportTable, text: "Export table");
