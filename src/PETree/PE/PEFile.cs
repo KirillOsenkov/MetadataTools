@@ -245,9 +245,17 @@ public class PEFile : Node
         AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable, text: "Base reloc table");
         AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport, text: "Bound import");
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
-        AddTable<Node>(OptionalHeader.DataDirectories.ExceptionTable, text: "Exception table");
+        AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
+        {
+            et.IsPE32Plus = IsPE32Plus;
+            et.PEFile = this;
+        });
         AddTable<Node>(OptionalHeader.DataDirectories.ExportTable, text: "Export table");
-        AddTable<Node>(OptionalHeader.DataDirectories.LoadConfigTable, text: "Load config table");
+        AddTable<LoadConfigDirectory>(OptionalHeader.DataDirectories.LoadConfigTable, configure: lc =>
+        {
+            lc.IsPE32Plus = IsPE32Plus;
+            lc.PEFile = this;
+        });
         AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
 
         ReadSingleFileBundle();
