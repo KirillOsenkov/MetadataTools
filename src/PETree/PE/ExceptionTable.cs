@@ -1,5 +1,7 @@
 namespace GuiLabs.FileFormat.PE;
 
+using System.Collections.Generic;
+
 public class ExceptionTable : Node
 {
     public ExceptionTable()
@@ -59,6 +61,97 @@ public class ExceptionTable : Node
                     }
                 }
             }
+        }
+
+        // Add unwind info nodes for unique UnwindInfoAddress values
+        if (PEFile != null)
+        {
+            AddUnwindInfoNodes();
+        }
+    }
+
+    private void AddUnwindInfoNodes()
+    {
+        var seen = new HashSet<int>();
+
+        for (int i = 0; i < (HasChildren ? Children.Count : 0); i++)
+        {
+            if (Children[i] is not RuntimeFunction rf)
+            {
+                continue;
+            }
+
+            int unwindRva = rf.UnwindInfoAddress.Value;
+            int unwindOffset = PEFile.ResolveVirtualAddress(unwindRva);
+            if (unwindOffset <= 0 || !seen.Add(unwindOffset))
+            {
+                continue;
+            }
+
+            // Validate: must not overlap an existing non-section node
+            var existing = PEFile.Find(unwindOffset);
+            if (existing != null && existing != PEFile && existing is not Section)
+            {
+                continue;
+            }
+
+            // Read UNWIND_INFO header (4 bytes minimum)
+            if (unwindOffset + 4 > PEFile.Buffer.Length)
+            {
+                continue;
+            }
+
+            byte versionFlags = PEFile.Buffer.ReadByte(unwindOffset);
+            int version = versionFlags & 0x7;
+            int flags = (versionFlags >> 3) & 0x1F;
+
+            // Only version 1 and 2 are defined
+            if (version != 1 && version != 2)
+            {
+                continue;
+            }
+
+            int countOfCodes = PEFile.Buffer.ReadByte(unwindOffset + 2);
+
+            // Size = 4 (header) + countOfCodes * 2 (codes), padded to DWORD boundary
+            int size = 4 + countOfCodes * 2;
+            if (countOfCodes % 2 != 0)
+            {
+                size += 2; // padding for DWORD alignment
+            }
+
+            const int UNW_FLAG_EHANDLER = 0x1;
+            const int UNW_FLAG_UHANDLER = 0x2;
+            const int UNW_FLAG_CHAININFO = 0x4;
+
+            if ((flags & UNW_FLAG_EHANDLER) != 0 || (flags & UNW_FLAG_UHANDLER) != 0)
+            {
+                size += 4; // ExceptionHandler RVA
+            }
+            else if ((flags & UNW_FLAG_CHAININFO) != 0)
+            {
+                size += 12; // Chained RUNTIME_FUNCTION
+            }
+
+            if (unwindOffset + size > PEFile.Buffer.Length)
+            {
+                continue;
+            }
+
+            // Verify the end doesn't overlap existing nodes
+            var atEnd = PEFile.Find(unwindOffset + size - 1);
+            if (atEnd != null && atEnd != PEFile && atEnd is not Section)
+            {
+                continue;
+            }
+
+            var unwindInfo = new Node
+            {
+                Start = unwindOffset,
+                Length = size,
+                Text = $"Unwind info (0x{unwindRva:X})"
+            };
+            PEFile.Add(unwindInfo);
         }
     }
 }
