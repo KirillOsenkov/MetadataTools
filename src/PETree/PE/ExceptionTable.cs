@@ -29,8 +29,17 @@ public class ExceptionTable : Node
             {
                 int beginRva = entry.BeginAddress.Value;
                 int endRva = entry.EndAddress.Value;
-                int beginOffset = PEFile.ResolveVirtualAddress(beginRva);
-                int endOffset = PEFile.ResolveVirtualAddress(endRva);
+
+                // Both RVAs must resolve to the same section
+                var beginSection = PEFile.GetSectionAtVirtualAddress(beginRva);
+                var endSection = PEFile.GetSectionAtVirtualAddress(endRva);
+                if (beginSection == null || endSection == null || beginSection != endSection)
+                {
+                    continue;
+                }
+
+                int beginOffset = PEFile.ResolveVirtualAddressInSection(beginRva, beginSection);
+                int endOffset = PEFile.ResolveVirtualAddressInSection(endRva, endSection);
                 if (beginOffset > 0 && endOffset > beginOffset)
                 {
                     // Check if this range overlaps existing nodes (e.g. RuntimeStartupStub)
