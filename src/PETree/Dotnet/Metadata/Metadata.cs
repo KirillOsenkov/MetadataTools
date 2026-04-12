@@ -1560,7 +1560,165 @@ public class ManagedResource : Node
     {
         Size = AddFourBytes("Size");
         int size = Size.Value;
-        Bytes = AddBytes(size, "Bytes");
+        if (size < 4)
+        {
+            Bytes = AddBytes(size, "Bytes");
+            return;
+        }
+
+        int dataStart = LastChildEnd;
+        uint magic = Buffer.ReadUInt32(dataStart);
+        if (magic == 0xBEEFCACE)
+        {
+            ParseResourceSet(size);
+        }
+        else
+        {
+            Bytes = AddBytes(size, "Bytes");
+        }
+    }
+
+    private void ParseResourceSet(int size)
+    {
+        int resourceStart = LastChildEnd;
+        int resourceEnd = resourceStart + size;
+
+        AddFourBytes("Magic (0xBEEFCACE)");
+        var headerVersion = AddFourBytes("Header version");
+        var headerDataLength = AddFourBytes("Header data length");
+
+        int headerDataStart = LastChildEnd;
+        int headerDataEnd = headerDataStart + headerDataLength.Value;
+
+        // Reader type string (7-bit encoded length + UTF-8)
+        int readerTypeLen = Read7BitEncodedLength(LastChildEnd, out int readerTypeLenBytes);
+        AddBytes(readerTypeLenBytes + readerTypeLen, "Reader type");
+
+        // ResourceSet type string (7-bit encoded length + UTF-8) — if there's room in the header data
+        if (LastChildEnd < headerDataEnd)
+        {
+            int setTypeLen = Read7BitEncodedLength(LastChildEnd, out int setTypeLenBytes);
+            AddBytes(setTypeLenBytes + setTypeLen, "ResourceSet type");
+        }
+
+        // Skip any remaining header data we didn't consume
+        if (LastChildEnd < headerDataEnd)
+        {
+            AddBytes(headerDataEnd - LastChildEnd, "Header data (remaining)");
+        }
+
+        // Runtime resource reader format
+        var runtimeVersion = AddFourBytes("Runtime version");
+        var numResources = AddFourBytes("Number of resources");
+        int numRes = numResources.Value;
+
+        if (numRes < 0 || LastChildEnd + 4 > resourceEnd)
+        {
+            AddBytes(resourceEnd - LastChildEnd, "Data");
+            return;
+        }
+
+        var numTypes = AddFourBytes("Number of types");
+        int nTypes = numTypes.Value;
+
+        // Type name strings (7-bit encoded length + UTF-8 each)
+        for (int i = 0; i < nTypes; i++)
+        {
+            if (LastChildEnd >= resourceEnd)
+            {
+                return;
+            }
+
+            int typeNameLen = Read7BitEncodedLength(LastChildEnd, out int typeNameLenBytes);
+            AddBytes(typeNameLenBytes + typeNameLen, $"Type {i}");
+        }
+
+        // PAD alignment to 8-byte boundary (relative to resourceStart)
+        int pos = LastChildEnd - resourceStart;
+        int aligned = (pos + 7) & ~7;
+        int padLen = aligned - pos;
+        if (padLen > 0 && LastChildEnd + padLen <= resourceEnd)
+        {
+            AddPadding(padLen);
+        }
+
+        // Name hash table
+        int hashTableSize = numRes * 4;
+        if (LastChildEnd + hashTableSize > resourceEnd)
+        {
+            AddBytes(resourceEnd - LastChildEnd, "Data");
+            return;
+        }
+
+        AddBytes(hashTableSize, "Name hash table");
+
+        // Name position table
+        int posTableSize = numRes * 4;
+        if (LastChildEnd + posTableSize > resourceEnd)
+        {
+            AddBytes(resourceEnd - LastChildEnd, "Data");
+            return;
+        }
+
+        AddBytes(posTableSize, "Name position table");
+
+        // Data section offset
+        if (LastChildEnd + 4 > resourceEnd)
+        {
+            AddBytes(resourceEnd - LastChildEnd, "Data");
+            return;
+        }
+
+        var dataSectionOffset = AddFourBytes("Data section offset");
+
+        // The rest is name entries + data entries
+        int remaining = resourceEnd - LastChildEnd;
+        if (remaining > 0)
+        {
+            // Name section runs from here to (nameSection + dataSectionOffset)
+            int nameSectionStart = LastChildEnd;
+            int dataSectionStart = nameSectionStart + dataSectionOffset.Value;
+
+            if (dataSectionStart > nameSectionStart && dataSectionStart <= resourceEnd)
+            {
+                AddBytes(dataSectionStart - nameSectionStart, "Name section");
+                int dataRemaining = resourceEnd - LastChildEnd;
+                if (dataRemaining > 0)
+                {
+                    AddBytes(dataRemaining, "Data section");
+                }
+            }
+            else
+            {
+                AddBytes(remaining, "Resource data");
+            }
+        }
+    }
+
+    private int Read7BitEncodedLength(int offset, out int bytesConsumed)
+    {
+        int result = 0;
+        int shift = 0;
+        bytesConsumed = 0;
+
+        while (true)
+        {
+            byte b = Buffer.ReadByte(offset + bytesConsumed);
+            bytesConsumed++;
+            result |= (b & 0x7F) << shift;
+            if ((b & 0x80) == 0)
+            {
+                break;
+            }
+
+            shift += 7;
+            if (shift >= 35)
+            {
+                break;
+            }
+        }
+
+        return result;
     }
 
     public FourBytes Size { get; set; }
