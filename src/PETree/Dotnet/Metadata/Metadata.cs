@@ -1592,6 +1592,13 @@ public class ManagedResource : Node
     {
         Size = AddFourBytes("Size");
         int size = Size.Value;
+        if (size < 0 || (long)Start + 4 + size > Buffer.Length)
+        {
+            size = (int)Math.Max(0, Buffer.Length - Start - 4);
+        }
+
+        Length = 4 + size;
+
         if (size < 4)
         {
             Bytes = AddBytes(size, "Bytes");
@@ -1716,6 +1723,7 @@ public class ManagedResource : Node
             {
                 // Parse individual name entries and collect data offsets
                 var dataOffsets = new List<(int dataOffset, string name)>();
+                var nameEntries = new List<(int entryStart, int nameLenBytes, int nameByteLen, string name, int dataOff)>();
 
                 for (int i = 0; i < numRes; i++)
                 {
@@ -1731,8 +1739,9 @@ public class ManagedResource : Node
                     int nameByteLen = Read7BitEncodedLength(entryStart, out int nameLenBytes);
                     int nameStrStart = entryStart + nameLenBytes;
                     int dataOffsetFieldStart = nameStrStart + nameByteLen;
+                    int entryEnd = dataOffsetFieldStart + 4;
 
-                    if (dataOffsetFieldStart + 4 > dataSectionStart)
+                    if (nameByteLen < 0 || entryEnd > dataSectionStart || entryEnd > resourceEnd)
                     {
                         continue;
                     }
@@ -1741,17 +1750,31 @@ public class ManagedResource : Node
                         Buffer.ReadBytes(nameStrStart, nameByteLen));
                     int dataOff = Buffer.ReadInt32(dataOffsetFieldStart);
                     dataOffsets.Add((dataOff, name));
+                    nameEntries.Add((entryStart, nameLenBytes, nameByteLen, name, dataOff));
+                }
+
+                // Sort by position and add, skipping overlapping entries
+                nameEntries.Sort((a, b) => a.entryStart.CompareTo(b.entryStart));
+                int prevEnd = 0;
+                foreach (var (entryStart, nameLenBytes, nameByteLen, name, dataOff) in nameEntries)
+                {
+                    int entryLen = nameLenBytes + nameByteLen + 4;
+                    if (entryStart < prevEnd)
+                    {
+                        continue;
+                    }
 
                     var entry = new Node
                     {
                         Start = entryStart,
-                        Length = nameLenBytes + nameByteLen + 4,
+                        Length = entryLen,
                         Text = name
                     };
                     Add(entry);
                     entry.AddBytes(nameLenBytes, $"Name byte length: {nameByteLen}");
-                    entry.Add(new Utf16String { Start = nameStrStart, Length = nameByteLen, Text = name });
+                    entry.Add(new Utf16String { Start = entryStart + nameLenBytes, Length = nameByteLen, Text = name });
                     entry.AddFourBytes($"Data offset: {dataOff}");
+                    prevEnd = entryStart + entryLen;
                 }
 
                 // Fill any gap between last name entry and data section
@@ -1775,6 +1798,11 @@ public class ManagedResource : Node
                         if (entryDataStart < dataSectionStart || entryDataStart >= resourceEnd)
                         {
                             continue;
+                        }
+
+                        if (entryDataEnd > resourceEnd)
+                        {
+                            entryDataEnd = resourceEnd;
                         }
 
                         int entryLen = entryDataEnd - entryDataStart;
