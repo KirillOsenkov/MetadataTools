@@ -235,6 +235,14 @@ public class Utf8String : Node
     }
 }
 
+public class Utf16String : Node
+{
+    public Utf16String()
+    {
+        Text = "UTF-16 string";
+    }
+}
+
 public class ZeroTerminatedAlignedString : ZeroTerminatedString
 {
     protected override int Align(int read, int position)

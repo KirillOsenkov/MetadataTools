@@ -1660,6 +1660,7 @@ public class ManagedResource : Node
             return;
         }
 
+        int namePositionTableStart = LastChildEnd;
         AddBytes(posTableSize, "Name position table");
 
         // Data section offset
@@ -1675,17 +1676,125 @@ public class ManagedResource : Node
         int remaining = resourceEnd - LastChildEnd;
         if (remaining > 0)
         {
-            // Name section runs from here to (nameSection + dataSectionOffset)
+            // dataSectionOffset is relative to the start of the .resources data
             int nameSectionStart = LastChildEnd;
-            int dataSectionStart = nameSectionStart + dataSectionOffset.Value;
+            int dataSectionStart = resourceStart + dataSectionOffset.Value;
 
             if (dataSectionStart > nameSectionStart && dataSectionStart <= resourceEnd)
             {
-                AddBytes(dataSectionStart - nameSectionStart, "Name section");
-                int dataRemaining = resourceEnd - LastChildEnd;
-                if (dataRemaining > 0)
+                // Parse individual name entries and collect data offsets
+                var dataOffsets = new List<(int dataOffset, string name)>();
+
+                for (int i = 0; i < numRes; i++)
                 {
-                    AddBytes(dataRemaining, "Data section");
+                    int namePos = Buffer.ReadInt32(namePositionTableStart + i * 4);
+                    int entryStart = nameSectionStart + namePos;
+
+                    if (entryStart < nameSectionStart || entryStart >= dataSectionStart)
+                    {
+                        continue;
+                    }
+
+                    // 7-bit encoded length (in bytes) of UTF-16 name
+                    int nameByteLen = Read7BitEncodedLength(entryStart, out int nameLenBytes);
+                    int nameStrStart = entryStart + nameLenBytes;
+                    int dataOffsetFieldStart = nameStrStart + nameByteLen;
+
+                    if (dataOffsetFieldStart + 4 > dataSectionStart)
+                    {
+                        continue;
+                    }
+
+                    string name = System.Text.Encoding.Unicode.GetString(
+                        Buffer.ReadBytes(nameStrStart, nameByteLen));
+                    int dataOff = Buffer.ReadInt32(dataOffsetFieldStart);
+                    dataOffsets.Add((dataOff, name));
+
+                    var entry = new Node
+                    {
+                        Start = entryStart,
+                        Length = nameLenBytes + nameByteLen + 4,
+                        Text = name
+                    };
+                    Add(entry);
+                    entry.AddBytes(nameLenBytes, $"Name byte length: {nameByteLen}");
+                    entry.Add(new Utf16String { Start = nameStrStart, Length = nameByteLen, Text = name });
+                    entry.AddFourBytes($"Data offset: {dataOff}");
+                }
+
+                // Fill any gap between last name entry and data section
+                if (LastChildEnd < dataSectionStart)
+                {
+                    AddBytes(dataSectionStart - LastChildEnd, "Name section padding");
+                }
+
+                // Parse individual data entries using sorted offsets
+                if (dataOffsets.Count > 0)
+                {
+                    dataOffsets.Sort((a, b) => a.dataOffset.CompareTo(b.dataOffset));
+
+                    for (int i = 0; i < dataOffsets.Count; i++)
+                    {
+                        int entryDataStart = dataSectionStart + dataOffsets[i].dataOffset;
+                        int entryDataEnd = (i + 1 < dataOffsets.Count)
+                            ? dataSectionStart + dataOffsets[i + 1].dataOffset
+                            : resourceEnd;
+
+                        if (entryDataStart < dataSectionStart || entryDataStart >= resourceEnd)
+                        {
+                            continue;
+                        }
+
+                        int entryLen = entryDataEnd - entryDataStart;
+                        if (entryLen <= 0)
+                        {
+                            continue;
+                        }
+
+                        // Read the 7-bit encoded type code
+                        int typeCode = Read7BitEncodedLength(entryDataStart, out int typeCodeBytes);
+                        string typeName = typeCode switch
+                        {
+                            0 => "Null",
+                            1 => "String",
+                            2 => "Boolean",
+                            3 => "Char",
+                            4 => "Byte",
+                            5 => "SByte",
+                            6 => "Int16",
+                            7 => "UInt16",
+                            8 => "Int32",
+                            9 => "UInt32",
+                            10 => "Int64",
+                            11 => "UInt64",
+                            12 => "Single",
+                            13 => "Double",
+                            14 => "Decimal",
+                            15 => "DateTime",
+                            16 => "TimeSpan",
+                            32 => "ByteArray",
+                            33 => "Stream",
+                            _ => $"Type {typeCode}"
+                        };
+
+                        var dataEntry = new Node
+                        {
+                            Start = entryDataStart,
+                            Length = entryLen,
+                            Text = $"{dataOffsets[i].name} ({typeName})"
+                        };
+                        Add(dataEntry);
+                    }
+
+                    // Fill any gap at the end
+                    if (LastChildEnd < resourceEnd)
+                    {
+                        AddBytes(resourceEnd - LastChildEnd, "Data section padding");
+                    }
+                }
+                else
+                {
+                    AddBytes(resourceEnd - LastChildEnd, "Data section");
                 }
             }
             else
