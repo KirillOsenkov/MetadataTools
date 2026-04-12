@@ -242,7 +242,7 @@ public class PEFile : Node
             }
         }
 
-        AddTable<Node>(OptionalHeader.DataDirectories.BaseRelocationTable, text: "Base reloc table");
+        AddTable<BaseRelocationTable>(OptionalHeader.DataDirectories.BaseRelocationTable);
         AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport, text: "Bound import");
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
         AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
