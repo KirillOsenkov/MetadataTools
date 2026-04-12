@@ -1,6 +1,5 @@
-﻿using System.IO.Compression;
-using System.IO;
-using GuiLabs.FileFormat;
+﻿using System.IO;
+using System.IO.Compression;
 
 namespace GuiLabs.FileFormat.PE.Dotnet;
 
@@ -34,40 +33,12 @@ public class EmbeddedPdb : Node
         Metadata = new Metadata
         {
             Buffer = metadataBuffer,
-            Start = 0,
             Length = (int)DecompressedStream.Length,
             EmbeddedPdb = this
         };
         Metadata.Parse();
 
-        Metadata.ValidateOverlap((prev, current, parent) =>
-        {
-            throw new System.Exception(
-                $"Embedded PDB overlap in {parent.Describe()}:\n" +
-                $"  Previous: {prev.Describe()}\n" +
-                $"  Current:  {current.Describe()}\n" +
-                $"  Overlap:  {prev.End - current.Start} bytes");
-        });
-
-        Metadata.ComputeUncoveredSpans(span =>
-        {
-            if (metadataBuffer.IsZeroFilled(span))
-            {
-                Metadata.Add(new Padding
-                {
-                    Start = span.Start,
-                    Length = span.Length
-                });
-            }
-            else
-            {
-                Metadata.Add(new Unknown
-                {
-                    Start = span.Start,
-                    Length = span.Length
-                });
-            }
-        });
+        Metadata.Check();
     }
 
     public FourBytes MPDB { get; set; }

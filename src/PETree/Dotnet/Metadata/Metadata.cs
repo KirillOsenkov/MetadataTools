@@ -162,6 +162,38 @@ public class Metadata : Node
         }
     }
 
+    public void Check()
+    {
+        this.ValidateOverlap((prev, current, parent) =>
+        {
+            throw new Exception(
+                $"Embedded PDB overlap in {parent.Describe()}:\n" +
+                $"  Previous: {prev.Describe()}\n" +
+                $"  Current:  {current.Describe()}\n" +
+                $"  Overlap:  {prev.End - current.Start} bytes");
+        });
+
+        this.ComputeUncoveredSpans(span =>
+        {
+            if (Buffer.IsZeroFilled(span))
+            {
+                Add(new Padding
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                });
+            }
+            else
+            {
+                Add(new Unknown
+                {
+                    Start = span.Start,
+                    Length = span.Length
+                });
+            }
+        });
+    }
+
     public PEFile PEFile => FindAncestor<PEFile>();
 
     public FourBytes BSJB { get; set; }
