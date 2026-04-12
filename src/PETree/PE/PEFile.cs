@@ -41,16 +41,6 @@ public class PEFile : Node
         Write(stream);
     }
 
-    public string GetText()
-    {
-        var sb = new StringBuilder();
-        var writer = new StringWriter(sb);
-
-        Write(writer, "");
-
-        return sb.ToString();
-    }
-
     public bool IsPE32Plus => OptionalHeader.StandardFields.IsPE32Plus;
 
     public override void Parse()

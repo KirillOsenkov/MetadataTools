@@ -357,6 +357,13 @@ public class Node
         }
     }
 
+    public string GetText()
+    {
+        var writer = new StringWriter();
+        Write(writer, "");
+        return writer.ToString();
+    }
+
     public void Write(TextWriter writer, string indent)
     {
         writer.Write(indent);
