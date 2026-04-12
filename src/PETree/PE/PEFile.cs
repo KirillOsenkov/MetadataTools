@@ -251,7 +251,10 @@ public class PEFile : Node
             et.MachineType = PEHeader.Platform.Value;
             et.PEFile = this;
         });
-        AddTable<Node>(OptionalHeader.DataDirectories.ExportTable, text: "Export table");
+        AddTable<ExportTable>(OptionalHeader.DataDirectories.ExportTable, configure: et =>
+        {
+            et.PEFile = this;
+        });
         AddTable<LoadConfigDirectory>(OptionalHeader.DataDirectories.LoadConfigTable, configure: lc =>
         {
             lc.IsPE32Plus = IsPE32Plus;
