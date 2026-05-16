@@ -68,13 +68,13 @@ Typical use: `lbi`/`refdump`/`checkbinarycompat` identify *what* is wrong on dis
 
 ---
 
-# Library API: reading an assembly MVID from your own code
+## Library API: reading an assembly MVID from your own code
 
 > The sections below document **C# library APIs** for retrieving an assembly's MVID programmatically, not the CLI tools above. They're aimed at developers building their own tools. If you just want to print MVIDs on the command line, use `lbi -mvid` and stop here.
 
 Mono.Cecil stripped down to a single file to read an assembly's MVID without dependencies. Here are the various ways to retrieve the MVID of an assembly:
 
-## ImageReader
+### ImageReader
 Just embed this file:
 https://github.com/KirillOsenkov/MetadataTools/blob/master/src/PEFile/ImageReader.cs
 ```
@@ -85,7 +85,7 @@ Cold run on a warm file: 7ms
 Or see this sample from Roslyn:
 https://github.com/dotnet/roslyn/blob/1c98fe1fc6ef122cb3bb436aa90a0ea729fdcf37/src/Compilers/Core/MSBuildTask/MvidReader.cs#L13
 
-## Mono.Cecil
+### Mono.Cecil
 https://www.nuget.org/packages/Mono.Cecil
 ```
 var module = Mono.Cecil.ModuleDefinition.ReadModule(filePath);
@@ -93,7 +93,7 @@ var mvid = module.Mvid;
 ```
 Cold run on a warm file: 16ms
 
-## Reflection
+### Reflection
 This has the downside that it loads the assembly:
 ```
 var assemblyName = AssemblyName.GetAssemblyName(filePath);
@@ -102,7 +102,7 @@ var mvid = assembly.ManifestModule.ModuleVersionId;
 ```
 Cold run on a warm file: 33ms
 
-## System.Reflection.Metadata
+### System.Reflection.Metadata
 https://www.nuget.org/packages/System.Reflection.Metadata
 
 Sample in Roslyn:

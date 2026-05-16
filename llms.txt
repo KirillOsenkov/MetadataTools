@@ -11,6 +11,8 @@ deduplicate / sort output so it's diffable.
 > see [Binlogs](#binlogs). Standard pattern: identify what is wrong with on-disk tools, then explain why with the
 > binlog.
 
+> **Runtime is out of scope.** These tools only read static files on disk. For runtime inspection (process tree with command lines, loaded images/modules, versions, every .NET exception thrown system-wide, with stacks, queryable through an MCP server), see [Beetle](https://github.com/KirillOsenkov/Beetle) and `beetlemcp`.
+
 ## Sections
 
 1. [Install](#install)
@@ -35,17 +37,18 @@ dotnet tool update -g pdb                  # .pdb info, dll/pdb match, download 
 
 `dotnet tool update -g <name>` installs if missing, upgrades to latest if present.
 
-# Decision tree
+## Decision tree
 
 Rule of thumb: **lbi** = what is it · **refdump** = what does it reference · **checkbinarycompat** = does it all fit together · **binlog** = how did it get here.
 
-## What is it? (lbi, mvid, pdb)
+### What is it? (lbi, mvid, pdb)
 
 | Question | Use |
 |---|---|
 | What `AssemblyVersion` / `FileVersion` / `TargetFramework` does this `.dll` have? | `lbi foo.dll` |
 | Show me every copy of `X.dll` under this tree, grouped by version + SHA1 | `lbi X.dll` |
 | Are these two `.dll`s byte-identical? | Put both in the same scan: `lbi -d:<dirA> -d:<dirB> X.dll`. Same SHA1 group = identical bytes. (MVID equality is *not* a byte-identity test — same source recompiled can keep the MVID.) |
+| Diff which dlls drifted between two directory trees (e.g. did my staged build replace the right files?) | `lbi -d:<treeA> -d:<treeB>` — every shared `AssemblyFullName` groups; identical bytes share an SHA1 sub-group, drifted files split into separate sub-groups. |
 | What's the MVID of this assembly? | `mvid foo.dll` or `lbi foo.dll -mvid` |
 | Is this assembly strong-name signed / delay-signed / public-signed? | `lbi foo.dll -sn` |
 | Is this assembly Authenticode signed (Windows-only)? | `lbi foo.dll -ac` |
@@ -56,7 +59,7 @@ Rule of thumb: **lbi** = what is it · **refdump** = what does it reference · *
 | Find the matching `.pdb` for `foo.dll` under a directory tree | `pdb foo.dll C:\path\to\symbols` |
 | Is this `.pdb` portable or native? | `pdb foo.pdb` |
 
-## What does it reference? (refdump)
+### What does it reference? (refdump)
 
 | Question | Use |
 |---|---|
@@ -66,7 +69,7 @@ Rule of thumb: **lbi** = what is it · **refdump** = what does it reference · *
 | What types/members of `X` does `foo.dll` actually use? | `refdump foo.dll -t -m -a:X` (single-file form of the workhorse) |
 | Generate a Graphviz reference graph of these assemblies | `refdump *.dll -g` (writes `AssemblyGraph.txt`) |
 
-## Does it all fit together? (checkbinarycompat)
+### Does it all fit together? (checkbinarycompat)
 
 | Question | Use |
 |---|---|
@@ -76,7 +79,7 @@ Rule of thumb: **lbi** = what is it · **refdump** = what does it reference · *
 | Find unreferenced assemblies in the closure of `MyApp.exe` | `checkbinarycompat -closure:MyApp.exe` |
 | Copy `<assemblyBinding>` from one app.config to many | `checkbinarycompat -replicateBindingRedirects src.config dest1.config ...` |
 
-## How did the build put it there? (binlog)
+### How did the build put it there? (binlog)
 
 These need an MSBuild binlog of the build that produced the output, plus `binlogmcp` configured. See [Binlogs](#binlogs).
 
@@ -88,7 +91,7 @@ These need an MSBuild binlog of the build that produced the output, plus `binlog
 | What `<PackageReference>` introduced this package? | `$nuget project(MyApp.csproj) Foo` |
 | Which `Copy` tasks ran inside the `Foo` project? | `$task Copy under($project Foo)` |
 
-## Misc helpers
+### Misc helpers
 
 | Question | Use |
 |---|---|
@@ -97,23 +100,23 @@ These need an MSBuild binlog of the build that produced the output, plus `binlog
 
 ---
 
-# lbi
+## lbi
 
 `lbi` = "list binary info". Walks a directory, reads PE + managed metadata, and prints per-file info.
 
-## Invocation
+### Invocation
 ```
 lbi [<pattern>] [-l[:out.txt]] [-d:<dir>]* [-ed:<dir>]* [-ef:<substr>]*
     [-nr] [-mo] [-sn] [-snv] [-ac] [-mvid] [-p] [-v] [-fv] [-fs] [-iv] [-tf]
     [@response.rsp]
 ```
 
-## Two output modes
+### Two output modes
 
 * **Default = grouped.** Files are grouped by `AssemblyFullName` → `SHA1`. Default pattern: `*.dll;*.exe`. Use to answer "which copies of `X.dll` differ from each other?".
 * **`-l` = flat csv-ish list, one row per file.** Default pattern: `*` (all files). Use for tabular output. Optionally write to a file: `-l:out.txt`.
 
-## Flags
+### Flags
 | Flag | Meaning |
 |---|---|
 | `<pattern>` | File pattern, e.g. `*.dll` (overrides default) |
@@ -135,7 +138,7 @@ lbi [<pattern>] [-l[:out.txt]] [-d:<dir>]* [-ed:<dir>]* [-ef:<substr>]*
 | `-snv` | Validate strong name via `sn.exe -vf` (Windows-only, slow — shells out per file) |
 | `-ac` | Authenticode signature info (Windows-only) |
 
-## Output shape
+### Output shape
 Grouped (default):
 ```
 Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed
@@ -149,7 +152,7 @@ relativePath[,fileSize][,FileVersion][,Version][,TargetFramework][,Signed][,Plat
 ```
 Only requested columns are emitted.
 
-## Common patterns
+### Common patterns
 ```
 lbi                              # group every dll/exe under cwd by AssemblyName + SHA1
 lbi foo.dll                      # same, just for files named foo.dll
@@ -159,16 +162,16 @@ lbi -ed:obj -ed:bin              # skip build output dirs
 lbi -sn                          # show strong-name flag per assembly
 ```
 
-## Gotchas
+### Gotchas
 * `-snv` shells out to `sn.exe` per file — orders of magnitude slower than `-sn`.
 
 ---
 
-# refdump
+## refdump
 
 `refdump` prints assembly references and (optionally) the consumed types/members per reference.
 
-## The workhorse pattern
+### The workhorse pattern
 
 ```
 refdump *.dll -s -a:<TargetAssembly> -t -m
@@ -185,7 +188,7 @@ so the output is dense.
 Every other refdump invocation is a variation on this. Reach for it first when investigating "who uses X" or
 "what surface of X is in use".
 
-## Flags
+### Flags
 | Flag | Meaning |
 |---|---|
 | `<file-or-pattern>` | A single file (`foo.dll`), a glob (`*.dll`), or a glob with a directory (`path\*.dll`). |
@@ -196,7 +199,7 @@ Every other refdump invocation is a variation on this. Reach for it first when i
 | `-g` | Emit `AssemblyGraph.txt` in cwd: a Graphviz `digraph` of edges between assemblies in the input set (no edges to assemblies outside the input). Open in the **MSBuild Structured Log Viewer** (built-in graph viewer for DOT files), or render with `dot -Tsvg AssemblyGraph.txt -o graph.svg`. |
 | `output.xml` | Any non-switch arg ending in `.xml` enables a detailed XML report. |
 
-## Output shape
+### Output shape
 ```
 foo.dll
     Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed
@@ -204,10 +207,10 @@ foo.dll
 ```
 With `-t`/`-m`, each reference is followed by an indented list of types (and, with `-m`, methods).
 
-## Gotchas
+### Gotchas
 * `-a:` is a substring match against `AssemblyReference.Name`, not the full name. `-a:Json` matches both `Newtonsoft.Json` and `System.Text.Json`.
 
-## Reading the graph (no Graphviz required)
+### Reading the graph (no Graphviz required)
 
 `AssemblyGraph.txt` is plain text DOT. Each interior line is `  "A" -> "B"` where `A` references `B`. Both `A` and `B`
 are short assembly names (no version). You can answer most topology questions by string-matching the file:
@@ -224,7 +227,7 @@ For static rendering: `dot -Tsvg AssemblyGraph.txt -o graph.svg`.
 
 ---
 
-# checkbinarycompat
+## checkbinarycompat
 
 Validates a directory of assemblies for binary compatibility. For each assembly it follows every reference and checks
 the referenced assemblies contain the expected types and members. It also inspects sibling `app.config` files and
@@ -234,19 +237,19 @@ match).
 Designed to run in CI: emits a sorted `BinaryCompatReport.txt`, compares to a checked-in baseline, exits non-zero on
 mismatch.
 
-## Invocation
+### Invocation
 ```
 checkbinarycompat <file-spec>* <option>* @<response>*
 checkbinarycompat <config.json>                                 # batch mode
 checkbinarycompat -replicateBindingRedirects <src.config> <dst.config>+   # side mode
 ```
 
-## File specs
+### File specs
 A file-spec is an absolute or cwd-relative directory, optionally ending with a file name, a pattern, or
 semicolon-separated patterns. `**` indicates recursive subtree. With no file specs, scans cwd non-recursively (`-s`
 for recursion). Default patterns: `*.dll;*.exe;*.exe.config`. Prefix with `!` to exclude.
 
-## Options
+### Options
 | Option | Meaning |
 |---|---|
 | `!<pattern>` | Exclude path/pattern. |
@@ -281,7 +284,7 @@ for recursion). Default patterns: `*.dll;*.exe;*.exe.config`. Prefix with `!` to
 | `@file` | Response file (one arg per line; `#` for comments). |
 | `-?` | Help. |
 
-## Exit codes
+### Exit codes
 | Code | Meaning |
 |---|---|
 | 0 | Report matches baseline. |
@@ -289,10 +292,10 @@ for recursion). Default patterns: `*.dll;*.exe;*.exe.config`. Prefix with `!` to
 | -1 | Invalid CLI args. |
 | 2 | Invalid config file (batch mode). |
 
-## Resolution order
+### Resolution order
 loaded-strict → CodeBase → input files → framework (GAC + NetCore shared) → `-resolve:` dirs → loaded-loose.
 
-## Diagnostic line shapes (what shows up in `BinaryCompatReport.txt`)
+### Diagnostic line shapes (what shows up in `BinaryCompatReport.txt`)
 ```
 In assembly 'Foo, Version=1.2.3.4, ...': Failed to resolve type reference 'System.Bar' in assembly 'System'
 In assembly 'Foo, ...': Failed to resolve method reference 'System.String System.Bar::Baz()' in assembly 'System'
@@ -304,7 +307,7 @@ App.config: 'App.exe.config': publicKeyToken 'aaa' from bindingRedirect for Foo 
 ```
 Lines are sorted alphabetically before being written, so diffs are stable.
 
-## Common patterns
+### Common patterns
 ```
 cd bin\Debug\net8.0 && checkbinarycompat                           # baseline check in output dir
 checkbinarycompat -s                                               # recursive
@@ -317,7 +320,7 @@ checkbinarycompat -outputNewWarnings                               # show only n
 checkbinarycompat config.json                                      # batch mode
 ```
 
-## Batch JSON config
+### Batch JSON config
 
 Pass a `.json` file to run many folders in parallel, each with its own args/baseline/report. Schema: see
 `src/BinaryCompatChecker/BinaryCompatConfig.schema.json`. Minimal example:
@@ -341,7 +344,7 @@ Pass a `.json` file to run many folders in parallel, each with its own args/base
 }
 ```
 
-### Multi-closure pattern (one output dir, several startup binaries)
+#### Multi-closure pattern (one output dir, several startup binaries)
 
 Common for VS-style products: a single `bin\Debug` hosts multiple independent executables. Use one wide check plus one closure entry per startup binary, each writing to its own baseline:
 
@@ -381,14 +384,14 @@ Notes:
   ```
   Developers run this after pulling changes; if any baseline changed, the new versions are written to disk for them to inspect and commit.
 
-## Replicate binding redirects (side mode)
+### Replicate binding redirects (side mode)
 ```
 checkbinarycompat -replicateBindingRedirects App.exe.config Tests1.dll.config Tests2.dll.config
 ```
 Copies `<assemblyBinding>` from source to each destination config. No baseline, no report — runs entirely separately
 from the analysis pipeline.
 
-## MSBuild integration
+### MSBuild integration
 ```xml
 <Target Name="CheckBinaryCompat" AfterTargets="Build" Condition="$(CheckBinaryCompat) == true">
   <Exec Command="checkbinarycompat" ConsoleToMSBuild="True" WorkingDirectory="$(OutDir)" />
@@ -396,7 +399,7 @@ from the analysis pipeline.
 ```
 Then `msbuild /p:CheckBinaryCompat=true` or wire it into CI.
 
-## Gotchas
+### Gotchas
 * Default behavior is non-recursive — pass `-s`.
 * The same assembly name appearing in multiple input directories is non-deterministic; exclude all but one with `!`.
 * A clean baseline is an empty file.
@@ -405,11 +408,11 @@ Then `msbuild /p:CheckBinaryCompat=true` or wire it into CI.
 
 ---
 
-# pdb
+## pdb
 
 Multi-mode tool for managed `.pdb` files.
 
-## Modes (dispatched by argument shape)
+### Modes (dispatched by argument shape)
 ```
 pdb <input.dll>                  # print debug directory info (Guid, Age, Path, Stamp), embedded-pdb flag,
                                  # SourceLink presence, checksums; if sibling .pdb exists, also check match
@@ -425,7 +428,7 @@ A URL is anything that starts with `http://` or `https://`.
 
 ---
 
-# mvid
+## mvid
 
 Tiny tool that prints the MVID of one or more assemblies using a minimal embedded PE reader (~7 ms cold).
 
@@ -442,7 +445,7 @@ single .cs file you can paste into any project to read MVIDs without a Mono.Ceci
 var mvid = ImageReader.ReadAssemblyMvid(filePath);
 ```
 
-# FakeSign
+## FakeSign
 
 Toggles the `StrongNameSigned` bit in the COR header of a managed assembly. Use to make a delay-signed assembly load
 without a real key (CLR will skip strong-name verification when the bit is set and skip-verification is configured).
@@ -457,7 +460,7 @@ FakeSign foo.dll -u -f
 Refuses to operate if the bit is already in the target state unless `-f` is passed. Refuses if the assembly isn't
 delay-signed (no `StrongNameSignatureDirectory`) — `-f` overrides this too.
 
-# Corflags
+## Corflags
 
 Minimal helper that clears the `Prefers32Bit` / `Requires32Bit` flags from a managed exe:
 
@@ -469,7 +472,7 @@ Only supports the one flag combination above. Use the SDK's `corflags.exe` for a
 
 ---
 
-# Binlogs
+## Binlogs
 
 Use the binlog whenever a question is about **build behavior** (which `Copy` task produced this dll, which NuGet
 package shipped it, which transitive dependency chain forced version X.Y.Z) rather than the final on-disk state.
@@ -483,7 +486,7 @@ Open it with the [`binlogmcp`](https://github.com/KirillOsenkov/MSBuildStructure
 
 Docs: <https://github.com/KirillOsenkov/MSBuildStructuredLog>, <https://msbuildlog.com>.
 
-## How to obtain a binlog
+### How to obtain a binlog
 
 Order of preference:
 
@@ -499,7 +502,7 @@ Order of preference:
    `build.cmd` / `build.ps1`, ask the user how to pass `/bl` through it.
 3. **If neither is available, stop and ask the user.**
 
-## Using `binlogmcp`
+### Using `binlogmcp`
 
 `binlogmcp` is an MCP server. Its tools take JSON args (not CLI syntax). The query DSL inside the `query` parameter
 is identical to the MSBuild Structured Log Viewer's search box: whitespace-AND, case-insensitive substring, double
@@ -511,7 +514,7 @@ Workflow:
 2. Call `get_session_summary` — one-page overview.
 3. Call `search` with `query: "$copy Foo.dll"` (or similar) — ask the question.
 
-### `$copy` — "where did this file come from?"
+#### `$copy` — "where did this file come from?"
 
 ```
 $copy Foo.dll                          # every copy whose source or dest contains Foo.dll
@@ -522,7 +525,7 @@ $copy C:\bin\Debug                     # all copies into this directory
 The full-path form is the workhorse. One query usually folds in the producing `Copy` task, the resolved-reference
 path, the NuGet source, the `Content` / `None CopyToOutputDirectory` declaration, and the project-reference output.
 
-### `$nuget` — "which package, which version, which chain?"
+#### `$nuget` — "which package, which version, which chain?"
 
 ```
 $nuget project(MyApp.csproj)                       # MyApp's whole NuGet dependency graph
@@ -536,14 +539,14 @@ $nuget project(.csproj) 13.0.3                     # scan all projects for a spe
 Each match shows the chain: project → project references → direct `<PackageReference>` → transitive dependencies →
 resolved package and shipped files.
 
-### Other useful tokens
+#### Other useful tokens
 
 * `$projectreference project(MyApp.csproj)` — transitive project-reference closure (bidirectional when scoped to a single project).
 * `$rar` — every `ResolveAssemblyReference` invocation. Useful when refs resolve to the wrong path.
 * `$error` / `$warning` — build diagnostics with full hierarchical context.
 * `$task Copy under($project Foo)` — every `Copy` task inside `Foo`.
 
-## Combining binlog with the on-disk tools
+### Combining binlog with the on-disk tools
 
 | Symptom on disk | Follow-up in the binlog |
 |---|---|
@@ -555,7 +558,7 @@ resolved package and shipped files.
 
 ---
 
-# Anti-patterns
+## Anti-patterns
 
 * **Don't** `Get-ChildItem -Recurse -Filter *.dll | ForEach-Object { [Reflection.AssemblyName]::GetAssemblyName($_.FullName) }` — `lbi` does this in one process with deferred-read Cecil and dedupes by SHA1.
 * **Don't** open assemblies in `ildasm` to read a reference list — `refdump foo.dll` prints the same info, one line per reference.
@@ -567,9 +570,9 @@ resolved package and shipped files.
 
 ---
 
-# Investigation playbooks
+## Investigation playbooks
 
-## 1. "Summarize binary compat issues in this output directory"
+### 1. "Summarize binary compat issues in this output directory"
 
 ```
 cd <output-dir>
@@ -586,7 +589,7 @@ Read `BinaryCompatReport.txt` in cwd. Each line is one diagnostic. Group by shap
 
 Exit code 0 = matches baseline. Exit code 1 = baseline overwritten — `git diff BinaryCompatReport.txt` to see what changed.
 
-## 2. "My checkbinarycompat step produced warnings about new entries in the baseline"
+### 2. "My checkbinarycompat step produced warnings about new entries in the baseline"
 
 The tool already overwrote the baseline file(s) when exit code was 1. Steps:
 
@@ -600,7 +603,7 @@ The tool already overwrote the baseline file(s) when exit code was 1. Steps:
 4. For each accepted change, commit the new baseline. For each unintended change, fix the underlying issue and re-run — exit code 0 means all good.
 5. `checkbinarycompat -outputNewWarnings` prints only what's new since the baseline if you want a delta without rerunning the build.
 
-## 3. "Add checkbinarycompat as a post-build step / CI gate"
+### 3. "Add checkbinarycompat as a post-build step / CI gate"
 
 For a single executable / single output directory:
 
@@ -626,7 +629,7 @@ For a complex repo (many startup binaries in one output directory, or many outpu
 
 Either way: a clean baseline is an empty file. Don't suppress diagnostics globally — leave them in the baseline so future changes get flagged.
 
-## 4. "Find who uses this assembly; find unused assemblies"
+### 4. "Find who uses this assembly; find unused assemblies"
 
 Who references `Foo.dll`?
 
@@ -661,7 +664,7 @@ Find unused assemblies — use both approaches:
 
 **Cross-check before deleting:** an "unreferenced" assembly may still be loaded at runtime by name (`Assembly.Load`, MEF, plugin discovery, reflection in tests). Grep the source for the assembly name as a string before removing it.
 
-## 5. "Why is *this version* of X.dll in my output? Which NuGet package brought it in?"
+### 5. "Why is *this version* of X.dll in my output? Which NuGet package brought it in?"
 
 A binlog question. The on-disk tools will tell you `lbi X.dll` shows `Version=13.0.3` — they cannot tell you why 13.0.3 instead of 12.0.0.
 
@@ -687,13 +690,13 @@ A binlog question. The on-disk tools will tell you `lbi X.dll` shows `Version=13
 
 The same recipe answers "where did this random `.exe.config` come from", "why is `pdb` X copied to the output", "which `<Content>` item put this file in `bin\Debug`" — just feed the full path to `$copy`.
 
-## 6. "Which copy of X.dll does my app actually load?"
+### 6. "Which copy of X.dll does my app actually load?"
 
 1. `lbi X.dll` — find every copy under the source tree; see whether they differ.
 2. Run the app, then either capture an assembly-load log or `lbi -d:<binplace>` the deployed location.
 3. **Why is *that* copy there?** Run `$copy C:\full\path\to\that\X.dll` against the binlog of the build that produced that binplace.
 
-## 7. "I have a MissingMethodException at runtime — what changed?"
+### 7. "I have a MissingMethodException at runtime — what changed?"
 
 1. `lbi <FailingAssembly>.dll -v -fv -tf` in every plausible binplace dir — which version is actually loaded?
 2. `refdump <FailingAssembly>.dll -t -m -a:<TargetAssembly>` — what does the dll think it can call?
@@ -701,17 +704,34 @@ The same recipe answers "where did this random `.exe.config` come from", "why is
 4. `checkbinarycompat` in the binplace — get the same diagnostic as a sorted line. Compare to a known-good build's report.
 5. **If the version on disk is wrong:** open the binlog. `$nuget <TargetAssembly>` traces the NuGet chain that picked that version; `$copy <TargetAssembly>.dll` shows the producing copy task.
 
-## 8. "Did this PR change any binary contract?"
+### 8. "Did this PR change any binary contract?"
 
 1. Before / after: `lbi -mo -mvid -v -fv > before.txt` / `after.txt`. Diff. Same SHA1 = byte-identical, same MVID with different SHA1 = same compilation input with cosmetic differences (re-signed, restamped), different version = recompile.
 2. `checkbinarycompat` in both bin dirs against the same baseline. Different exit codes = behavior changed.
 
-## 9. "Is this NuGet package compatible with my target framework?"
+### 9. "Is this NuGet package compatible with my target framework?"
 
 1. `lbi <package>\lib\**\*.dll -tf` — which TFMs the package ships.
 2. `refdump <package>\lib\netstandard2.0\*.dll` — what BCL surface it pulls in.
 
-## 10. "Symbol server is missing pdbs"
+### 10. "Symbol server is missing pdbs"
 
 1. `pdb http://msdl.microsoft.com/download/symbols` in the dir to batch-download every available pdb.
 2. `pdb foo.dll` to confirm Guid/Age, then `pdb foo.dll C:\local\symbols` to verify a local copy matches.
+
+### 11. "I just rebuilt a dependency package and dropped its dlls somewhere; did the right bits land?"
+
+1. Verify the dropped files have the version you expected:
+   ```
+   lbi <stash-dir>\*.dll -v -fv -tf -mvid
+   ```
+2. Diff the drop against the build output it came from — both trees in one scan; identical files share an SHA1 sub-group, drifted ones split:
+   ```
+   lbi -d:<source-build-output> -d:<stash-dir> X.dll
+   ```
+3. Re-validate the consumer's output directory:
+   ```
+   cd <consumer-output-dir>
+   checkbinarycompat
+   ```
+   Exit code 1 = new diagnostics; `git diff BinaryCompatReport.txt` to inspect.
