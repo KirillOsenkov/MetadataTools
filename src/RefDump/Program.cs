@@ -515,24 +515,37 @@ namespace RefDump
         private static void PrintUsage()
         {
             Log(@"Usage: ", ConsoleColor.Green, lineBreak: false);
-            Log(@"refdump file.dll [-a:<refname>] [-t] [-m] [-s] [output.xml]", ConsoleColor.White);
+            Log(@"refdump <file-or-pattern> [-a:<refname>] [-t] [-m] [-s] [-g] [<output.xml>]", ConsoleColor.White);
 
             Log(@"    Lists all references of the input assembly(ies).
-    (could be a file mask such as *.dll)
-    -t    List all used types
-    -m    List all used members
-    -a:   Narrow results to a particular reference assembly,
-          <refname> is a substring of the reference assembly
-          name.
-    -s    If the file pattern is specified, such as *.dll, 
-          -s or /s indicates that the pattern should recurse
-          into all subdirectories to find *.dll files.
-    -g    Copy the reference graph to Clipboard in GraphViz
-          format. Paste into http://www.webgraphviz.com/
-          to generate an image.
+    Input may be a single file (foo.dll) or a file mask such as *.dll.
 
-    If an output.xml file name is specified, dump detailed 
-    report into that xml.", ConsoleColor.Gray);
+    -t    List all used types for each reference.
+    -m    List all used members (implies -t).
+    -a:   Narrow results to a particular reference assembly.
+          <refname> is a case-insensitive substring of the
+          reference assembly name. Files with no matching
+          references are skipped.
+    -s    If the file pattern is specified (such as *.dll),
+          -s or /s indicates that the pattern should recurse
+          into all subdirectories.
+    -g    Write the reference graph in GraphViz DOT format to
+          AssemblyGraph.txt in the current directory. Only
+          edges between assemblies in the input set are
+          emitted (no edges to BCL / external assemblies).
+          Open in the MSBuild Structured Log Viewer (built-in
+          graph viewer), or render with: dot -Tsvg AssemblyGraph.txt -o graph.svg
+
+    If an <output.xml> file name is specified, also dump a
+    detailed report into that XML file.
+
+Examples:
+    refdump *.dll -s -a:Foo -t -m                  THE workhorse: who in this tree references Foo,
+                                                   and exactly what types/members of Foo do they use?
+    refdump *.dll -s -a:Foo                        Same, but only list the referencing assemblies.
+    refdump foo.dll                                Just dump every reference of one assembly.
+    refdump foo.dll -t -m -a:System.Collections.Immutable    Types/members from one ref of one file.
+    refdump *.dll -s -g                            Dump the inter-assembly reference graph.", ConsoleColor.Gray);
         }
     }
 }

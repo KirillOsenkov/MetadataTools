@@ -23,6 +23,7 @@ lbi.exe [<pattern>]
         [-mo]
         [-sn]
         [-snv]
+        [-ac]
         [-mvid]
         [-p]
         [-v]
@@ -32,33 +33,38 @@ lbi.exe [<pattern>]
         [-tf]
         [@response.rsp]
 
-    -l:     List full directory contents (optionally output to a file, e.g. out.txt)
-            If not specified, files are grouped by hash, then version.
+    -l:     List full directory contents (optionally output to a file, e.g. -l:out.txt).
+            If not specified, files are grouped by AssemblyName, then by SHA1 hash.
+            -l also changes the default pattern from *.dll;*.exe to * (all files).
     -d:     Specify root directory to start in (defaults to current directory).
-            Maybe be specified more than once to scan multiple directories.
+            May be specified more than once to scan multiple directories.
     -ed:    Exclude directory from search. May be specified more than once.
     -ef:    Exclude files with substring. May be specified more than once.
     -nr:    Non-recursive (current directory only). Recursive by default.
-    -mo     Managed assemblies only.
+    -mo     Managed assemblies only (skip native binaries).
 
-    -sn     Print assembly strong named/delay-signed/public-signed.
-    -snv    Validate assembly strong name using sn.exe -vf (slow).
-    -ac:    Print Authenticode signature information (Windows-only)
+    -sn     Print strong-name signing status (signed/delay-signed/public-signed).
+    -snv    Validate the strong-name signature using sn.exe -vf (slow, Windows-only).
+    -ac     Print Authenticode signature information (Windows-only).
     -mvid   Print assembly MVID.
-    -p      Print assembly platform.
-    -v      Print assembly version.
-    -fv     Print assembly file version.
+    -p      Print assembly platform (uses corflags.exe, Windows-only).
+    -v      Print AssemblyVersion.
+    -fv     Print FileVersion (Win32 version resource).
+    -iv     Print InformationalVersion.
+    -tf     Print TargetFramework (TargetFrameworkAttribute).
     -fs     Print file size.
-    -iv     Print assembly informational version.
-    -tf     Print assembly target framework.
 
-    @r:     Specify a response file (each file line treated as argument).
+    @r:     Specify a response file (each line treated as one argument).
 
-Examples: 
-    lbi foo.dll
-    lbi *.exe -nr
-    lbi
-    lbi -d:sub\directory -d:sub\dir2 -ed:sub\dir2\obj -l:out.txt");
+Examples:
+    lbi foo.dll                                Group all copies of foo.dll under cwd by version + hash.
+    lbi *.exe -nr                              Group .exe files in cwd only.
+    lbi                                        Default: group *.dll;*.exe under cwd recursively.
+    lbi -d:sub\dir1 -d:sub\dir2 -ed:obj        Scan two roots, exclude any 'obj' folder.
+    lbi -l:out.txt                             Flat listing of every file under cwd, written to out.txt.
+    lbi -l -v -fv -tf                          Flat listing with AssemblyVersion, FileVersion, TargetFramework.
+    lbi -sn -mvid                              Grouped output enriched with strong-name + MVID columns.
+    lbi -mo -ac                                Managed assemblies only, plus Authenticode signature info.");
     }
 
     private static string[] netfxToolsPaths =

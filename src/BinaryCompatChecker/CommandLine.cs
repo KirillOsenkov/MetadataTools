@@ -1082,6 +1082,14 @@ public class CommandLine
         Write(@"checkbinarycompat", ConsoleColor.Cyan);
         Write(@" <file-spec>* <option>* @<response-file>*", ConsoleColor.White);
         WriteLine();
+        Write(@"       ", ConsoleColor.White);
+        Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Write(@" <config.json>                                       (batch mode, see below)", ConsoleColor.White);
+        WriteLine();
+        Write(@"       ", ConsoleColor.White);
+        Write(@"checkbinarycompat", ConsoleColor.Cyan);
+        Write(@" -replicateBindingRedirects <src.config> <dst.config>+   (side mode)", ConsoleColor.White);
+        WriteLine();
         Write(@"
 Inspects assemblies and app.config files in a directory and reports potential issues.
 Writes a report of possible issues to BinaryCompatReport.txt (sorted alphabetically).
@@ -1163,7 +1171,12 @@ Options:", ConsoleColor.White);
     -outputSummary             Output the summary comparing the report and the baseline.
 
     @response.rsp              Response file containing additional command-line arguments, one per line.
-    -?:                        Display help.
+    -?                         Display help.
+
+If invoked with a single .json file as the only argument, runs in batch mode: the file describes
+one or more folders to check, each with its own arguments, baseline, and report path. The tool runs
+all folders in parallel and returns exit code 0 only if every folder matches its baseline. Schema:
+https://raw.githubusercontent.com/KirillOsenkov/MetadataTools/main/src/BinaryCompatChecker/BinaryCompatConfig.schema.json
 
 -ignoreVersionMismatch can optionally specify a list of app.config file names (semicolon-separated)
 that should be ignored for version mismatch reporting. If there is a version mismatch that is covered
