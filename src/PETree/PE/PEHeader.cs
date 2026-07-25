@@ -110,12 +110,19 @@ public class IAT : Node
     public override void Parse()
     {
         var list = new List<BytesNode>();
-        BytesNode entry;
-        do
+        int entrySize = IsPE32Plus ? 8 : 4;
+        int entryCount = Length / entrySize;
+        for (int i = 0; i < entryCount; i++)
         {
-            entry = IsPE32Plus ? AddEightBytes("Entry") : AddFourBytes("Entry");
+            BytesNode entry = IsPE32Plus ? AddEightBytes("Entry") : AddFourBytes("Entry");
             list.Add(entry);
-        } while (!Buffer.IsZeroFilled(entry.Span));
+        }
+
+        int trailingBytes = Length % entrySize;
+        if (trailingBytes > 0)
+        {
+            AddBytes(trailingBytes, "Trailing bytes");
+        }
 
         Entries = list.ToArray();
     }

@@ -19,7 +19,7 @@ public class PEFile : Node
 
     public static PEFile ReadFromFile(string filePath, bool inMemory = true)
     {
-        using var fileStream = new FileStream(filePath, FileMode.Open);
+        using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         Stream stream = fileStream;
         if (inMemory)
         {
@@ -250,9 +250,15 @@ public class PEFile : Node
             lc.IsPE32Plus = IsPE32Plus;
             lc.PEFile = this;
         });
-        AddTable<Node>(OptionalHeader.DataDirectories.TLSTable, text: "Thread Local Storage table");
+        AddTable<TLSDirectory>(OptionalHeader.DataDirectories.TLSTable, configure: tls =>
+        {
+            tls.IsPE32Plus = IsPE32Plus;
+            tls.PEFile = this;
+        });
 
         ReadSingleFileBundle();
+
+        AddNativeCode(allSections);
 
         foreach (var section in allSections)
         {
@@ -403,6 +409,53 @@ public class PEFile : Node
         }
 
         return true;
+    }
+
+    private void AddNativeCode(IEnumerable<Node> sections)
+    {
+        const uint ImageScnCntCode = 0x00000020;
+
+        foreach (var section in sections)
+        {
+            var sectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.PointerToRawData.Value == section.Start);
+            if (sectionHeader == null || ((uint)sectionHeader.Characteristics.Value & ImageScnCntCode) == 0)
+            {
+                continue;
+            }
+
+            int contentLength = Math.Min(section.Length, sectionHeader.VirtualSize.Value);
+            int contentEnd = section.Start + contentLength;
+            int start = section.Start;
+            var spans = new List<Span>();
+
+            foreach (var child in section.Children)
+            {
+                int end = Math.Min(child.Start, contentEnd);
+                if (end > start)
+                {
+                    spans.Add(new Span(start, end - start));
+                }
+
+                start = Math.Max(start, child.End);
+                if (start >= contentEnd)
+                {
+                    break;
+                }
+            }
+
+            if (start < contentEnd)
+            {
+                spans.Add(new Span(start, contentEnd - start));
+            }
+
+            foreach (var span in spans)
+            {
+                if (!Buffer.IsZeroFilled(span))
+                {
+                    section.Add(new NativeCode { Start = span.Start, Length = span.Length });
+                }
+            }
+        }
     }
 
     private void ReadDotnetMetadata(int cliHeader)
@@ -620,6 +673,49 @@ public class PEFile : Node
         }
 
         return null;
+    }
+
+    public bool IsRangeAvailable(int start, int length)
+    {
+        if (start < 0 || length <= 0 || start > Buffer.Length - length)
+        {
+            return false;
+        }
+
+        int end = start + length;
+        var section = Children.OfType<Section>()
+            .FirstOrDefault(candidate => start >= candidate.Start && end <= candidate.End);
+        if (section == null)
+        {
+            return false;
+        }
+
+        return FindAvailableParent(section, start, end) != null;
+    }
+
+    private static Node FindAvailableParent(Node parent, int start, int end)
+    {
+        foreach (var child in parent.Children)
+        {
+            if (end <= child.Start)
+            {
+                break;
+            }
+
+            if (start >= child.End)
+            {
+                continue;
+            }
+
+            if (start >= child.Start && end <= child.End && child.HasChildren)
+            {
+                return FindAvailableParent(child, start, end);
+            }
+
+            return null;
+        }
+
+        return parent;
     }
 }
 

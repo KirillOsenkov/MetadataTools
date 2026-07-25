@@ -6,6 +6,14 @@ public class Section : Node
 {
 }
 
+public class NativeCode : Node
+{
+    public NativeCode()
+    {
+        Text = "Native code";
+    }
+}
+
 public class SectionTable : Node
 {
     public SectionTable(short count)
