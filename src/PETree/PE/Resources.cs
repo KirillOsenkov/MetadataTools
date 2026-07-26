@@ -67,6 +67,18 @@ public class ResourceTable : Node
                 {
                     resource = new NativeManifestResource();
                 }
+                else if (resourceKind == "MessageTable")
+                {
+                    resource = new MessageTableResource();
+                }
+                else if (resourceKind == "String")
+                {
+                    resource = new StringTableResource();
+                }
+                else if (resourceKind == "GroupIcon")
+                {
+                    resource = new GroupIconResource();
+                }
                 else
                 {
                     resource = new Resource();
@@ -118,6 +130,250 @@ public class Resource : Node
     public Node Bytes { get; set; }
 
     public string Type { get; set; }
+}
+
+public class MessageTableResource : Resource
+{
+    protected override void ParseBytes(int start)
+    {
+        MessageTable = new MessageTableData
+        {
+            Start = start,
+            Length = Size.Value
+        };
+        Root.Add(MessageTable);
+    }
+
+    public MessageTableData MessageTable { get; set; }
+}
+
+public class MessageTableData : Node
+{
+    public MessageTableData()
+    {
+        Text = "Message table";
+    }
+
+    public override void Parse()
+    {
+        NumberOfBlocks = AddFourBytes("Number of blocks");
+
+        int blockCount = NumberOfBlocks.Value;
+        if (blockCount < 0 || 4L + blockCount * 12L > Length)
+        {
+            return;
+        }
+
+        var blocks = new List<MessageBlock>(blockCount);
+        for (int i = 0; i < blockCount; i++)
+        {
+            blocks.Add(Add<MessageBlock>());
+        }
+
+        foreach (var block in blocks)
+        {
+            block.AddEntries(this);
+        }
+
+        AddRemainingPadding();
+    }
+
+    public FourBytes NumberOfBlocks { get; set; }
+}
+
+public class MessageBlock : Node
+{
+    public override void Parse()
+    {
+        LowId = AddFourBytes("Low id");
+        HighId = AddFourBytes("High id");
+        OffsetToEntries = AddFourBytes("Offset to entries");
+
+        Text = $"Messages 0x{LowId.Value:X}-0x{HighId.Value:X}";
+    }
+
+    public void AddEntries(MessageTableData table)
+    {
+        int offset = table.Start + OffsetToEntries.Value;
+        long id = (uint)LowId.Value;
+        long highId = (uint)HighId.Value;
+
+        while (id <= highId && offset + 4 <= table.End)
+        {
+            int entryLength = Buffer.ReadUInt16(offset);
+            if (entryLength < 4 || offset + entryLength > table.End)
+            {
+                break;
+            }
+
+            var entry = new MessageEntry
+            {
+                Start = offset,
+                Length = entryLength,
+                MessageId = id
+            };
+            table.Add(entry);
+
+            offset += entryLength;
+            id++;
+        }
+    }
+
+    public FourBytes LowId { get; set; }
+    public FourBytes HighId { get; set; }
+    public FourBytes OffsetToEntries { get; set; }
+}
+
+public class MessageEntry : Node
+{
+    public long MessageId { get; set; }
+
+    public override void Parse()
+    {
+        EntryLength = AddTwoBytes("Length");
+        Flags = AddTwoBytes("Flags");
+
+        int textLength = EntryLength.Value - 4;
+        if (textLength <= 0)
+        {
+            return;
+        }
+
+        var bytes = Buffer.ReadBytes(LastChildEnd, textLength);
+        string message = (Flags.Value & 1) != 0
+            ? System.Text.Encoding.Unicode.GetString(bytes)
+            : System.Text.Encoding.ASCII.GetString(bytes);
+        message = message.TrimEnd('\0', '\r', '\n');
+
+        AddBytes(textLength, message);
+        Text = $"0x{MessageId:X}: {message}";
+    }
+
+    public TwoBytes EntryLength { get; set; }
+    public TwoBytes Flags { get; set; }
+}
+
+public class StringTableResource : Resource
+{
+    protected override void ParseBytes(int start)
+    {
+        StringTable = new StringTableData
+        {
+            Start = start,
+            Length = Size.Value
+        };
+        Root.Add(StringTable);
+    }
+
+    public StringTableData StringTable { get; set; }
+}
+
+public class StringTableData : Node
+{
+    public StringTableData()
+    {
+        Text = "String table";
+    }
+
+    public override void Parse()
+    {
+        // A string table block holds 16 length-prefixed UTF-16 strings
+        for (int i = 0; i < 16 && LastChildEnd + 2 <= End; i++)
+        {
+            int length = Buffer.ReadUInt16(LastChildEnd);
+            if (2 + length * 2 > End - LastChildEnd)
+            {
+                break;
+            }
+
+            if (length == 0)
+            {
+                AddTwoBytes($"String {i}: (empty)");
+                continue;
+            }
+
+            var bytes = Buffer.ReadBytes(LastChildEnd + 2, length * 2);
+            string value = System.Text.Encoding.Unicode.GetString(bytes);
+            AddBytes(2 + length * 2, $"String {i}: {value}");
+        }
+
+        AddRemainingPadding();
+    }
+}
+
+public class GroupIconResource : Resource
+{
+    protected override void ParseBytes(int start)
+    {
+        GroupIcon = new GroupIconData
+        {
+            Start = start,
+            Length = Size.Value
+        };
+        Root.Add(GroupIcon);
+    }
+
+    public GroupIconData GroupIcon { get; set; }
+}
+
+public class GroupIconData : Node
+{
+    public GroupIconData()
+    {
+        Text = "Icon group";
+    }
+
+    public override void Parse()
+    {
+        Reserved = AddTwoBytes("Reserved");
+        IconType = AddTwoBytes("Type");
+        Count = AddTwoBytes("Count");
+
+        int count = Count.Value;
+        if (count < 0 || 6 + count * 14 > Length)
+        {
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            Add<GroupIconEntry>();
+        }
+
+        AddRemainingPadding();
+    }
+
+    public TwoBytes Reserved { get; set; }
+    public TwoBytes IconType { get; set; }
+    public TwoBytes Count { get; set; }
+}
+
+public class GroupIconEntry : Node
+{
+    public override void Parse()
+    {
+        Width = AddOneByte("Width");
+        Height = AddOneByte("Height");
+        ColorCount = AddOneByte("Color count");
+        Reserved = AddOneByte("Reserved");
+        Planes = AddTwoBytes("Planes");
+        BitCount = AddTwoBytes("Bit count");
+        BytesInResource = AddFourBytes("Bytes in resource");
+        IconId = AddTwoBytes("Icon id");
+
+        int width = Width.Value == 0 ? 256 : Width.Value;
+        int height = Height.Value == 0 ? 256 : Height.Value;
+        Text = $"Icon {IconId.Value}: {width}x{height} {BitCount.Value}bpp ({BytesInResource.Value} bytes)";
+    }
+
+    public OneByte Width { get; set; }
+    public OneByte Height { get; set; }
+    public OneByte ColorCount { get; set; }
+    public OneByte Reserved { get; set; }
+    public TwoBytes Planes { get; set; }
+    public TwoBytes BitCount { get; set; }
+    public FourBytes BytesInResource { get; set; }
+    public TwoBytes IconId { get; set; }
 }
 
 public class VersionResource : Resource
@@ -296,11 +552,20 @@ public class IdDirectoryEntry : Node
         [4] = "Menu",
         [5] = "Dialog",
         [6] = "String",
+        [7] = "FontDir",
+        [8] = "Font",
         [9] = "Accelerator",
         [10] = "StringData",
+        [11] = "MessageTable",
         [12] = "GroupCursor",
         [14] = "GroupIcon",
         [16] = "Version",
+        [17] = "DlgInclude",
+        [19] = "PlugPlay",
+        [20] = "VXD",
+        [21] = "AniCursor",
+        [22] = "AniIcon",
+        [23] = "HTML",
         [24] = "Manifest"
     };
 

@@ -37,6 +37,12 @@ public class WinCertificate : Node
     {
         DwLength = AddFourBytes("dwLength");
         int length = DwLength.Value;
+        int available = (int)System.Math.Min(Buffer.Length - Start, int.MaxValue);
+        if (length < 8 || length > available)
+        {
+            length = System.Math.Max(8, System.Math.Min(available, Parent.End - Start));
+        }
+
         Length = length;
 
         WRevision = AddTwoBytes("wRevision");
@@ -135,7 +141,7 @@ public class Asn1Node : Node
 
         Header = AddBytes(headerLength, $"Tag: {tagName}, Length: {contentLength}");
 
-        if (isConstructed && contentLength > 0)
+        if (isConstructed && contentLength > 0 && Depth < 64)
         {
             // Parse children
             int childEnd = offset + contentLength;
@@ -146,8 +152,13 @@ public class Asn1Node : Node
                     break;
                 }
 
-                var child = new Asn1Node();
+                int previousEnd = LastChildEnd;
+                var child = new Asn1Node { Depth = Depth + 1 };
                 Add(child);
+                if (LastChildEnd <= previousEnd)
+                {
+                    break;
+                }
             }
 
             Text = tagName;
@@ -280,6 +291,8 @@ public class Asn1Node : Node
 
         return oid;
     }
+
+    public int Depth { get; set; }
 
     public Node Header { get; set; }
 }

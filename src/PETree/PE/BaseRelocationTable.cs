@@ -56,7 +56,10 @@ public class BaseRelocationBlock : Node
                 2 => "LOW",
                 3 => "HIGHLOW",
                 4 => "HIGHADJ",
-                5 => "MIPS_JMPADDR",
+                5 => "MIPS_JMPADDR/ARM_MOV32",
+                7 => "THUMB_MOV32",
+                8 => "RISCV_LOW12S",
+                9 => "MIPS_JMPADDR16/IA64_IMM64",
                 10 => "DIR64",
                 _ => $"Type {type}"
             };

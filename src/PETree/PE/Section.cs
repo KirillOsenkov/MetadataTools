@@ -14,6 +14,14 @@ public class NativeCode : Node
     }
 }
 
+public class Overlay : Node
+{
+    public Overlay()
+    {
+        Text = "Overlay (data appended after the image)";
+    }
+}
+
 public class SectionTable : Node
 {
     public SectionTable(short count)

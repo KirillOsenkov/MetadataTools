@@ -43,8 +43,41 @@ public class PEFile : Node
 
     public bool IsPE32Plus => OptionalHeader.StandardFields.IsPE32Plus;
 
+    private bool HasValidPESignatures()
+    {
+        if (Buffer.Length < 0x40 || Buffer.ReadUInt16(0) != 0x5A4D)
+        {
+            return false;
+        }
+
+        int peHeaderPointer = Buffer.ReadInt32(0x3C);
+        if (peHeaderPointer == 0)
+        {
+            peHeaderPointer = 0x80;
+        }
+
+        if (peHeaderPointer < 0 || peHeaderPointer + 4 > Buffer.Length)
+        {
+            return false;
+        }
+
+        return Buffer.ReadUInt32(peHeaderPointer) == 0x00004550;
+    }
+
     public override void Parse()
     {
+        if (!HasValidPESignatures())
+        {
+            int unknownLength = (int)System.Math.Min(Buffer.Length, int.MaxValue);
+            Text = "Not a PE file";
+            if (unknownLength > 0)
+            {
+                Add(new Unknown { Length = unknownLength, Text = "Not a PE file" });
+            }
+
+            return;
+        }
+
         DOSHeader = Add<DOSHeader>("DOS Header");
 
         int peHeaderPointer = DOSHeader.CoffHeaderPointer.Value;
@@ -89,11 +122,10 @@ public class PEFile : Node
         // Add Rich header if found
         if (richHeaderStart > 0 && richHeaderEnd > richHeaderStart)
         {
-            var richHeader = new Node
+            var richHeader = new RichHeader
             {
                 Start = richHeaderStart,
-                Length = richHeaderEnd - richHeaderStart,
-                Text = "Rich Header"
+                Length = richHeaderEnd - richHeaderStart
             };
             Add(richHeader);
         }
@@ -162,8 +194,11 @@ public class PEFile : Node
             foreach (var debugDirectory in DebugDirectories.Directories)
             {
                 var address = debugDirectory.AddressOfRawData.Value;
-                var start = ResolveVirtualAddress(address);
-                if (start > 0)
+                var start = address != 0
+                    ? ResolveVirtualAddress(address)
+                    : debugDirectory.PointerToRawData.Value;
+                int size = debugDirectory.SizeOfData.Value;
+                if (start > 0 && size > 0 && start + size <= Buffer.Length)
                 {
                     Node entry = null;
                     if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb)
@@ -171,7 +206,7 @@ public class PEFile : Node
                         EmbeddedPdb = new EmbeddedPdb
                         {
                             Start = start,
-                            Length = debugDirectory.SizeOfData.Value
+                            Length = size
                         };
                         entry = EmbeddedPdb;
                     }
@@ -179,12 +214,44 @@ public class PEFile : Node
                     {
                         entry = RSDS = new RSDS() { Start = start };
                     }
+                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.Pogo)
+                    {
+                        entry = new PogoDebugData
+                        {
+                            Start = start,
+                            Length = size
+                        };
+                    }
+                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.PdbChecksum)
+                    {
+                        entry = new PdbChecksumDebugData
+                        {
+                            Start = start,
+                            Length = size
+                        };
+                    }
+                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.ExtendedDllCharacteristics)
+                    {
+                        entry = new ExtendedDllCharacteristicsDebugData
+                        {
+                            Start = start,
+                            Length = size
+                        };
+                    }
+                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.VcFeature)
+                    {
+                        entry = new VcFeatureDebugData
+                        {
+                            Start = start,
+                            Length = size
+                        };
+                    }
                     else
                     {
                         entry = new DebugDirectoryEntry
                         {
                             Start = start,
-                            Length = debugDirectory.SizeOfData.Value,
+                            Length = size,
                             Text = $"{debugDirectory.DirectoryType}"
                         };
                     }
@@ -202,7 +269,10 @@ public class PEFile : Node
 
         ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT, configure: iat => iat.IsPE32Plus = IsPE32Plus);
 
-        if (OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
+        // The startup stub is only present in managed images; a native image's
+        // entry point is ordinary code
+        if (CLIHeader != null &&
+            OptionalHeader.StandardFields.AddressOfEntryPoint is { } entrypointBytes &&
             entrypointBytes.Value is int entrypointRVA &&
             entrypointRVA != 0)
         {
@@ -234,6 +304,11 @@ public class PEFile : Node
 
         AddTable<BaseRelocationTable>(OptionalHeader.DataDirectories.BaseRelocationTable);
         AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport, text: "Bound import");
+        AddTable<DelayLoadImportTable>(OptionalHeader.DataDirectories.DelayImportDescriptor, configure: d =>
+        {
+            d.IsPE32Plus = IsPE32Plus;
+            d.PEFile = this;
+        });
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
         AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
         {
@@ -256,7 +331,11 @@ public class PEFile : Node
             tls.PEFile = this;
         });
 
+        AddCoffSymbolTable();
+
         ReadSingleFileBundle();
+
+        AddOverlay();
 
         AddNativeCode(allSections);
 
@@ -312,11 +391,11 @@ public class PEFile : Node
 
     private void ReadSingleFileBundle()
     {
-        int fileLength = (int)Buffer.Length;
+        long fileLength = Buffer.Length;
 
         // The bundle signature is embedded in the apphost, typically in the .text section
         // Search the PE portion of the file for it
-        int searchEnd = System.Math.Min(fileLength - BundleSignature.Length, 1024 * 1024);
+        int searchEnd = (int)System.Math.Min(fileLength - BundleSignature.Length, 1024 * 1024);
 
         int markerOffset = -1;
         for (int i = searchEnd; i >= 0; i--)
@@ -352,14 +431,15 @@ public class PEFile : Node
 
         // Validate the header offset: must be non-zero and within the file.
         // Non-bundle apphosts have zero here (the placeholder is all zeros).
+        // Node offsets are 32-bit, so anything past 2 GB can't be represented.
         long headerOffset = (long)Buffer.ReadUInt64(markerStart);
-        if (headerOffset <= 0 || headerOffset >= fileLength)
+        if (headerOffset <= 0 || headerOffset >= fileLength || headerOffset > int.MaxValue)
         {
             return;
         }
 
         // Extend PEFile to cover the entire file
-        Length = fileLength;
+        Length = (int)System.Math.Min(fileLength, int.MaxValue);
         var bundleMarker = new BundleMarker
         {
             Start = markerStart
@@ -377,7 +457,7 @@ public class PEFile : Node
         {
             long entryOffset = (long)entry.Offset.ReadUInt64();
             long entrySize = (long)entry.Size.ReadUInt64();
-            if (entrySize > 0 && entryOffset > 0)
+            if (entrySize > 0 && entryOffset > 0 && entryOffset + entrySize <= System.Math.Min(fileLength, int.MaxValue))
             {
                 var bundledFile = new BundledFile
                 {
@@ -389,6 +469,61 @@ public class PEFile : Node
                 entry.BundledFile = bundledFile;
                 Add(bundledFile);
             }
+        }
+    }
+
+    private void AddCoffSymbolTable()
+    {
+        int pointer = PEHeader.PointerToSymbolTable.Value;
+        int symbolCount = PEHeader.NumberOfSymbols.Value;
+        if (pointer <= 0 || symbolCount <= 0)
+        {
+            return;
+        }
+
+        const int symbolSize = 18;
+        long tableEnd = (long)pointer + (long)symbolCount * symbolSize;
+        if (tableEnd + 4 > Buffer.Length)
+        {
+            return;
+        }
+
+        var symbolTable = new CoffSymbolTable
+        {
+            Start = pointer,
+            Length = symbolCount * symbolSize,
+            SymbolCount = symbolCount
+        };
+        Add(symbolTable);
+
+        // The string table immediately follows; its leading 4-byte size includes itself
+        int stringTableStart = (int)tableEnd;
+        int stringTableSize = Buffer.ReadInt32(stringTableStart);
+        if (stringTableSize >= 4 && stringTableStart + stringTableSize <= Buffer.Length)
+        {
+            var stringTable = new CoffStringTable
+            {
+                Start = stringTableStart,
+                Length = stringTableSize
+            };
+            Add(stringTable);
+            symbolTable.StringTable = stringTable;
+            symbolTable.ApplyLongNames();
+        }
+    }
+
+    private void AddOverlay()
+    {
+        long fileLength = System.Math.Min(Buffer.Length, int.MaxValue);
+        int end = End;
+        if (fileLength > end)
+        {
+            var overlay = new Overlay
+            {
+                Start = end,
+                Length = (int)fileLength - end
+            };
+            Add(overlay);
         }
     }
 
@@ -484,22 +619,47 @@ public class PEFile : Node
         }
 
         AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
+
+        AddReadyToRunHeader();
+    }
+
+    private void AddReadyToRunHeader()
+    {
+        int nativeHeaderRVA = CLIHeader.ManagedNativeHeader.ReadInt32();
+        int nativeHeaderSize = Buffer.ReadInt32(CLIHeader.ManagedNativeHeader.Start + 4);
+        if (nativeHeaderRVA == 0 || nativeHeaderSize < 16)
+        {
+            return;
+        }
+
+        int offset = ResolveVirtualAddress(nativeHeaderRVA);
+        if (offset <= 0 || Buffer.ReadUInt32(offset) != 0x00525452)
+        {
+            return;
+        }
+
+        if (!IsRangeAvailable(offset, nativeHeaderSize))
+        {
+            return;
+        }
+
+        var readyToRunHeader = new ReadyToRunHeader
+        {
+            Start = offset,
+            Length = nativeHeaderSize
+        };
+        Add(readyToRunHeader);
     }
 
     private Node AddCertificateTable(DataDirectory dataDirectory)
     {
         if (dataDirectory.Size.Value > 0)
         {
-            var offset = dataDirectory.RVA.Value;
-            var resolved = offset;
-            if (resolved == 0)
-            {
-                resolved = offset;
-            }
-
+            // Unlike other data directories, the certificate table's "RVA"
+            // field is a plain file offset
             var node = new CertificateTable
             {
-                Start = resolved,
+                Start = dataDirectory.RVA.Value,
                 Length = dataDirectory.Size.Value
             };
 
@@ -576,39 +736,78 @@ public class PEFile : Node
 
             var lookupTable = ResolveVirtualAddress(lookupTableRva.Value);
 
-            var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
-            ImportTable.Add(importLookupTable);
-
-            for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+            if (lookupTable > 0)
             {
-                var entry = importLookupTable.Entries[j];
-
-                // For PE32+, the ordinal flag is bit 63; for PE32 it's bit 31
-                long value = IsPE32Plus
-                    ? (long)Buffer.ReadUInt64(entry.Start)
-                    : (long)Buffer.ReadUInt32(entry.Start);
-                if (value == 0)
+                var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
+                ImportTable.Add(importLookupTable);
+                AddImportNames(importLookupTable);
+            }
+            else
+            {
+                // Some linkers leave the lookup table RVA zero; the loader
+                // falls back to the address table, which holds the same entries
+                int addressTable = ResolveVirtualAddress(addressTableRva.Value);
+                if (addressTable > 0)
                 {
-                    continue;
-                }
-
-                // High bit set means import by ordinal, not by name
-                bool isOrdinal = IsPE32Plus ? (value & unchecked((long)0x8000000000000000)) != 0 : (value & 0x80000000) != 0;
-                if (!isOrdinal)
-                {
-                    int rva = (int)(value & 0x7FFFFFFF);
-                    var resolved = ResolveVirtualAddress(rva);
-                    var imageImportByName = new ImageImportByName() { Start = resolved };
-                    ImportTable.Add(imageImportByName);
+                    AddImportNamesFromRawTable(addressTable);
                 }
             }
 
-            var addressTable = ResolveVirtualAddress(addressTableRva.Value);
             var dllName = ResolveVirtualAddress(dllNameRva.Value);
             if (dllName > 0)
             {
                 var dllNameNode = new ZeroTerminatedString() { Start = dllName };
                 ImportTable.Add(dllNameNode);
+            }
+        }
+    }
+
+    private void AddImportNames(ImportLookupTable importLookupTable)
+    {
+        for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+        {
+            AddImportName(importLookupTable.Entries[j].Start);
+        }
+    }
+
+    private void AddImportNamesFromRawTable(int tableOffset)
+    {
+        int entrySize = IsPE32Plus ? 8 : 4;
+        for (int offset = tableOffset; offset + entrySize <= Buffer.Length; offset += entrySize)
+        {
+            long value = IsPE32Plus
+                ? (long)Buffer.ReadUInt64(offset)
+                : (long)Buffer.ReadUInt32(offset);
+            if (value == 0)
+            {
+                break;
+            }
+
+            AddImportName(offset);
+        }
+    }
+
+    private void AddImportName(int entryOffset)
+    {
+        // For PE32+, the ordinal flag is bit 63; for PE32 it's bit 31
+        long value = IsPE32Plus
+            ? (long)Buffer.ReadUInt64(entryOffset)
+            : (long)Buffer.ReadUInt32(entryOffset);
+        if (value == 0)
+        {
+            return;
+        }
+
+        // High bit set means import by ordinal, not by name
+        bool isOrdinal = IsPE32Plus ? (value & unchecked((long)0x8000000000000000)) != 0 : (value & 0x80000000) != 0;
+        if (!isOrdinal)
+        {
+            int rva = (int)(value & 0x7FFFFFFF);
+            var resolved = ResolveVirtualAddress(rva);
+            if (resolved > 0)
+            {
+                var imageImportByName = new ImageImportByName() { Start = resolved };
+                ImportTable.Add(imageImportByName);
             }
         }
     }
@@ -644,6 +843,13 @@ public class PEFile : Node
             return 0;
         }
 
+        // An RVA in the virtual-only tail of a section (VirtualSize > SizeOfRawData)
+        // has no backing file data
+        if (rva - section.VirtualAddress.Value >= section.SizeOfRawData.Value)
+        {
+            return 0;
+        }
+
         return ResolveVirtualAddressInSection(rva, section);
     }
 
@@ -666,7 +872,8 @@ public class PEFile : Node
         {
             var section = sections[i];
             var virtualAddress = section.VirtualAddress.Value;
-            if (rva >= virtualAddress && rva < virtualAddress + section.SizeOfRawData.Value)
+            int virtualExtent = Math.Max(section.VirtualSize.Value, section.SizeOfRawData.Value);
+            if (rva >= virtualAddress && rva < virtualAddress + virtualExtent)
             {
                 return section;
             }

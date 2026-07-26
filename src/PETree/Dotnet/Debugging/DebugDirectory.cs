@@ -67,9 +67,140 @@ public class DebugDirectory : Node
         Misc = 4,
         Exception = 5,
         Fixup = 6,
+        OmapToSrc = 7,
+        OmapFromSrc = 8,
         Borland = 9,
+        Reserved10 = 10,
+        Clsid = 11,
+        VcFeature = 12,
+        Pogo = 13,
+        Iltcg = 14,
+        Mpx = 15,
         Reproducible = 16,
         EmbeddedPortablePdb = 17,
         PdbChecksum = 19,
+        ExtendedDllCharacteristics = 20,
+    }
+}
+
+public class PogoDebugData : DebugDirectoryEntry
+{
+    public PogoDebugData()
+    {
+        Text = "POGO data (section contributions)";
+    }
+
+    public override void Parse()
+    {
+        Signature = AddFourBytes("Signature");
+
+        while (LastChildEnd + 8 < End)
+        {
+            Add<PogoEntry>();
+        }
+
+        AddRemainingPadding();
+    }
+
+    public FourBytes Signature { get; set; }
+}
+
+public class PogoEntry : Node
+{
+    public override void Parse()
+    {
+        RVA = AddFourBytes("RVA");
+        Size = AddFourBytes("Size");
+        Name = Add<ZeroTerminatedString>("Name");
+
+        int aligned = (LastChildEnd - Start + 3) & ~3;
+        if (Start + aligned > LastChildEnd)
+        {
+            AddPadding(Start + aligned - LastChildEnd);
+        }
+
+        Text = $"{Name.Text} RVA 0x{RVA.Value:X} ({Size.Value} bytes)";
+    }
+
+    public FourBytes RVA { get; set; }
+    public FourBytes Size { get; set; }
+    public ZeroTerminatedString Name { get; set; }
+}
+
+public class PdbChecksumDebugData : DebugDirectoryEntry
+{
+    public PdbChecksumDebugData()
+    {
+        Text = "PDB checksum";
+    }
+
+    public override void Parse()
+    {
+        AlgorithmName = Add<ZeroTerminatedString>("Algorithm");
+        int hashLength = End - LastChildEnd;
+        if (hashLength > 0)
+        {
+            Checksum = AddBytes(hashLength, "Checksum");
+        }
+
+        Text = $"PDB checksum ({AlgorithmName.Text})";
+    }
+
+    public ZeroTerminatedString AlgorithmName { get; set; }
+    public Node Checksum { get; set; }
+}
+
+public class ExtendedDllCharacteristicsDebugData : DebugDirectoryEntry
+{
+    public ExtendedDllCharacteristicsDebugData()
+    {
+        Text = "Extended DLL characteristics";
+    }
+
+    public override void Parse()
+    {
+        Characteristics = AddFourBytes("Characteristics");
+
+        int value = Characteristics.Value;
+        var flags = new System.Collections.Generic.List<string>();
+        if ((value & 0x01) != 0)
+        {
+            flags.Add("CET compatible");
+        }
+
+        if ((value & 0x40) != 0)
+        {
+            flags.Add("Forward CFI compatible");
+        }
+
+        if ((value & 0x80) != 0)
+        {
+            flags.Add("Hotpatch compatible");
+        }
+
+        if (flags.Count > 0)
+        {
+            Text = $"Extended DLL characteristics: {string.Join(", ", flags)}";
+        }
+    }
+
+    public FourBytes Characteristics { get; set; }
+}
+
+public class VcFeatureDebugData : DebugDirectoryEntry
+{
+    public VcFeatureDebugData()
+    {
+        Text = "VC feature data";
+    }
+
+    public override void Parse()
+    {
+        AddFourBytes("Pre-VC++ 11 count");
+        AddFourBytes("C/C++ count");
+        AddFourBytes("/GS count");
+        AddFourBytes("/sdl count");
+        AddFourBytes("GuardN count");
+        AddRemainingPadding();
     }
 }
