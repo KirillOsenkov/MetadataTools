@@ -153,7 +153,7 @@ namespace GuiLabs.Metadata
             byte[] pubKeyData)
         {
             var stream = new MemoryStream(3 * sizeof(uint) + s_offsetToKeyData + pubKeyData.Length);
-            var w = new StreamWriter(stream);
+            var w = new BinaryWriter(stream);
             w.Write((uint)AlgorithmId.RsaSign);
             w.Write((uint)AlgorithmId.Sha);
             w.Write((uint)(s_offsetToKeyData + pubKeyData.Length));

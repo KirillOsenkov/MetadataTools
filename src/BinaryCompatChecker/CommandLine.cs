@@ -62,6 +62,11 @@ public class Invocation
             arguments.Add($"-baseline:\"{BaselinePath}\"");
         }
 
+        if (!string.IsNullOrEmpty(ReportPath))
+        {
+            arguments.Add($"-out:\"{ReportPath}\"");
+        }
+
         if (Resolve != null)
         {
             foreach (var resolve in Resolve)
@@ -197,6 +202,7 @@ public class CommandLine
             ReportVersionMismatch = ReportVersionMismatch,
             ReportIntPtrConstructors = ReportIntPtrConstructors,
             ReportUnreferencedAssemblies = ReportUnreferencedAssemblies,
+            IgnoreUnreferencedAssemblies = IgnoreUnreferencedAssemblies,
             ReportFacade = ReportFacade,
             ReportMissingAssemblies = ReportMissingAssemblies,
             ReportMissingTypes = ReportMissingTypes,
@@ -806,7 +812,8 @@ public class CommandLine
                 !first.Contains("*") &&
                 !first.Contains("?") &&
                 first != "." &&
-                first != "..")
+                first != ".." &&
+                Directory.Exists(Path.Combine(root, first)))
             {
                 root = Path.Combine(root, first);
                 parts = parts.Skip(1).ToArray();
@@ -863,7 +870,7 @@ public class CommandLine
                 return false;
             }
 
-            return AddFilesInDirectory(root, parts.Skip(1).ToArray());
+            return AddFiles(root, parts.Skip(1).ToArray());
         }
 
         var subdirectories = Directory.GetDirectories(root);

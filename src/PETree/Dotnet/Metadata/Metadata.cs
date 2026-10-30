@@ -357,7 +357,7 @@ public class UserString : Node
             Text = str;
             Utf16Chars = AddBytes(length, "Utf-16 chars");
 
-            Add<OneByte>("Final byte");
+            FinalByte = Add<OneByte>("Final byte");
         }
     }
 

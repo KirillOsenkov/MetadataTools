@@ -183,7 +183,7 @@ namespace ListDiff
             {
                 for (var j = 1; j <= n - start; j++)
                 {
-                    if (match(x[i - 1], y[j - 1]))
+                    if (match(x[start + i - 1], y[start + j - 1]))
                     {
                         c[i, j] = c[i - 1, j - 1] + 1;
                     }

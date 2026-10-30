@@ -44,7 +44,7 @@ namespace Ref12.Diagnostics.Extraction
 
         public override long Length
         {
-            get { return int.MaxValue; }
+            get { return _len; }
         }
 
         public override long Position

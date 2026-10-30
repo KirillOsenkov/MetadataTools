@@ -279,7 +279,7 @@ namespace MetadataTools
         public string DownloadPdb(string serverUrl)
         {
             var client = new HttpClient();
-            var url = $"{serverUrl}/{AssemblyShortName}.pdb/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
+            var url = $"{serverUrl}/{System.IO.Path.GetFileName(Path)}/{Guid.ToString("N").ToUpperInvariant()}{Age}/file.ptr";
             string text;
             try
             {

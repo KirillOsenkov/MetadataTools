@@ -169,7 +169,7 @@ public static class TextUtilities
 
         if (previousWasCarriageReturn)
         {
-            spanCollector(new Span(currentPosition, 0), LineEndingKind.None);
+            spanCollector(new Span(currentPosition + currentLineLength, 0), LineEndingKind.None);
         }
     }
 

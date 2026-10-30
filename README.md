@@ -37,6 +37,16 @@ dotnet tool update -g pdb
  * **LargeAddressAware** &mdash; set the `LargeAddressAware` bit in a 32-bit executable to unlock the 4 GB user-mode address space.
  * **ReadAssemblyVersion** &mdash; quickly read an assembly's version.
 
+## Regression tests
+
+Run the focused semantic regression suite with .NET 8 or later:
+
+```
+dotnet test src\MetadataTools.Tests\MetadataTools.Tests.csproj
+```
+
+The tests use synthetic inputs and do not scan the local filesystem.
+
 ## Common workflows
 
 | Question | Command |

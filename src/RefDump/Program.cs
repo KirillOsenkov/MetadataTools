@@ -482,6 +482,7 @@ namespace RefDump
                 if (arg == "-m" || arg == "/m")
                 {
                     OutputMembers = true;
+                    OutputTypes = true;
                     continue;
                 }
 

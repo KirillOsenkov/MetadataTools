@@ -183,7 +183,7 @@ namespace MetadataTools
                 else if (!PdbInfo.IsMatch(file, pdb))
                 {
                     File.Delete(pdb);
-                    DownloadSymbols(file, pdb);
+                    DownloadSymbols(file, symbolPath);
                 }
             }
         }

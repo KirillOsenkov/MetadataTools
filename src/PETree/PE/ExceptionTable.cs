@@ -50,8 +50,8 @@ public class ExceptionTable : Node
         {
             if (entrySize == 12)
             {
-                var entry = Add<RuntimeFunction>("RUNTIME_FUNCTION");
-                entry.PEFile = PEFile;
+                var entry = new RuntimeFunction { PEFile = PEFile, Text = "RUNTIME_FUNCTION" };
+                Add(entry);
                 AddNativeCodeRange(entry.BeginAddress.Value, entry.EndAddress.Value);
             }
             else

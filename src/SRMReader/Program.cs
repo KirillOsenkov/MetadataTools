@@ -57,7 +57,12 @@ class Program
 
     private static string GetCustomAttributeStringArgument(MetadataReader reader, System.Reflection.Metadata.CustomAttribute attribute)
     {
-        var signature = reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor).Signature;
+        var signature = attribute.Constructor.Kind switch
+        {
+            HandleKind.MethodDefinition => reader.GetMethodDefinition((MethodDefinitionHandle)attribute.Constructor).Signature,
+            HandleKind.MemberReference => reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor).Signature,
+            _ => throw new InvalidOperationException()
+        };
         var signatureReader = reader.GetBlobReader(signature);
         var valueReader = reader.GetBlobReader(attribute.Value);
 

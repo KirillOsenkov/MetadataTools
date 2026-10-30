@@ -40,9 +40,6 @@ namespace GuiLabs.Metadata
         public uint SizeOfImage { get; private set; }
 
         private static PEFile NotAPEFile = new PEFile();
-        private static PEFile Native64Bit = new PEFile { IsValidPEFile = true, Platform64Bit = true };
-        private static PEFile Native32Bit = new PEFile { IsValidPEFile = true };
-        private static PEFile Managed = new PEFile { IsValidPEFile = true, ManagedAssembly = true };
 
         public static bool IsManagedAssembly(Stream stream)
         {
@@ -97,7 +94,7 @@ namespace GuiLabs.Metadata
                         return NotAPEFile;
                     }
 
-                    PEFile result = NotAPEFile;
+                    PEFile result = new PEFile();
 
                     ushort platform = (ushort)binaryReader.ReadInt16();
 
@@ -105,11 +102,12 @@ namespace GuiLabs.Metadata
                     // 0x014C for x86
                     if (platform == 0x8664)
                     {
-                        result = Native64Bit;
+                        result.IsValidPEFile = true;
+                        result.Platform64Bit = true;
                     }
                     else if (platform == 0x014C)
                     {
-                        result = Native32Bit;
+                        result.IsValidPEFile = true;
                     }
 
                     stream.Position += 2;
@@ -143,7 +141,9 @@ namespace GuiLabs.Metadata
                         return result;
                     }
 
-                    return Managed;
+                    result.IsValidPEFile = true;
+                    result.ManagedAssembly = true;
+                    return result;
                 }
             }
             catch
