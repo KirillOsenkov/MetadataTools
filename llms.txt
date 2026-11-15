@@ -240,16 +240,19 @@ few reflection patterns. Full description: `src/FindUnusedMembers/readme.md`.
 ### Invocation
 ```
 FindUnusedMembers <target.dll>... [-c:<dir|file|dir\pattern>]... [-keepPublic] [-roots:<file>] [-r:<dir>]
-                  [-why:<text>]... [-out:<file>] [-v]
+                  [-why:<text>]... [-out:<file>] [-accessors] [-v]
 ```
 Without `-c`, the public API of the targets is treated as used and the report shows unused internal code.
 
 ### Report sections
 * `Unused types` / `Unused members` — documentation IDs (`T:`, `M:`, `F:`, `P:`, `E:`) with `file(line)` from the PDB.
   `(written but never read)` marks fields and auto-properties that are assigned but never read; delete the assignments too.
-* `Unused accessors of used properties` — a getter or setter that nothing calls.
+* `Unused accessors of used properties` — only with `-accessors`: a getter or setter of a used property that nothing
+  calls. Off by default, because deleting one accessor changes the API shape for a small gain.
 * `Constants` — `const` fields of used types. IL never references constants (their values are copied), so search the
   source of targets and consumers for each name before deleting.
+* `Classes that are never instantiated` — used classes whose instance members are used but no instance constructor is.
+  The code that reaches those members is usually dead too (type tests, comparers); delete it together by hand.
 * `Reflection call sites` — places where string-based access was detected; members named there were treated as used.
 * `Why '<text>'` — for each match, the chain of references from a root.
 
@@ -258,7 +261,10 @@ Without `-c`, the public API of the targets is treated as used and the report sh
    `DocumentationCommentId.GetSymbolsForDeclarationId`), rebuild the target **and** the consumers.
 2. Build errors after a deletion point to: code the compiler removed as unreachable (`if (ConstFalse) return;`) but
    that still refers to the member in source; XAML that the XAML compiler resolves although it is never loaded
-   (`MC3050`, `MC4005`); a missing `using` for a namespace that became empty.
+   (`MC3050`, `MC4005`); a missing `using` for a namespace that became empty; `nameof(X)` of a deleted member
+   (replace it with `"X"`). The compiler reports only declaration errors until those are fixed, so a short error list
+   after the first rebuild can grow after the next one.
+   New `CS0649` warnings (field is never assigned) point to state whose writers were deleted; the reads are dead code.
 3. Rerun the tool on the new build until nothing is reported (second-order dead code appears after each pass).
 4. Run the app. Runtime failures (`ArgumentException: Property set method not found`, `event not found`,
    `MissingMethodException`) mean access by name that no heuristic covers: restore the member and add it to `-roots:`.

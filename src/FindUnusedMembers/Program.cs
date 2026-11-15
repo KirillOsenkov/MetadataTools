@@ -18,6 +18,7 @@ namespace FindUnusedMembers
         private string outputFile;
         private bool keepPublicApi;
         private bool verbose;
+        private bool reportAccessors;
         private string dumpBaml;
 
         static int Main(string[] args)
@@ -73,6 +74,10 @@ namespace FindUnusedMembers
                 else if (arg is "-v" or "/v")
                 {
                     verbose = true;
+                }
+                else if (arg is "-accessors" or "/accessors")
+                {
+                    reportAccessors = true;
                 }
                 else if (TryGetValue(arg, "dumpBaml", out value))
                 {
@@ -132,7 +137,7 @@ namespace FindUnusedMembers
                 resolver.AddSearchDirectory(Path.GetFullPath(directory));
             }
 
-            var analyzer = new Analyzer(resolver);
+            var analyzer = new Analyzer(resolver) { KeepAllAccessors = !reportAccessors };
             foreach (var file in targetFiles)
             {
                 analyzer.AddTarget(file);
@@ -155,7 +160,7 @@ namespace FindUnusedMembers
 
             analyzer.Run();
 
-            var report = new Report(analyzer, keepPublic, verbose);
+            var report = new Report(analyzer, keepPublic, verbose, reportAccessors);
             var text = report.Build(whyQueries);
             if (outputFile != null)
             {
@@ -225,6 +230,9 @@ compiled XAML (BAML) in the targets and the consumers.
   -why:<text>       For every used member whose ID contains <text>, print the
                     chain of references that keeps it. Repeatable.
   -out:<file>       Write the report to a file.
+  -accessors        Also list the unused getter or setter of a used property.
+                    Off by default: deleting one accessor changes the shape of
+                    an API and saves little.
   -v                Also list resolution warnings.
   -dumpBaml:<name>  Print the records of the target BAML resources whose name
                     contains <name> (diagnostics).
@@ -246,15 +254,17 @@ Examples:
         private readonly Analyzer analyzer;
         private readonly bool keepPublic;
         private readonly bool verbose;
+        private readonly bool reportAccessors;
         private readonly StringBuilder sb = new StringBuilder();
 
         public string Summary { get; private set; }
 
-        public Report(Analyzer analyzer, bool keepPublic, bool verbose)
+        public Report(Analyzer analyzer, bool keepPublic, bool verbose, bool reportAccessors)
         {
             this.analyzer = analyzer;
             this.keepPublic = keepPublic;
             this.verbose = verbose;
+            this.reportAccessors = reportAccessors;
         }
 
         public string Build(IReadOnlyList<string> whyQueries)
@@ -263,6 +273,8 @@ Examples:
             var unusedMembers = new List<(string Id, string Location)>();
             var unusedAccessors = new List<(string Id, string Location)>();
             var constants = new List<(string Id, string Location)>();
+            var reportedTypes = new HashSet<TypeDefinition>();
+            var neverInstantiated = new List<(string Id, string Location)>();
             int totalTypes = 0;
             int totalMembers = 0;
 
@@ -276,15 +288,27 @@ Examples:
                     }
 
                     totalTypes++;
-                    if (!analyzer.IsMarked(type))
+                    if (!analyzer.IsMarked(type) && !HasConstants(type))
                     {
-                        if (type.IsNested && !analyzer.IsMarked(type.DeclaringType))
+                        if (type.IsNested && reportedTypes.Contains(type.DeclaringType))
                         {
+                            reportedTypes.Add(type);
                             continue;
                         }
 
+                        reportedTypes.Add(type);
                         unusedTypes.Add((DocumentationId.Get(type), GetLocation(type)));
                         continue;
+                    }
+
+                    // A type that holds constants is never reported as a whole: code that uses a constant
+                    // contains a copy of its value, not a reference to the type. Its constants are listed
+                    // for a source search, and its other members are listed individually.
+
+                    if (analyzer.IsMarked(type) && !analyzer.IsInstantiated(type) &&
+                        Analyzer.GetMembers(type).Any(m => !IsStatic(m) && !(m is MethodDefinition { IsConstructor: true }) && analyzer.IsMarked(m)))
+                    {
+                        neverInstantiated.Add((DocumentationId.Get(type), GetLocation(type)));
                     }
 
                     foreach (var member in Analyzer.GetMembers(type))
@@ -300,7 +324,8 @@ Examples:
                 }
             }
 
-            Summary = $"{unusedTypes.Count} of {totalTypes} types and {unusedMembers.Count} of {totalMembers} members in used types are unused; {unusedAccessors.Count} unused accessors, {constants.Count} constants to check by hand.";
+            var accessorSummary = reportAccessors ? $"{unusedAccessors.Count} unused accessors, " : "";
+            Summary = $"{unusedTypes.Count} of {totalTypes} types and {unusedMembers.Count} of {totalMembers} members in used types are unused; {accessorSummary}{constants.Count} constants to check by hand.";
 
             sb.AppendLine("Targets:");
             foreach (var assembly in analyzer.Targets)
@@ -330,8 +355,12 @@ Examples:
 
             WriteSection("Unused types", unusedTypes);
             WriteSection("Unused members", unusedMembers);
-            WriteSection("Unused accessors of used properties", unusedAccessors);
+            if (reportAccessors)
+            {
+                WriteSection("Unused accessors of used properties", unusedAccessors);
+            }
             WriteSection("Constants (compilers copy constant values into the code that uses them, so usage is not visible in IL; check the source)", constants);
+            WriteSection("Classes that are never instantiated (no instance constructor is used, so their instance members are only reached through null references or a generic interface; check by hand)", neverInstantiated);
 
             sb.AppendLine($"Reflection call sites ({analyzer.ReflectionSites.Count}) - members named by these strings were kept; check by hand:");
             foreach (var site in analyzer.ReflectionSites.OrderBy(s => s.Assembly).ThenBy(s => s.Method))
@@ -435,6 +464,28 @@ Examples:
 
                     return;
             }
+        }
+
+        private static bool IsStatic(IMemberDefinition member)
+        {
+            switch (member)
+            {
+                case MethodDefinition method:
+                    return method.IsStatic;
+                case FieldDefinition field:
+                    return field.IsStatic;
+                case PropertyDefinition property:
+                    return (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
+                case EventDefinition @event:
+                    return @event.AddMethod?.IsStatic == true;
+                default:
+                    return true;
+            }
+        }
+
+        private static bool HasConstants(TypeDefinition type)
+        {
+            return !type.IsEnum && type.Fields.Any(f => f.IsLiteral && f.HasConstant);
         }
 
         private bool IsWrittenOnlyInsideTarget(PropertyDefinition property)

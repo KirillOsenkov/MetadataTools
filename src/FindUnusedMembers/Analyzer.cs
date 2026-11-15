@@ -43,6 +43,12 @@ namespace FindUnusedMembers
         private readonly HashSet<TypeDefinition> virtualInfoComputed = new HashSet<TypeDefinition>();
         private readonly HashSet<Guid> visitedConsumers = new HashSet<Guid>();
 
+        /// <summary>
+        /// When true, using one accessor of a property keeps the other accessors too, so that code reached only
+        /// from those accessors (for example the backing field read by a getter) is not reported either.
+        /// </summary>
+        public bool KeepAllAccessors { get; set; }
+
         public List<ReflectionSite> ReflectionSites { get; } = new List<ReflectionSite>();
         public List<string> Consumers { get; } = new List<string>();
         public List<string> BamlConsumers { get; } = new List<string>();
@@ -228,6 +234,16 @@ namespace FindUnusedMembers
                         action();
                     }
                 }
+            }
+        }
+
+        private readonly HashSet<MethodDefinition> keptAccessors = new HashSet<MethodDefinition>();
+
+        private void ProcessKeptAccessor(MethodDefinition accessor)
+        {
+            if (accessor != null && !marked.Contains(accessor) && keptAccessors.Add(accessor))
+            {
+                worklist.Enqueue(accessor);
             }
         }
 
@@ -566,6 +582,15 @@ namespace FindUnusedMembers
             {
                 case TypeReference type:
                     MarkTypeReference(type, from, "typeof() in custom attribute");
+
+                    // Attributes such as [TypeConverter(typeof(X))] or [Editor(typeof(X))] name a type that
+                    // a framework creates through reflection.
+                    var attributeType = ResolveTargetType(type);
+                    if (attributeType != null && !attributeType.IsAbstract)
+                    {
+                        MarkInstanceConstructors(attributeType, from, "typeof() in custom attribute; created through reflection");
+                    }
+
                     break;
                 case CustomAttributeArgument nested:
                     MarkAttributeArgument(nested, from, context);
@@ -663,6 +688,41 @@ namespace FindUnusedMembers
         private static MethodDefinition GetDefaultConstructor(TypeDefinition type)
         {
             return type.Methods.FirstOrDefault(m => m.IsConstructor && !m.IsStatic && m.Parameters.Count == 0);
+        }
+
+        /// <summary>
+        /// A type that is named in a string may be created through reflection, which calls a constructor
+        /// that the IL does not show.
+        /// </summary>
+        private void MarkInstanceConstructors(TypeDefinition type, IMemberDefinition from, string text)
+        {
+            foreach (var constructor in type.Methods.Where(m => m.IsConstructor && !m.IsStatic))
+            {
+                Mark(constructor, from, text);
+            }
+        }
+
+        private static bool InheritsFrom(TypeDefinition type, string baseTypeFullName)
+        {
+            return FindInHierarchy(type.BaseType == null ? null : TryResolveStatic(type.BaseType),
+                t => t.FullName == baseTypeFullName ? t : null) != null;
+        }
+
+        private static bool Implements(TypeDefinition type, string interfaceFullName)
+        {
+            return FindInHierarchy(type, t => t.Interfaces.Any(i => i.InterfaceType.FullName == interfaceFullName) ? t : null) != null;
+        }
+
+        private static TypeDefinition TryResolveStatic(TypeReference type)
+        {
+            try
+            {
+                return type.Resolve();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         #endregion
@@ -1225,6 +1285,7 @@ namespace FindUnusedMembers
             if (targetTypesByFullName.TryGetValue(value.Trim(), out var namedType))
             {
                 Mark(namedType, from, text + " (type name string)");
+                MarkInstanceConstructors(namedType, from, text + " (type name string)");
             }
 
             foreach (var identifier in GetIdentifiers(value))
@@ -1385,6 +1446,7 @@ namespace FindUnusedMembers
                         (value.Contains(',') && targetTypesByFullName.TryGetValue(value.Substring(0, value.IndexOf(',')).Trim(), out namedType)))
                     {
                         Mark(namedType, from, "type name string in " + DescribeMethod(method));
+                        MarkInstanceConstructors(namedType, from, "type name string in " + DescribeMethod(method));
                     }
                 }
             }
@@ -1772,6 +1834,21 @@ namespace FindUnusedMembers
                 }
             }
 
+            if (!type.IsAbstract && (InheritsFrom(type, "System.Runtime.InteropServices.SafeHandle") ||
+                InheritsFrom(type, "System.Runtime.InteropServices.CriticalHandle")))
+            {
+                Mark(GetDefaultConstructor(type), type, "created by the interop marshaler for a returned handle");
+            }
+
+            if (!type.IsInterface && Implements(type, "System.Runtime.Serialization.ISerializable"))
+            {
+                var deserializationConstructor = type.Methods.FirstOrDefault(m => m.IsConstructor && !m.IsStatic &&
+                    m.Parameters.Count == 2 &&
+                    m.Parameters[0].ParameterType.FullName == "System.Runtime.Serialization.SerializationInfo" &&
+                    m.Parameters[1].ParameterType.FullName == "System.Runtime.Serialization.StreamingContext");
+                Mark(deserializationConstructor, type, "deserialization constructor of an ISerializable type");
+            }
+
             if (interopTypes.Contains(type))
             {
                 foreach (var field in type.Fields.Where(f => !f.IsStatic))
@@ -1888,6 +1965,13 @@ namespace FindUnusedMembers
             if (accessorOwners.TryGetValue(method, out var owner))
             {
                 Mark(owner, method, "accessor");
+                if (KeepAllAccessors && owner is PropertyDefinition ownerProperty)
+                {
+                    // The unused accessor is not reported, so it stays in the source; whatever it uses stays too.
+                    // The accessor itself is not marked, so a write-only auto-property is still recognized.
+                    ProcessKeptAccessor(ownerProperty.GetMethod);
+                    ProcessKeptAccessor(ownerProperty.SetMethod);
+                }
             }
 
             if (method.IsSpecialName && method.IsStatic && operatorPairs.TryGetValue(method.Name, out var pairName))
@@ -2004,6 +2088,35 @@ namespace FindUnusedMembers
             }
 
             return changed;
+        }
+
+        /// <summary>
+        /// A type can have instances when it is a value type or an interface (implemented elsewhere), when it
+        /// is imported from COM, or when one of its instance constructors is used. A derived constructor
+        /// calls the base constructor, so a used derived class makes its base classes count as instantiated.
+        /// </summary>
+        public bool IsInstantiated(TypeDefinition type)
+        {
+            if (type.IsValueType || type.IsInterface || type.IsImport || interopTypes.Contains(type))
+            {
+                // Classes with an interop layout are created by the marshaler (for example Marshal.PtrToStructure).
+                return true;
+            }
+
+            bool hasConstructor = false;
+            foreach (var method in type.Methods)
+            {
+                if (method.IsConstructor && !method.IsStatic)
+                {
+                    hasConstructor = true;
+                    if (marked.Contains(method))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return !hasConstructor;
         }
 
         private VirtualInfo GetOrCreateVirtualInfo(MethodDefinition method)

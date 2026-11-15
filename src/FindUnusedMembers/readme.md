@@ -21,6 +21,7 @@ a library that its own public API does not reach.
 | `-r:<dir>` | Extra directory to resolve references from. Repeatable. |
 | `-why:<text>` | For every used member whose ID contains `<text>`, print the chain of references that marks it as used. Repeatable. |
 | `-out:<file>` | Write the report to a file. |
+| `-accessors` | Also list the unused getter or setter of a used property. Off by default: deleting one accessor changes the shape of an API (a read-write property becomes read-only or write-only) and saves little. |
 | `-v` | Also list resolution warnings. |
 | `-dumpBaml:<name>` | Print the records of the BAML resources of the target whose name contains `<name>` (for diagnostics). |
 
@@ -43,6 +44,16 @@ be reached:
 * Enum members, delegate members, members of COM interfaces, fields of types with an interop layout and members with
   serialization or composition attributes are kept with their type. C# operator pairs (`==` and `!=`) are kept
   together.
+* Constructors that the runtime calls through reflection are kept with their type: the parameterless constructor of a
+  `SafeHandle` or `CriticalHandle` subclass (the interop marshaler creates it for a returned handle), the
+  `(SerializationInfo, StreamingContext)` constructor of an `ISerializable` type, and the constructors of a type that
+  is named by `typeof` in an attribute (`[TypeConverter(typeof(X))]`) or by a type name string.
+* Without `-accessors`, the unused accessor of a used property is kept, and so is everything that accessor uses (for
+  example the field that a getter returns). A get/set auto-property whose getter is never called is still reported as
+  `(written but never read)`.
+* A type that declares constants is never reported as a whole unused type, because the code that uses a constant holds
+  a copy of its value and no reference to the type. Its constants are listed for a source search and its other
+  members are listed one by one. After its constants are deleted, a later run reports the empty type.
 
 ## Heuristics for reflection and string-based access
 
@@ -57,6 +68,11 @@ be reached:
 The `Reflection call sites` section of the report lists the places where these heuristics applied, and reflection calls
 whose arguments are not constants. Check them by hand.
 
+The `Classes that are never instantiated` section lists used classes with used instance members but no used instance
+constructor. Their instance members can only run on a null reference, which usually means that the code which reaches
+them is dead too (for example a type test `x is Foo` or a comparer for `Foo`). Delete such a class together with that
+code by hand.
+
 ## Limitations
 
 * Constant values are copied into the code that uses them, so the IL shows no reference to a `const` field. The report
@@ -65,6 +81,10 @@ whose arguments are not constants. Check them by hand.
   the IL, but it still refers to members in the source. Delete that code too, or keep the members.
 * Members that are accessed by name through reflection, `dynamic`, serialization or data binding from code that the
   heuristics do not cover are reported as unused. Before deleting a member, search the source for its name.
+* `nameof(X)` compiles to the string `"X"`, so a member that is used only in `nameof` is reported as unused. After the
+  member is deleted, replace each such `nameof(X)` with `"X"`; serialization keys and messages stay the same.
+* Interface implementations are matched without regard to the generic arguments of the interface, so a class that
+  implements `IComparer<A>` and `IComparer<B>` keeps both implementations when either is used.
 * A XAML resource that is never looked up can still be required by the XAML compiler. If a build fails with `MC3050` or
   `MC4005` after a deletion, the type or attached property accessor is referenced from XAML.
 
