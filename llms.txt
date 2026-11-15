@@ -19,6 +19,7 @@ deduplicate / sort output so it's diffable.
 2. [Decision tree](#decision-tree) — pick the right tool for the question
 3. [lbi](#lbi) — list binary info (versions, hashes, signing, MVID)
 4. [refdump](#refdump) — dump assembly references, filter by name, list consumed types/members, emit a graph
+   [FindUnusedMembers](#findunusedmembers) — types/members of an assembly that no consumer can reach (dead code)
 5. [checkbinarycompat](#checkbinarycompat) — validate references + binding redirects, baseline-driven CI gate
 6. [pdb](#pdb) — `.pdb` info, dll/pdb match, symbol-server download
 7. [mvid](#mvid), [FakeSign](#fakesign), [Corflags](#corflags) — small single-purpose helpers
@@ -32,6 +33,7 @@ deduplicate / sort output so it's diffable.
 dotnet tool update -g checkbinarycompat   # binary compat + binding redirects
 dotnet tool update -g lbi                  # list binary info (versions, hashes, signing, mvid, ...)
 dotnet tool update -g refdump              # dump assembly references (filterable, with types/members)
+dotnet tool update -g FindUnusedMembers    # types/members of an assembly unused by a set of consumers
 dotnet tool update -g pdb                  # .pdb info, dll/pdb match, download from symbol server
 ```
 
@@ -68,6 +70,8 @@ Rule of thumb: **lbi** = what is it · **refdump** = what does it reference · *
 | Which `.dll`s in this folder reference `Newtonsoft.Json`? | `refdump *.dll -s -a:Newtonsoft.Json` (drop `-t -m` from the workhorse) |
 | What types/members of `X` does `foo.dll` actually use? | `refdump foo.dll -t -m -a:X` (single-file form of the workhorse) |
 | Generate a Graphviz reference graph of these assemblies | `refdump *.dll -g` (writes `AssemblyGraph.txt`) |
+| Which types/members of `Lib.dll` does nothing in `bin\Debug` use (so they can be deleted)? | `FindUnusedMembers Lib.dll -c:bin\Debug -out:unused.txt` |
+| Why is `Lib.Foo.Bar` considered used? | `FindUnusedMembers Lib.dll -c:bin\Debug -why:Foo.Bar` |
 
 ### Does it all fit together? (checkbinarycompat)
 
@@ -224,6 +228,46 @@ are short assembly names (no version). You can answer most topology questions by
 | Strongly connected components / cycles | Standard graph algorithm on the edge list. Cycles between product assemblies are usually a smell. |
 
 For static rendering: `dot -Tsvg AssemblyGraph.txt -o graph.svg`.
+
+---
+
+## FindUnusedMembers
+
+Lists the types and members of target assemblies that cannot be reached from consumer assemblies. Reachability is
+computed over IL, metadata, overrides/interface implementations, compiled XAML (BAML) of targets and consumers, and a
+few reflection patterns. Full description: `src/FindUnusedMembers/readme.md`.
+
+### Invocation
+```
+FindUnusedMembers <target.dll>... [-c:<dir|file|dir\pattern>]... [-keepPublic] [-roots:<file>] [-r:<dir>]
+                  [-why:<text>]... [-out:<file>] [-v]
+```
+Without `-c`, the public API of the targets is treated as used and the report shows unused internal code.
+
+### Report sections
+* `Unused types` / `Unused members` — documentation IDs (`T:`, `M:`, `F:`, `P:`, `E:`) with `file(line)` from the PDB.
+  `(written but never read)` marks fields and auto-properties that are assigned but never read; delete the assignments too.
+* `Unused accessors of used properties` — a getter or setter that nothing calls.
+* `Constants` — `const` fields of used types. IL never references constants (their values are copied), so search the
+  source of targets and consumers for each name before deleting.
+* `Reflection call sites` — places where string-based access was detected; members named there were treated as used.
+* `Why '<text>'` — for each match, the chain of references from a root.
+
+### Removal loop (what worked on a real WPF library)
+1. Run the tool, delete the reported declarations (documentation IDs map 1:1 to Roslyn
+   `DocumentationCommentId.GetSymbolsForDeclarationId`), rebuild the target **and** the consumers.
+2. Build errors after a deletion point to: code the compiler removed as unreachable (`if (ConstFalse) return;`) but
+   that still refers to the member in source; XAML that the XAML compiler resolves although it is never loaded
+   (`MC3050`, `MC4005`); a missing `using` for a namespace that became empty.
+3. Rerun the tool on the new build until nothing is reported (second-order dead code appears after each pass).
+4. Run the app. Runtime failures (`ArgumentException: Property set method not found`, `event not found`,
+   `MissingMethodException`) mean access by name that no heuristic covers: restore the member and add it to `-roots:`.
+
+### Gotchas
+* Point `-c:` at the directory of the real consumers. Copies of the target found there are skipped automatically.
+* Analyze a fresh build of the target, not an older copy from a package.
+* Members accessed only by name from assemblies that do not reference the target (string-based tools, theme explorers)
+  are invisible to the tool; search the consumers' source for the member names.
 
 ---
 

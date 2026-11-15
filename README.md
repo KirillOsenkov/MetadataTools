@@ -11,6 +11,7 @@ A collection of small command-line tools for inspecting .NET assemblies on disk:
 | [**checkbinarycompat**](src/BinaryCompatChecker/readme.md) | [checkbinarycompat](https://nuget.org/packages/checkbinarycompat) | Detect binary incompatibilities across a set of assemblies: missing types/members/assemblies, version mismatches, facade/interop issues, broken `app.config` binding redirects. Compares against a baseline `.txt` and returns a non-zero exit code on change &mdash; designed to plug into CI builds. |
 | [**lbi**](src/lbi/readme.md) | [lbi](https://nuget.org/packages/lbi) | List binary info for assemblies in a tree: AssemblyName, AssemblyVersion, FileVersion, InformationalVersion, TargetFramework, platform, MVID, SHA1, strong-name signing, Authenticode signature, file size. Default output groups identical files by AssemblyName then SHA1; `-l` switches to a flat directory-listing format. |
 | [**refdump**](src/RefDump/readme.md) | [refdump](https://nuget.org/packages/refdump) | Print all assembly references for one or more `.dll`/`.exe`. Optionally list types/members consumed per reference, filter to a specific reference name (e.g. find every consumer of `Newtonsoft.Json`), or emit a Graphviz reference graph. |
+| [**FindUnusedMembers**](src/FindUnusedMembers/readme.md) | [FindUnusedMembers](https://nuget.org/packages/FindUnusedMembers) | List the types and members of an assembly that no consumer assembly can reach. Follows IL, metadata, overrides and interface implementations, compiled XAML (BAML) of the target and the consumers, and common reflection patterns. Prints documentation IDs with source locations, and `-why:` explains what keeps a member. |
 | **pdb** | [pdb](https://nuget.org/packages/pdb) | Print `.pdb` info from a `.dll`'s debug directory (Pdb Guid / Age / path / Stamp, embedded-pdb flag, SourceLink). Verify a `.dll` matches a `.pdb`. Download `.pdb`s from a symbol server. Find the matching `.pdb` for a `.dll` in a directory tree. Handles portable and native pdbs. |
 
 Install / update any of them (`dotnet tool update -g` installs if missing, upgrades to latest if present):
@@ -19,6 +20,7 @@ Install / update any of them (`dotnet tool update -g` installs if missing, upgra
 dotnet tool update -g checkbinarycompat
 dotnet tool update -g lbi
 dotnet tool update -g refdump
+dotnet tool update -g FindUnusedMembers
 dotnet tool update -g pdb
 ```
 
@@ -48,6 +50,7 @@ dotnet tool update -g pdb
 | Is the report from the last `checkbinarycompat` run different from the checked-in baseline? | `checkbinarycompat` returns exit code `1` if any line differs &mdash; wire it into CI. |
 | Validate many startup binaries that share one output directory | `checkbinarycompat config.json` &mdash; see [batch mode](src/BinaryCompatChecker/readme.md#worked-example-multi-closure-on-one-output-directory). |
 | Find unreferenced assemblies in a directory | `refdump *.dll -g` then read `AssemblyGraph.txt` (or open in MSBuild Structured Log Viewer's graph viewer). |
+| Which types and members of `Lib.dll` does my app not use? | `FindUnusedMembers Lib.dll -c:C:\App\bin\Debug -out:unused.txt`; add `-why:Name` to see what keeps a member. |
 | **Where did `X.dll` get copied from? Which NuGet package shipped it?** | Build with `msbuild /bl` (or capture the CI binlog), then ask `binlogmcp`: `$copy <full path to X.dll>` and `$nuget X.dll`. See [Binlogs](#binlogs--how-did-this-dll-get-here-questions) below. |
 | **What's the transitive NuGet dependency chain that brought in version `A` of `Foo`?** | Binlog &mdash; ask `binlogmcp`: `$nuget Foo A` (or `$nuget project(MyApp.csproj) Foo`). |
 | Does this `.dll` have a matching `.pdb` on this symbol server? | `pdb Foo.dll http://symbol.server/` |
