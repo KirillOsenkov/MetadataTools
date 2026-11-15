@@ -288,8 +288,16 @@ Examples:
                     }
 
                     totalTypes++;
-                    if (!analyzer.IsMarked(type) && !HasConstants(type))
+                    if (!analyzer.IsMarked(type))
                     {
+                        // Code that uses a constant contains a copy of its value and no reference to the type,
+                        // so a type that declares constants may still be needed by the source. Its constants
+                        // are listed for a source search as well.
+                        foreach (var constant in type.Fields.Where(f => f.IsLiteral && f.HasConstant && !type.IsEnum))
+                        {
+                            constants.Add((DocumentationId.Get(constant), GetLocation(type)));
+                        }
+
                         if (type.IsNested && reportedTypes.Contains(type.DeclaringType))
                         {
                             reportedTypes.Add(type);
@@ -297,13 +305,10 @@ Examples:
                         }
 
                         reportedTypes.Add(type);
-                        unusedTypes.Add((DocumentationId.Get(type), GetLocation(type)));
+                        var suffix = HasConstants(type) ? "  (declares constants)" : "";
+                        unusedTypes.Add((DocumentationId.Get(type) + suffix, GetLocation(type)));
                         continue;
                     }
-
-                    // A type that holds constants is never reported as a whole: code that uses a constant
-                    // contains a copy of its value, not a reference to the type. Its constants are listed
-                    // for a source search, and its other members are listed individually.
 
                     if (analyzer.IsMarked(type) && !analyzer.IsInstantiated(type) &&
                         Analyzer.GetMembers(type).Any(m => !IsStatic(m) && !(m is MethodDefinition { IsConstructor: true }) && analyzer.IsMarked(m)))

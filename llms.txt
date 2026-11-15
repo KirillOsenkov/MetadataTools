@@ -247,6 +247,8 @@ Without `-c`, the public API of the targets is treated as used and the report sh
 ### Report sections
 * `Unused types` / `Unused members` — documentation IDs (`T:`, `M:`, `F:`, `P:`, `E:`) with `file(line)` from the PDB.
   `(written but never read)` marks fields and auto-properties that are assigned but never read; delete the assignments too.
+  `(declares constants)` marks an unused type whose constants may still be named in source (IL never references a
+  constant); search for `Type.Constant` in the targets and consumers before deleting the type.
 * `Unused accessors of used properties` — only with `-accessors`: a getter or setter of a used property that nothing
   calls. Off by default, because deleting one accessor changes the API shape for a small gain.
 * `Constants` — `const` fields of used types. IL never references constants (their values are copied), so search the

@@ -51,9 +51,10 @@ be reached:
 * Without `-accessors`, the unused accessor of a used property is kept, and so is everything that accessor uses (for
   example the field that a getter returns). A get/set auto-property whose getter is never called is still reported as
   `(written but never read)`.
-* A type that declares constants is never reported as a whole unused type, because the code that uses a constant holds
-  a copy of its value and no reference to the type. Its constants are listed for a source search and its other
-  members are listed one by one. After its constants are deleted, a later run reports the empty type.
+* An unused type that declares constants is reported as `(declares constants)`: the code that uses a constant holds a
+  copy of its value and no reference to the type, so the type may still be needed by the source. Its constants are
+  also listed in the `Constants` section. Before deleting such a type, search the source of the targets and the
+  consumers for its constants.
 
 ## Heuristics for reflection and string-based access
 
