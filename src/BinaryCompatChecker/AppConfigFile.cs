@@ -55,6 +55,7 @@ namespace BinaryCompatChecker
             public string Name { get; set; }
             public string Culture { get; set; }
             public string PublicKeyToken { get; set; }
+            public string ProcessorArchitecture { get; set; }
             public Version OldVersionRangeStart { get; set; }
             public Version OldVersionRangeEnd { get; set; }
             public Version NewVersion { get; set; }
@@ -107,6 +108,11 @@ namespace BinaryCompatChecker
                 if (!string.IsNullOrEmpty(PublicKeyToken))
                 {
                     AssemblyIdentityElement.SetAttributeValue("publicKeyToken", PublicKeyToken);
+                }
+
+                if (!string.IsNullOrEmpty(ProcessorArchitecture))
+                {
+                    AssemblyIdentityElement.SetAttributeValue("processorArchitecture", ProcessorArchitecture);
                 }
 
                 if (BindingRedirectElement == null)
@@ -170,6 +176,7 @@ namespace BinaryCompatChecker
                     Name = bindingRedirect.Name,
                     Culture = bindingRedirect.Culture,
                     PublicKeyToken = bindingRedirect.PublicKeyToken,
+                    ProcessorArchitecture = bindingRedirect.ProcessorArchitecture,
                     OldVersionRangeStart = bindingRedirect.OldVersionRangeStart,
                     OldVersionRangeEnd = bindingRedirect.OldVersionRangeEnd,
                     NewVersion = bindingRedirect.NewVersion,
@@ -234,9 +241,7 @@ namespace BinaryCompatChecker
 
         public void AddBindingRedirect(BindingRedirect bindingRedirect)
         {
-            var existing = bindingRedirects.FirstOrDefault(b =>
-                b.Name.Equals(bindingRedirect.Name, StringComparison.OrdinalIgnoreCase) &&
-                b.PublicKeyToken.Equals(bindingRedirect.PublicKeyToken, StringComparison.OrdinalIgnoreCase));
+            var existing = bindingRedirects.FirstOrDefault(b => IsSameIdentity(b, bindingRedirect));
             if (existing != null)
             {
                 existing.Name = bindingRedirect.Name;
@@ -257,6 +262,17 @@ namespace BinaryCompatChecker
             {
                 bindingRedirects.Add(bindingRedirect);
             }
+        }
+
+        // Two dependentAssembly elements for the same name and publicKeyToken are not duplicates
+        // if their processorArchitecture differs (or only one of them has it). The runtime uses
+        // the element that matches the platform, or else the element without the attribute:
+        // https://learn.microsoft.com/en-us/dotnet/framework/configure-apps/file-schema/runtime/assemblyidentity-element-for-runtime
+        private static bool IsSameIdentity(BindingRedirect left, BindingRedirect right)
+        {
+            return string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.PublicKeyToken, right.PublicKeyToken, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(left.ProcessorArchitecture, right.ProcessorArchitecture, StringComparison.OrdinalIgnoreCase);
         }
 
         private static XName Xmlns(string shortName) => XName.Get(shortName, "urn:schemas-microsoft-com:asm.v1");
@@ -302,6 +318,8 @@ namespace BinaryCompatChecker
                 var culture = GetAttributeValue(assemblyIdentity, "culture");
 
                 var publicKeyToken = GetAttributeValue(assemblyIdentity, "publicKeyToken");
+
+                var processorArchitecture = GetAttributeValue(assemblyIdentity, "processorArchitecture");
 
                 var bindingRedirect = dependentAssembly.Element(Xmlns("bindingRedirect"));
                 var codeBases = dependentAssembly.Elements(Xmlns("codeBase"));
@@ -407,6 +425,7 @@ namespace BinaryCompatChecker
                     Name = name,
                     Culture = culture,
                     PublicKeyToken = publicKeyToken,
+                    ProcessorArchitecture = processorArchitecture,
                     OldVersionRangeStart = oldVersionStart,
                     OldVersionRangeEnd = oldVersionEnd,
                     NewVersion = newVersion,
@@ -417,9 +436,7 @@ namespace BinaryCompatChecker
                     CodeBases = codeBaseList
                 };
 
-                if (bindingRedirects.Any(b =>
-                    b.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
-                    b.PublicKeyToken.Equals(publicKeyToken, StringComparison.OrdinalIgnoreCase)))
+                if (bindingRedirects.Any(b => IsSameIdentity(b, bindingRedirectResult)))
                 {
                     Error($"Duplicate binding redirect: {name}");
                     continue;
