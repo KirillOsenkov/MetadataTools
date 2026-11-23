@@ -62,7 +62,7 @@ public static class Inspector
             return ByteCategory.UnparsedSection;
         }
 
-        if (leaf is NativeCode || (leaf.GetType() == typeof(Node) && leaf.Text != null && leaf.Text.StartsWith("Native code")))
+        if (leaf is NativeCode || leaf is PCode || (leaf.GetType() == typeof(Node) && leaf.Text != null && leaf.Text.StartsWith("Native code")))
         {
             return ByteCategory.Code;
         }

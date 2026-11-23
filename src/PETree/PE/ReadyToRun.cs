@@ -113,8 +113,10 @@ public partial class PEFile
                 };
                 break;
             case 103:
+                node = new NativeArray { DescribeElement = DescribeMethodEntryPoint };
+                break;
             case 105:
-                node = new NativeArray();
+                node = new NativeArray { DescribeElement = (index, _, _) => $"Debug info of MethodDef 0x{0x06000001 + index:X8}" };
                 break;
             case 104:
                 node = new RecordTable
@@ -203,6 +205,13 @@ public partial class PEFile
             case 105:
                 node.Text = $"{text} ({((NativeArray)node).ElementCount} elements)";
                 break;
+            case 108:
+            case 109:
+            case 114:
+            case 117:
+            case 119:
+                node.Text = $"{text} ({((NativeHashtable)node).EntryCount} entries)";
+                break;
             case 104:
                 node.Text = text;
                 AddReadyToRunExceptionClauses((RecordTable)node);
@@ -219,6 +228,35 @@ public partial class PEFile
                 node.Text = text;
                 break;
         }
+    }
+
+    /// <summary>
+    /// An entry point element starts with an integer that holds the index of
+    /// the method in the runtime function table and says whether a list of
+    /// import slots to fill first follows.
+    /// </summary>
+    private string DescribeMethodEntryPoint(int index, int offset, int length)
+    {
+        int size = FieldCursor.MeasureCompressed(Buffer, offset);
+        if (size == 0)
+        {
+            return $"MethodDef 0x{0x06000001 + index:X8}";
+        }
+
+        uint value = FieldCursor.ReadCompressedUInt32(Buffer, offset, size);
+        string fixups = "";
+        uint functionIndex;
+        if ((value & 1) == 0)
+        {
+            functionIndex = value >> 1;
+        }
+        else
+        {
+            functionIndex = value >> 2;
+            fixups = (value & 2) != 0 ? ", reference to a fixup list" : ", fixup list";
+        }
+
+        return $"MethodDef 0x{0x06000001 + index:X8}: runtime function {functionIndex}{fixups}";
     }
 
     private void AddSecondaryMetadata(int offset, string text)

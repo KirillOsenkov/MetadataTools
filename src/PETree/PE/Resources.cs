@@ -109,6 +109,14 @@ public class Resource : Node
         Zero = AddFourBytes("Zero");
         var peFile = Root as PEFile;
         var start = peFile.ResolveVirtualAddress(RVA.Value);
+
+        // In a packed image the RVA is that of the unpacked resource. The
+        // file has compressed data at that place.
+        if (peFile.IsCompressedData(start))
+        {
+            return;
+        }
+
         ParseBytes(start);
     }
 

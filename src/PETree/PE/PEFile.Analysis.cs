@@ -143,6 +143,60 @@ public partial class PEFile
         return null;
     }
 
+    /// <summary>
+    /// Export names keyed by the RVA in the export address table.
+    /// </summary>
+    public Dictionary<int, string> ExportNamesByRva { get; } = new();
+
+    /// <summary>
+    /// A section name of the form "/123" is an offset into the COFF string
+    /// table, which is located after the COFF symbol table.
+    /// </summary>
+    private void ResolveLongSectionNames()
+    {
+        long stringTable = (long)PEHeader.PointerToSymbolTable.Value + (long)PEHeader.NumberOfSymbols.Value * 18;
+        if (PEHeader.PointerToSymbolTable.Value <= 0 || stringTable + 4 > Buffer.Length)
+        {
+            return;
+        }
+
+        foreach (var sectionHeader in SectionTable.SectionHeaders)
+        {
+            string name = sectionHeader.Name.Text;
+            if (name.Length < 2 || name[0] != '/' || !int.TryParse(name.Substring(1), out int offset))
+            {
+                continue;
+            }
+
+            string longName = stringTable + offset < Buffer.Length ? ReadZeroTerminatedAscii((int)stringTable + offset) : null;
+            if (!string.IsNullOrEmpty(longName))
+            {
+                sectionHeader.Name.Text = longName;
+                sectionHeader.Text = $"{longName} section header";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Data directory 7 is reserved today. Old images use it for a copyright
+    /// or description string.
+    /// </summary>
+    private void AddArchitectureDirectory()
+    {
+        var directory = OptionalHeader.DataDirectories.Architecture;
+        int size = directory.Size.Value;
+        int offset = directory.RVA.Value > 0 ? ResolveVirtualAddress(directory.RVA.Value) : 0;
+        if (offset <= 0 || size <= 0 || !IsRangeAvailable(offset, size))
+        {
+            return;
+        }
+
+        var data = new Utf8String { Start = offset, Length = size };
+        Add(data);
+        string text = ReadZeroTerminatedAscii(offset, size);
+        data.Text = text != null ? $"Copyright string: {text}" : "Architecture-specific data";
+    }
+
     private int[] relocationOffsets = Array.Empty<int>();
 
     public bool HasRelocations => relocationOffsets.Length > 0;

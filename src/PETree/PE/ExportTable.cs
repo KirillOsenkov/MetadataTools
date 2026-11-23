@@ -32,6 +32,25 @@ public class ExportTable : Node
         int numAddresses = addressTableEntries.Value;
         int numNames = numberOfNamePointers.Value;
 
+        // Names by index into the export address table, read through the
+        // name pointer table and the parallel ordinal table
+        var namesByIndex = new System.Collections.Generic.Dictionary<int, string>();
+        int namePointers = namePointerRva.Value != 0 ? PEFile.ResolveVirtualAddress(namePointerRva.Value) : 0;
+        int ordinals = ordinalTableRva.Value != 0 ? PEFile.ResolveVirtualAddress(ordinalTableRva.Value) : 0;
+        if (namePointers > 0 && ordinals > 0 && numNames > 0 && numNames < 0x100000 &&
+            (long)namePointers + numNames * 4L <= Buffer.Length && (long)ordinals + numNames * 2L <= Buffer.Length)
+        {
+            for (int i = 0; i < numNames; i++)
+            {
+                int nameOffset = PEFile.ResolveVirtualAddress(Buffer.ReadInt32(namePointers + i * 4));
+                string name = PEFile.ReadZeroTerminatedAscii(nameOffset);
+                if (name != null)
+                {
+                    namesByIndex[Buffer.ReadUInt16(ordinals + i * 2)] = name;
+                }
+            }
+        }
+
         // Export Address Table
         if (exportAddressTableRva.Value != 0 && numAddresses > 0)
         {
@@ -45,6 +64,16 @@ public class ExportTable : Node
                     Text = "Export address table"
                 };
                 Add(eat);
+                for (int i = 0; i < numAddresses; i++)
+                {
+                    int rva = Buffer.ReadInt32(eatOffset + i * 4);
+                    string name = namesByIndex.TryGetValue(i, out var exportName) ? exportName : $"Ordinal {ordinalBase.Value + i}";
+                    eat.AddFourBytes($"{name}: 0x{rva:X}");
+                    if (rva != 0)
+                    {
+                        PEFile.ExportNamesByRva[rva] = name;
+                    }
+                }
 
                 // Check for forwarder strings (RVA within export directory range)
                 int exportRvaStart = exportAddressTableRva.Value - (eatOffset - Start);

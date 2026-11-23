@@ -105,7 +105,242 @@ public partial class PEFile
             return;
         }
 
+        Node node = CreateNativeAotNode(id, offset, length);
+        if (node != null)
+        {
+            node.Start = offset;
+            node.Length = length;
+            if (TryAdd(node))
+            {
+                node.Text = node switch
+                {
+                    NativeHashtable hashtable => $"{text} ({hashtable.EntryCount} entries)",
+                    RecordTable table => $"{text} ({table.Count} entries)",
+                    FrozenObjectRegion frozen => $"{text} ({frozen.ObjectCount} objects)",
+                    _ => text
+                };
+                return;
+            }
+        }
+
         TryAddRegion(new Region { Start = offset, Length = length, Text = text });
+    }
+
+    /// <summary>
+    /// Labels MethodTables: the type descriptors of the NativeAOT runtime.
+    /// Candidates are the types of frozen objects and the targets of the
+    /// reference tables; from each one the base type and the interfaces are
+    /// visited too. A candidate is accepted when every vtable slot is a
+    /// relocated pointer to code and every interface slot a relocated pointer
+    /// to data.
+    /// </summary>
+    private void AddNativeAotMethodTables()
+    {
+        if (!IsNativeAot || !HasRelocations || PointerSize != 8)
+        {
+            return;
+        }
+
+        var pending = new Stack<int>();
+        var visited = new HashSet<int>();
+
+        void Enqueue(int offset)
+        {
+            if (offset > 0 && visited.Add(offset))
+            {
+                pending.Push(offset);
+            }
+        }
+
+        foreach (var node in Inspect(this))
+        {
+            if (node is FrozenObjectRegion frozen)
+            {
+                foreach (int offset in frozen.MethodTableOffsets)
+                {
+                    Enqueue(offset);
+                }
+            }
+            else if (node is RecordTable table && table.Text != null &&
+                (table.Text.StartsWith("NativeAOT CommonFixupsTable") || table.Text.StartsWith("NativeAOT NativeReferences")))
+            {
+                foreach (var record in table.Children)
+                {
+                    int target = record.Length == 4
+                        ? ResolveVirtualAddress(OffsetToRva(record.Start) + Buffer.ReadInt32(record.Start))
+                        : ResolvePointerAt(record.Start);
+                    Enqueue(target);
+                }
+            }
+        }
+
+        int added = 0;
+        while (pending.Count > 0 && added < 200000)
+        {
+            int offset = pending.Pop();
+            if ((offset & 7) != 0 || offset + 24 > Buffer.Length || !IsRangeAvailable(offset, 24))
+            {
+                continue;
+            }
+
+            uint baseSize = Buffer.ReadUInt32(offset + 4);
+            int vtableSlots = Buffer.ReadUInt16(offset + 16);
+            int interfaces = Buffer.ReadUInt16(offset + 18);
+            int size = 24 + (vtableSlots + interfaces) * 8;
+            if (baseSize > 0x1000000 || !IsRangeAvailable(offset, size))
+            {
+                continue;
+            }
+
+            bool hasRelatedType = IsRelocated(offset + 8);
+            if (!hasRelatedType && Buffer.ReadUInt64(offset + 8) != 0 && vtableSlots + interfaces == 0)
+            {
+                continue;
+            }
+
+            if (vtableSlots + interfaces == 0 && !hasRelatedType)
+            {
+                continue;
+            }
+
+            bool isValid = true;
+            for (int i = 0; i < vtableSlots + interfaces && isValid; i++)
+            {
+                int slot = offset + 24 + i * 8;
+                ulong value = Buffer.ReadUInt64(slot);
+                bool isVtableSlot = i < vtableSlots;
+                if (value == 0 && isVtableSlot)
+                {
+                    // A slot of a method that was removed as unused
+                    continue;
+                }
+
+                int rva = IsRelocated(slot) ? VirtualAddressToRva(value) : 0;
+                isValid = rva != 0 && IsCodeAddress(rva) == isVtableSlot;
+            }
+
+            if (!isValid)
+            {
+                continue;
+            }
+
+            var fields = new List<(string, int)>
+            {
+                ("Flags", 4),
+                ("Base size", 4),
+                ("Related type", 8),
+                ("Vtable slot count", 2),
+                ("Interface count", 2),
+                ("Hash code", 4)
+            };
+            for (int i = 0; i < vtableSlots; i++)
+            {
+                fields.Add(($"Vtable slot {i}", 8));
+            }
+
+            for (int i = 0; i < interfaces; i++)
+            {
+                fields.Add(($"Interface {i}", 8));
+            }
+
+            var methodTable = new Record { Start = offset, Length = size, Fields = fields.ToArray() };
+            Add(methodTable);
+            methodTable.Text = $"MethodTable (base size {baseSize}, {vtableSlots} vtable slots, {interfaces} interfaces)";
+            added++;
+
+            if (hasRelatedType)
+            {
+                Enqueue(ResolvePointerAt(offset + 8));
+            }
+
+            for (int i = 0; i < interfaces; i++)
+            {
+                Enqueue(ResolvePointerAt(offset + 24 + (vtableSlots + i) * 8));
+            }
+        }
+    }
+
+    private static IEnumerable<Node> Inspect(Node node)
+    {
+        yield return node;
+        if (node.HasChildren && (node is PEFile || node is Section || node is Region))
+        {
+            foreach (var child in node.Children)
+            {
+                foreach (var descendant in Inspect(child))
+                {
+                    yield return descendant;
+                }
+            }
+        }
+    }
+
+    private Node CreateNativeAotNode(int id, int offset, int length)
+    {
+        string DescribeRelativePointer(Record record)
+        {
+            int start = record.Start;
+            int target = OffsetToRva(start) + Buffer.ReadInt32(start);
+            return $"Relative pointer to 0x{target:X}";
+        }
+
+        switch (id)
+        {
+            // Hashtables of the reflection and type loader maps
+            case 301:
+            case 302:
+            case 303:
+            case 304:
+            case 306:
+            case 307:
+            case 309:
+            case 310:
+            case 311:
+            case 316:
+            case 317:
+            case 318:
+            case 319:
+            case 321:
+            case 322:
+            case 324:
+            case 332:
+            case 334:
+            case 335:
+            case 336:
+                return new NativeHashtable();
+
+            // Arrays of references: pointers when relocated, else 32-bit relative pointers
+            case 201:
+            case 205:
+            case 213:
+            case 308:
+            case 331:
+            case 333:
+                if (IsRelocated(offset) && length % PointerSize == 0)
+                {
+                    return new RecordTable { Count = length / PointerSize, Fields = [("Pointer", PointerSize)], RecordText = "Pointer" };
+                }
+
+                if (length % 4 != 0)
+                {
+                    return null;
+                }
+
+                return new RecordTable
+                {
+                    Count = length / 4,
+                    Fields = [("Relative pointer", 4)],
+                    Describe = DescribeRelativePointer
+                };
+            case 313:
+                return length > 4 && Buffer.ReadUInt32(offset) == 0xDEADDFFD
+                    ? new Record { Fields = [("Signature", 4), ("Metadata records", length - 4)] }
+                    : null;
+            case 206:
+                return new FrozenObjectRegion { PEFile = this };
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -370,6 +605,105 @@ public class DehydratedData : Node
     }
 
     public long HydratedSize { get; set; }
+}
+
+/// <summary>
+/// Objects that exist before the program starts, such as string literals.
+/// Each is an object header, a MethodTable pointer and the fields. The size
+/// is read from the MethodTable: base size plus component size times length.
+/// </summary>
+public class FrozenObjectRegion : Node
+{
+    public PEFile PEFile { get; set; }
+    public int ObjectCount { get; set; }
+    public HashSet<int> MethodTableOffsets { get; } = new();
+
+    public override void Parse()
+    {
+        int pointerSize = PEFile.PointerSize;
+        int minimumSize = 3 * pointerSize;
+        const uint HasComponentSize = 0x80000000;
+
+        while (Remaining >= minimumSize)
+        {
+            int position = LastChildEnd;
+            int methodTable = PEFile.ResolvePointerAt(position + pointerSize);
+            if (methodTable <= 0 || methodTable + 8 > Buffer.Length)
+            {
+                break;
+            }
+
+            uint flags = Buffer.ReadUInt32(methodTable);
+            uint baseSize = Buffer.ReadUInt32(methodTable + 4);
+            if (baseSize < 2 * pointerSize || baseSize > 0x100000)
+            {
+                break;
+            }
+
+            MethodTableOffsets.Add(methodTable);
+
+            long size = baseSize;
+            int componentSize = (flags & HasComponentSize) != 0 ? (int)(flags & 0xFFFF) : 0;
+            int count = 0;
+            if (componentSize != 0)
+            {
+                count = Buffer.ReadInt32(position + 2 * pointerSize);
+                if (count < 0)
+                {
+                    break;
+                }
+
+                size += (long)componentSize * count;
+            }
+
+            size = (size + pointerSize - 1) & ~(long)(pointerSize - 1);
+            if (size > Remaining)
+            {
+                break;
+            }
+
+            var fields = new List<(string, int)>
+            {
+                ("Object header", pointerSize),
+                ("MethodTable pointer", pointerSize)
+            };
+            int dataSize = (int)size - 2 * pointerSize;
+            if (componentSize != 0)
+            {
+                fields.Add(("Length", 4));
+                dataSize -= 4;
+            }
+
+            if (dataSize > 0)
+            {
+                fields.Add((componentSize != 0 ? "Elements" : "Fields", dataSize));
+            }
+
+            var frozenObject = new Record { Fields = fields.ToArray() };
+            Add(frozenObject);
+            ObjectCount++;
+
+            bool isString = componentSize == 2 && baseSize == 2 * pointerSize + 4 + 2;
+            if (isString)
+            {
+                var characters = Buffer.ReadBytes(position + 2 * pointerSize + 4, Math.Min(count, 200) * 2);
+                frozenObject.Text = $"String \"{System.Text.Encoding.Unicode.GetString(characters)}\"";
+            }
+            else if (componentSize != 0)
+            {
+                frozenObject.Text = $"Array ({count} elements of {componentSize} bytes)";
+            }
+            else
+            {
+                frozenObject.Text = $"Object ({size} bytes)";
+            }
+        }
+
+        if (Remaining > 0)
+        {
+            AddBytes(Remaining, "Remaining bytes");
+        }
+    }
 }
 
 public class NativeAotUnwindData : Node

@@ -103,6 +103,11 @@ public partial class PEFile
     /// </summary>
     public string GetImportThunkName(int rva)
     {
+        if (ExportNamesByRva.TryGetValue(rva, out var exportName))
+        {
+            return exportName;
+        }
+
         int offset = ResolveVirtualAddress(rva);
         if (offset <= 0 || offset + 7 > Buffer.Length || Machine != MachineAmd64)
         {

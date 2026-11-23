@@ -138,6 +138,7 @@ public partial class PEFile : Node
 
         SectionTable = new SectionTable(PEHeader.NumberOfSections.Value);
         Add(SectionTable);
+        ResolveLongSectionNames();
 
         TextSection = AddSection(".text");
         RsrcSection = AddSection(".rsrc");
@@ -177,6 +178,9 @@ public partial class PEFile : Node
                 }
             }
         }
+
+        // Goes first: the compressed range must not get resource data nodes
+        AddUpxData();
 
         int cliHeader = ResolveDataDirectory(OptionalHeader.DataDirectories.CLRRuntimeHeader);
         if (cliHeader > 0)
@@ -296,6 +300,7 @@ public partial class PEFile : Node
             tls.PEFile = this;
         });
 
+        AddArchitectureDirectory();
         AddExceptionHandlerData(ExceptionTable);
 
         AddCoffSymbolTable();
@@ -305,8 +310,11 @@ public partial class PEFile : Node
         AddOverlay();
 
         AddNativeAotModules();
+        AddNativeAotMethodTables();
         AddNativeAotUnwindData(ExceptionTable);
         AddRtti();
+        AddVisualBasicStructures();
+        AddX86ExceptionData();
         AddGcInfo();
         AddNativeImageVirtualSections();
 
@@ -508,11 +516,24 @@ public partial class PEFile : Node
     private void AddNativeCode(IEnumerable<Node> sections)
     {
         const uint ImageScnCntCode = 0x00000020;
+        const uint ImageScnCntInitializedData = 0x00000040;
+        const uint ImageScnMemExecute = 0x20000000;
+        const uint ImageScnMemWrite = 0x80000000;
 
         foreach (var section in sections)
         {
             var sectionHeader = SectionTable.SectionHeaders.FirstOrDefault(s => s.PointerToRawData.Value == section.Start);
-            if (sectionHeader == null || ((uint)sectionHeader.Characteristics.Value & ImageScnCntCode) == 0)
+            if (sectionHeader == null)
+            {
+                continue;
+            }
+
+            // Old Borland linkers mark the code section as executable and
+            // read-only without setting the code flag
+            uint characteristics = (uint)sectionHeader.Characteristics.Value;
+            bool isCode = (characteristics & ImageScnCntCode) != 0 ||
+                (characteristics & (ImageScnMemExecute | ImageScnMemWrite | ImageScnCntInitializedData)) == ImageScnMemExecute;
+            if (!isCode)
             {
                 continue;
             }
@@ -540,7 +561,8 @@ public partial class PEFile : Node
                 spans.Add(new Span(start, end - start));
             }
 
-            if (child is Region region && child.Start < contentEnd)
+            // A region without children is a named range of data
+            if (child is Region region && child.Start < contentEnd && (region.HasChildren || region.ContainsCode))
             {
                 AddNativeCode(child, contentEnd, isManagedImage ? region.ContainsCode : fillGaps, isManagedImage);
             }
@@ -557,9 +579,10 @@ public partial class PEFile : Node
             spans.Add(new Span(start, contentEnd - start));
         }
 
-        foreach (var span in spans)
+        foreach (var gap in spans)
         {
-            if (Buffer.IsZeroFilled(span))
+            var span = ExcludeVisualBasicData(gap);
+            if (span.Length <= 0 || Buffer.IsZeroFilled(span))
             {
                 continue;
             }
@@ -796,31 +819,46 @@ public partial class PEFile : Node
 
             var lookupTable = ResolveVirtualAddress(lookupTableRva.Value);
 
+            bool hasLookupTableNode = false;
             if (lookupTable > 0)
             {
-                var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
-                ImportTable.Add(importLookupTable);
-                importLookupTable.Text = $"Import Lookup Table: {dllNameText}";
-                for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+                int lookupTableLength = 0;
+                for (int offset = lookupTable; offset + entrySize <= Buffer.Length; offset += entrySize)
                 {
-                    var entry = importLookupTable.Entries[j];
-                    string name = AddImportName(entry.Start);
-                    if (name != null)
+                    lookupTableLength += entrySize;
+                    if (ReadPointer(offset) == 0)
                     {
-                        entry.Text = name;
-                        ImportNamesBySlotRva[addressTableRva.Value + j * entrySize] = $"{dllNameText}!{name}";
+                        break;
+                    }
+                }
+
+                var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
+                hasLookupTableNode = AddImportNode(importLookupTable, lookupTableLength);
+                if (hasLookupTableNode)
+                {
+                    importLookupTable.Text = $"Import Lookup Table: {dllNameText}";
+                    for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+                    {
+                        var entry = importLookupTable.Entries[j];
+                        string name = AddImportName(entry.Start);
+                        if (name != null)
+                        {
+                            entry.Text = name;
+                            ImportNamesBySlotRva[addressTableRva.Value + j * entrySize] = $"{dllNameText}!{name}";
+                        }
                     }
                 }
             }
-            else
+
+            if (!hasLookupTableNode)
             {
                 // Some linkers leave the lookup table RVA zero; the loader
                 // falls back to the address table, which holds the same entries
-                int addressTable = ResolveVirtualAddress(addressTableRva.Value);
-                if (addressTable > 0)
+                int table = lookupTable > 0 ? lookupTable : ResolveVirtualAddress(addressTableRva.Value);
+                if (table > 0)
                 {
                     int index = 0;
-                    for (int offset = addressTable; offset + entrySize <= Buffer.Length; offset += entrySize, index++)
+                    for (int offset = table; offset + entrySize <= Buffer.Length; offset += entrySize, index++)
                     {
                         if (ReadPointer(offset) == 0)
                         {
@@ -838,10 +876,72 @@ public partial class PEFile : Node
 
             if (dllName > 0)
             {
-                var dllNameNode = new ZeroTerminatedString() { Start = dllName };
-                ImportTable.Add(dllNameNode);
+                AddImportNode(new ZeroTerminatedString() { Start = dllName }, MeasureZeroTerminated(dllName));
             }
         }
+    }
+
+    private int MeasureZeroTerminated(int offset)
+    {
+        const int MaximumLength = 4096;
+        for (int i = offset; i < Buffer.Length && i - offset < MaximumLength; i++)
+        {
+            if (Buffer.ReadByte(i) == 0)
+            {
+                return i - offset + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Adds a lookup table, an import name or a DLL name. A node that is
+    /// located after the import table becomes its child, and the import table
+    /// is extended to contain it. A node that is located before the import
+    /// table, or after another node of the section, is added to the section.
+    /// Nothing is added when the bytes belong to another node already: packers
+    /// store names so that they overlap.
+    /// </summary>
+    private bool AddImportNode(Node node, int length)
+    {
+        int start = node.Start;
+        if (length <= 0 || start <= 0 || (long)start + length > Buffer.Length)
+        {
+            return false;
+        }
+
+        var parent = ImportTable.Parent;
+        int tableIndex = parent.FindChildIndex(ImportTable.Start);
+        int limit = tableIndex >= 0 && tableIndex + 1 < parent.Children.Count
+            ? parent.Children[tableIndex + 1].Start
+            : parent.End;
+
+        if (start < ImportTable.Start || start + length > limit)
+        {
+            if (!IsRangeAvailable(start, length))
+            {
+                return false;
+            }
+
+            Add(node);
+            return true;
+        }
+
+        int index = ImportTable.FindChildIndex(start);
+        if (index >= 0)
+        {
+            return false;
+        }
+
+        index = ~index;
+        if (index < ImportTable.Children.Count && ImportTable.Children[index].Start < start + length)
+        {
+            return false;
+        }
+
+        ImportTable.Add(node);
+        return true;
     }
 
     /// <summary>
@@ -888,12 +988,22 @@ public partial class PEFile : Node
 
         int rva = (int)(value & 0x7FFFFFFF);
         var resolved = ResolveVirtualAddress(rva);
-        if (resolved > 0)
+        if (resolved > 0 && resolved + 2 < Buffer.Length)
         {
+            int nameLength = MeasureZeroTerminated(resolved + 2);
+            if (nameLength == 0)
+            {
+                return null;
+            }
+
             var imageImportByName = new ImageImportByName() { Start = resolved };
-            ImportTable.Add(imageImportByName);
-            imageImportByName.Text = imageImportByName.Name.Text;
-            return imageImportByName.Name.Text;
+            if (AddImportNode(imageImportByName, 2 + nameLength))
+            {
+                imageImportByName.Text = imageImportByName.Name.Text;
+                return imageImportByName.Name.Text;
+            }
+
+            return System.Text.Encoding.UTF8.GetString(Buffer.ReadBytes(resolved + 2, nameLength - 1));
         }
 
         return null;

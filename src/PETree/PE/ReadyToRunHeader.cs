@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace GuiLabs.FileFormat.PE;
 
@@ -196,9 +197,17 @@ public class ReadyToRunSection : Node
 /// </summary>
 public class NativeArray : Node
 {
+    private const int BlockSize = 16;
+    private const int MaximumExpandedElements = 400000;
+
+    /// <summary>
+    /// Text for the element at an index, given its offset and length.
+    /// </summary>
+    public Func<int, int, int, string> DescribeElement { get; set; }
+
     public override void Parse()
     {
-        var cursor = new FieldCursor(Buffer, Start, this);
+        var cursor = new FieldCursor(Buffer, Start, this) { Limit = End };
         uint header = cursor.CompressedUInt32("Header");
         if (cursor.Failed)
         {
@@ -207,29 +216,144 @@ public class NativeArray : Node
 
         int count = (int)(header >> 2);
         int entrySize = 1 << (int)(header & 3);
-        long indexSize = (long)((count + 15) / 16) * entrySize;
-        if (indexSize > 0 && indexSize <= Remaining)
+        int blockCount = (count + BlockSize - 1) / BlockSize;
+        long indexSize = (long)blockCount * entrySize;
+        ElementCount = count;
+        int baseOffset = LastChildEnd;
+        if ((header & 3) > 2 || indexSize <= 0 || indexSize > Remaining)
         {
-            AddBytes((int)indexSize, $"Block index ({(count + 15) / 16} entries of {entrySize} bytes)");
+            if (Remaining > 0)
+            {
+                AddBytes(Remaining, "Elements");
+            }
+
+            return;
+        }
+
+        AddBytes((int)indexSize, $"Block index ({blockCount} entries of {entrySize} bytes)");
+        if (count > MaximumExpandedElements)
+        {
+            AddBytes(Remaining, "Elements");
+            return;
+        }
+
+        // Each block is a binary tree of depth 4. Walking to every index
+        // gives the offsets of the tree nodes and of the elements.
+        var treeNodes = new SortedDictionary<int, int>();
+        var elements = new SortedDictionary<int, int>();
+        for (int index = 0; index < count; index++)
+        {
+            int blockOffset = baseOffset + index / BlockSize * entrySize;
+            uint relative = entrySize == 1 ? Buffer.ReadByte(blockOffset)
+                : entrySize == 2 ? Buffer.ReadUInt16(blockOffset)
+                : Buffer.ReadUInt32(blockOffset);
+            long offset = baseOffset + (long)relative;
+            bool found = true;
+            for (int bit = BlockSize >> 1; bit > 0; bit >>= 1)
+            {
+                if (offset < baseOffset || offset >= End)
+                {
+                    found = false;
+                    break;
+                }
+
+                int length = FieldCursor.MeasureCompressed(Buffer, (int)offset);
+                if (length == 0)
+                {
+                    found = false;
+                    break;
+                }
+
+                uint value = FieldCursor.ReadCompressedUInt32(Buffer, (int)offset, length);
+                treeNodes[(int)offset] = length;
+                if ((index & bit) != 0)
+                {
+                    if ((value & 2) != 0)
+                    {
+                        offset += value >> 2;
+                        continue;
+                    }
+                }
+                else if ((value & 1) != 0)
+                {
+                    offset += length;
+                    continue;
+                }
+
+                // A node without children that carries the index of its only element
+                if ((value & 3) == 0 && (value >> 2) == (index & (BlockSize - 1)))
+                {
+                    offset += length;
+                }
+                else
+                {
+                    found = false;
+                }
+
+                break;
+            }
+
+            if (found && offset >= baseOffset && offset < End && !treeNodes.ContainsKey((int)offset))
+            {
+                elements[(int)offset] = index;
+            }
+        }
+
+        var marks = new SortedDictionary<int, (bool isElement, int value)>();
+        foreach (var node in treeNodes)
+        {
+            marks[node.Key] = (false, node.Value);
+        }
+
+        foreach (var element in elements)
+        {
+            marks[element.Key] = (true, element.Value);
+        }
+
+        var ordered = new List<KeyValuePair<int, (bool isElement, int value)>>(marks);
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            int offset = ordered[i].Key;
+            if (offset < LastChildEnd)
+            {
+                continue;
+            }
+
+            if (offset > LastChildEnd)
+            {
+                AddBytes(offset - LastChildEnd, "Data");
+            }
+
+            int next = i + 1 < ordered.Count ? ordered[i + 1].Key : End;
+            if (ordered[i].Value.isElement)
+            {
+                int index = ordered[i].Value.value;
+                int length = next - offset;
+                AddBytes(length, DescribeElement?.Invoke(index, offset, length) ?? $"Element {index}");
+            }
+            else
+            {
+                AddBytes(Math.Min(ordered[i].Value.value, next - offset), "Tree node");
+            }
         }
 
         if (Remaining > 0)
         {
-            AddBytes(Remaining, "Elements");
+            AddBytes(Remaining, "Data");
         }
-
-        ElementCount = count;
     }
 
     public int ElementCount { get; set; }
 }
 
 /// <summary>
-/// The .NET native format hashtable: a header byte, the bucket offsets, then
-/// the entries.
+/// The .NET native format hashtable: a header byte, the bucket offsets, the
+/// entries (low hash byte and relative offset of an object), then the objects.
 /// </summary>
 public class NativeHashtable : Node
 {
+    public int EntryCount { get; set; }
+
     public override void Parse()
     {
         if (Length < 1)
@@ -241,15 +365,84 @@ public class NativeHashtable : Node
         int bucketCount = 1 << (header.Value >> 2);
         int entrySize = 1 << (header.Value & 3);
         header.Text = $"Header: {bucketCount} buckets, {entrySize}-byte offsets";
+        int baseOffset = LastChildEnd;
         long tableSize = (long)(bucketCount + 1) * entrySize;
-        if (tableSize <= Remaining)
+        if ((header.Value & 3) > 2 || (header.Value >> 2) > 24 || tableSize > Remaining)
         {
-            AddBytes((int)tableSize, "Bucket offsets");
+            if (Remaining > 0)
+            {
+                AddBytes(Remaining, "Data");
+            }
+
+            return;
+        }
+
+        AddBytes((int)tableSize, $"Bucket offsets ({bucketCount} buckets)");
+
+        uint ReadBucket(int index)
+        {
+            int offset = baseOffset + index * entrySize;
+            return entrySize == 1 ? Buffer.ReadByte(offset)
+                : entrySize == 2 ? Buffer.ReadUInt16(offset)
+                : Buffer.ReadUInt32(offset);
+        }
+
+        long entriesStart = baseOffset + (long)ReadBucket(0);
+        long entriesEnd = baseOffset + (long)ReadBucket(bucketCount);
+        var targets = new SortedSet<int>();
+        if (entriesStart == LastChildEnd && entriesEnd >= entriesStart && entriesEnd <= End)
+        {
+            var entries = new Node { Start = (int)entriesStart, Length = (int)(entriesEnd - entriesStart), Text = "Entries" };
+            if (entries.Length > 0)
+            {
+                Add(entries);
+                var cursor = new FieldCursor(Buffer, entries.Start) { Limit = entries.End };
+                while (cursor.Available > 1 && !cursor.Failed)
+                {
+                    int entryStart = cursor.Position;
+                    byte lowHash = cursor.Byte(null);
+                    int offsetPosition = cursor.Position;
+                    int delta = cursor.CompressedInt32(null);
+                    if (cursor.Failed)
+                    {
+                        break;
+                    }
+
+                    int target = offsetPosition + delta;
+                    entries.Add(new Node
+                    {
+                        Start = entryStart,
+                        Length = cursor.Position - entryStart,
+                        Text = $"Hash 0x{lowHash:X2}, object at 0x{target:X}"
+                    });
+                    EntryCount++;
+                    if (target >= entriesEnd && target < End)
+                    {
+                        targets.Add(target);
+                    }
+                }
+
+                entries.Text = $"Entries ({EntryCount})";
+            }
+        }
+
+        // Objects have no length field. Each one is taken to run up to the
+        // next object that an entry points to.
+        var ordered = new List<int>(targets);
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            if (ordered[i] > LastChildEnd)
+            {
+                AddBytes(ordered[i] - LastChildEnd, "Data");
+            }
+
+            int next = i + 1 < ordered.Count ? ordered[i + 1] : End;
+            AddBytes(next - ordered[i], "Object");
         }
 
         if (Remaining > 0)
         {
-            AddBytes(Remaining, "Entries");
+            AddBytes(Remaining, "Data");
         }
     }
 }

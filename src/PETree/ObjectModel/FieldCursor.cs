@@ -24,6 +24,75 @@ public class FieldCursor
     public bool Failed { get; private set; }
 
     /// <summary>
+    /// A signed integer in the .NET native format encoding (1 to 5 bytes).
+    /// </summary>
+    public int CompressedInt32(string name)
+    {
+        int position = Position;
+        int length = MeasureCompressed(Buffer, position);
+        if (length == 0 || !Take(name, length))
+        {
+            Failed = true;
+            return 0;
+        }
+
+        return ReadCompressedInt32(Buffer, position, length);
+    }
+
+    /// <summary>
+    /// Byte length of a native format integer at the offset, or 0 past the end.
+    /// </summary>
+    public static int MeasureCompressed(ByteBuffer buffer, int offset)
+    {
+        if (offset < 0 || offset >= buffer.Length)
+        {
+            return 0;
+        }
+
+        byte first = buffer.ReadByte(offset);
+        int length =
+            (first & 1) == 0 ? 1 :
+            (first & 2) == 0 ? 2 :
+            (first & 4) == 0 ? 3 :
+            (first & 8) == 0 ? 4 : 5;
+        return (long)offset + length <= buffer.Length ? length : 0;
+    }
+
+    public static int ReadCompressedInt32(ByteBuffer buffer, int offset, int length)
+    {
+        if (length == 5)
+        {
+            return buffer.ReadInt32(offset + 1);
+        }
+
+        int raw = 0;
+        for (int i = 0; i < length; i++)
+        {
+            raw |= buffer.ReadByte(offset + i) << (8 * i);
+        }
+
+        // Sign-extend from the top bit of the last byte read
+        int shift = 32 - 8 * length;
+        return (raw << shift) >> (shift + length);
+    }
+
+    public static uint ReadCompressedUInt32(ByteBuffer buffer, int offset, int length)
+    {
+        if (length == 5)
+        {
+            return buffer.ReadUInt32(offset + 1);
+        }
+
+        uint raw = 0;
+        for (int i = 0; i < length; i++)
+        {
+            raw |= (uint)buffer.ReadByte(offset + i) << (8 * i);
+        }
+
+        return raw >> length;
+    }
+
+    /// <summary>
     /// Offset that reads must not go past. Defaults to the end of the buffer.
     /// </summary>
     public long Limit { get; set; } = long.MaxValue;
