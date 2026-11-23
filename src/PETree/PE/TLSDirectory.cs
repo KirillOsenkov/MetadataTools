@@ -33,6 +33,44 @@ public class TLSDirectory : Node
         }
 
         AddCallbacks();
+        AddTemplateAndIndex();
+    }
+
+    private void AddTemplateAndIndex()
+    {
+        if (PEFile == null)
+        {
+            return;
+        }
+
+        ulong startAddress = PEFile.ReadPointer(StartAddressOfRawData.Start);
+        ulong endAddress = PEFile.ReadPointer(EndAddressOfRawData.Start);
+        int templateOffset = PEFile.ResolvePointer(startAddress);
+        if (templateOffset > 0 && endAddress > startAddress && endAddress - startAddress < int.MaxValue)
+        {
+            int length = (int)(endAddress - startAddress);
+            int startRva = PEFile.VirtualAddressToRva(startAddress);
+            var section = PEFile.GetSectionAtVirtualAddress(startRva);
+            int rawEnd = section.PointerToRawData.Value + section.SizeOfRawData.Value;
+            length = System.Math.Min(length, rawEnd - templateOffset);
+            if (length > 0)
+            {
+                PEFile.TryAddRegion(new Region
+                {
+                    Start = templateOffset,
+                    Length = length,
+                    Text = $"TLS template data ({length} bytes)"
+                });
+            }
+        }
+
+        int indexOffset = PEFile.ResolvePointerAt(AddressOfIndex.Start);
+        if (indexOffset > 0 && PEFile.IsRangeAvailable(indexOffset, 4))
+        {
+            var index = new FourBytes { Start = indexOffset };
+            PEFile.Add(index);
+            index.Text = "TLS index";
+        }
     }
 
     private BytesNode AddPointer(string text)

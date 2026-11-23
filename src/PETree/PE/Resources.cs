@@ -114,12 +114,29 @@ public class Resource : Node
 
     protected virtual void ParseBytes(int start)
     {
-        Bytes = new BytesNode()
+        int size = Size.Value;
+        Node data = Type switch
         {
-            Start = start,
-            Length = Size.Value,
-            Text = $"{Type} bytes"
+            "Icon" => new IconResourceData(),
+            "Cursor" => new IconResourceData { IsCursor = true },
+            "Bitmap" => new BitmapResourceData(),
+            "GroupCursor" => new GroupCursorData(),
+            "Dialog" => new DialogResourceData(),
+            "Menu" => new MenuResourceData(),
+            "MUI" => new MuiResourceData(),
+            "Accelerator" when size % 8 == 0 => new RecordTable
+            {
+                Count = size / 8,
+                Fields = [("Flags", 2), ("Key", 2), ("Command id", 2), ("Padding", 2)],
+                RecordText = "Accelerator"
+            },
+            "HTML" or "REGISTRY" or "XML" or "XSD" or "XSL" or "JSON" => new Utf8String(),
+            _ => new BytesNode()
         };
+        data.Start = start;
+        data.Length = size;
+        data.Text = $"{Type} bytes";
+        Bytes = data;
         this.Root.Add(Bytes);
     }
 

@@ -9,6 +9,70 @@ public class Sequence : Node
 {
 }
 
+/// <summary>
+/// A named byte range that groups other nodes, such as a table of contents
+/// entry that says what a part of a section is used for.
+/// </summary>
+public class Region : Node
+{
+    /// <summary>
+    /// True when the bytes of the region that no other node claims are machine code.
+    /// </summary>
+    public bool ContainsCode { get; set; }
+}
+
+/// <summary>
+/// A fixed sequence of named fields.
+/// </summary>
+public class Record : Node
+{
+    public (string name, int size)[] Fields { get; set; }
+
+    public override void Parse()
+    {
+        if (Fields == null)
+        {
+            return;
+        }
+
+        foreach (var (name, size) in Fields)
+        {
+            AddField(name, size);
+        }
+    }
+
+    public int ReadInt32(int fieldIndex) => Buffer.ReadInt32(Children[fieldIndex].Start);
+}
+
+/// <summary>
+/// An array of records that all have the same fields.
+/// </summary>
+public class RecordTable : Node
+{
+    public (string name, int size)[] Fields { get; set; }
+    public int Count { get; set; }
+    public string RecordText { get; set; }
+    public Func<Record, string> Describe { get; set; }
+
+    public override void Parse()
+    {
+        for (int i = 0; i < Count; i++)
+        {
+            var record = new Record { Fields = Fields };
+            if (RecordText != null)
+            {
+                record.Text = RecordText;
+            }
+
+            Add(record);
+            if (Describe != null)
+            {
+                record.Text = Describe(record);
+            }
+        }
+    }
+}
+
 public class BytesNode : Node
 {
     public BytesNode()

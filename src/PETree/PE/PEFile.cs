@@ -8,7 +8,7 @@ using GuiLabs.Utilities;
 
 namespace GuiLabs.FileFormat.PE;
 
-public class PEFile : Node
+public partial class PEFile : Node
 {
     public string FilePath { get; set; }
 
@@ -198,62 +198,22 @@ public class PEFile : Node
                     ? ResolveVirtualAddress(address)
                     : debugDirectory.PointerToRawData.Value;
                 int size = debugDirectory.SizeOfData.Value;
-                if (start > 0 && size > 0 && start + size <= Buffer.Length)
+                if (start > 0 && size > 0 && (long)start + size <= Buffer.Length)
                 {
-                    Node entry = null;
-                    if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.EmbeddedPortablePdb)
+                    Node entry = debugDirectory.CreateDataNode(Buffer, start, size);
+                    entry.Start = start;
+                    if (entry is RSDS rsds)
                     {
-                        EmbeddedPdb = new EmbeddedPdb
-                        {
-                            Start = start,
-                            Length = size
-                        };
-                        entry = EmbeddedPdb;
-                    }
-                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.CodeView && Buffer.ReadUInt32(start) == 0x53445352)
-                    {
-                        entry = RSDS = new RSDS() { Start = start };
-                    }
-                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.Pogo)
-                    {
-                        entry = new PogoDebugData
-                        {
-                            Start = start,
-                            Length = size
-                        };
-                    }
-                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.PdbChecksum)
-                    {
-                        entry = new PdbChecksumDebugData
-                        {
-                            Start = start,
-                            Length = size
-                        };
-                    }
-                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.ExtendedDllCharacteristics)
-                    {
-                        entry = new ExtendedDllCharacteristicsDebugData
-                        {
-                            Start = start,
-                            Length = size
-                        };
-                    }
-                    else if (debugDirectory.DirectoryType == DebugDirectory.ImageDebugType.VcFeature)
-                    {
-                        entry = new VcFeatureDebugData
-                        {
-                            Start = start,
-                            Length = size
-                        };
+                        RSDS = rsds;
                     }
                     else
                     {
-                        entry = new DebugDirectoryEntry
-                        {
-                            Start = start,
-                            Length = size,
-                            Text = $"{debugDirectory.DirectoryType}"
-                        };
+                        entry.Length = size;
+                    }
+
+                    if (entry is EmbeddedPdb embeddedPdb)
+                    {
+                        EmbeddedPdb = embeddedPdb;
                     }
 
                     Add(entry);
@@ -268,6 +228,7 @@ public class PEFile : Node
         ParseImportTable();
 
         ImportAddressTable = AddTable<IAT>(OptionalHeader.DataDirectories.IAT, configure: iat => iat.IsPE32Plus = IsPE32Plus);
+        NameImportAddressTableEntries();
 
         // The startup stub is only present in managed images; a native image's
         // entry point is ordinary code
@@ -303,6 +264,7 @@ public class PEFile : Node
         }
 
         AddTable<BaseRelocationTable>(OptionalHeader.DataDirectories.BaseRelocationTable);
+        ReadRelocations();
         AddTable<BoundImport>(OptionalHeader.DataDirectories.BoundImport, text: "Bound import");
         AddTable<DelayLoadImportTable>(OptionalHeader.DataDirectories.DelayImportDescriptor, configure: d =>
         {
@@ -310,12 +272,15 @@ public class PEFile : Node
             d.PEFile = this;
         });
         AddCertificateTable(OptionalHeader.DataDirectories.CertificateTable);
-        AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
+        ExceptionTable = AddTable<ExceptionTable>(OptionalHeader.DataDirectories.ExceptionTable, configure: et =>
         {
             et.IsPE32Plus = IsPE32Plus;
             et.MachineType = PEHeader.Platform.Value;
             et.PEFile = this;
+            et.IsManaged = IsManagedFunctionTable(OptionalHeader.DataDirectories.ExceptionTable.RVA.Value);
         });
+        AddReadyToRunSections();
+        AddNativeImageSections();
         AddTable<ExportTable>(OptionalHeader.DataDirectories.ExportTable, configure: et =>
         {
             et.PEFile = this;
@@ -331,11 +296,19 @@ public class PEFile : Node
             tls.PEFile = this;
         });
 
+        AddExceptionHandlerData(ExceptionTable);
+
         AddCoffSymbolTable();
 
         ReadSingleFileBundle();
 
         AddOverlay();
+
+        AddNativeAotModules();
+        AddNativeAotUnwindData(ExceptionTable);
+        AddRtti();
+        AddGcInfo();
+        AddNativeImageVirtualSections();
 
         AddNativeCode(allSections);
 
@@ -353,27 +326,7 @@ public class PEFile : Node
                 $"  Overlap:  {prev.End - current.Start} bytes");
         });
 
-        this.ComputeUncoveredSpans(span =>
-        {
-            if (Buffer.IsZeroFilled(span) || IsPaddingFilled(span))
-            {
-                var padding = new Padding
-                {
-                    Start = span.Start,
-                    Length = span.Length
-                };
-                Add(padding);
-            }
-            else
-            {
-                var unknown = new Unknown
-                {
-                    Start = span.Start,
-                    Length = span.Length
-                };
-                this.Add(unknown);
-            }
-        });
+        ClassifyUncoveredSpans();
 
         Text = $"PE File";
     }
@@ -564,37 +517,60 @@ public class PEFile : Node
                 continue;
             }
 
+            // The code section of a precompiled managed image also holds
+            // metadata and runtime tables, and its code is listed by the
+            // function table and by named regions. Only those are code.
+            bool isManagedImage = ReadyToRunHeader != null || NativeImageHeader != null;
             int contentLength = Math.Min(section.Length, sectionHeader.VirtualSize.Value);
-            int contentEnd = section.Start + contentLength;
-            int start = section.Start;
-            var spans = new List<Span>();
+            AddNativeCode(section, section.Start + contentLength, fillGaps: !isManagedImage, isManagedImage);
+        }
+    }
 
-            foreach (var child in section.Children)
+    private void AddNativeCode(Node container, int contentEnd, bool fillGaps, bool isManagedImage)
+    {
+        contentEnd = Math.Min(contentEnd, container.End);
+        int start = container.Start;
+        var spans = new List<Span>();
+
+        foreach (var child in container.Children)
+        {
+            int end = Math.Min(child.Start, contentEnd);
+            if (end > start && fillGaps)
             {
-                int end = Math.Min(child.Start, contentEnd);
-                if (end > start)
-                {
-                    spans.Add(new Span(start, end - start));
-                }
-
-                start = Math.Max(start, child.End);
-                if (start >= contentEnd)
-                {
-                    break;
-                }
+                spans.Add(new Span(start, end - start));
             }
 
-            if (start < contentEnd)
+            if (child is Region region && child.Start < contentEnd)
             {
-                spans.Add(new Span(start, contentEnd - start));
+                AddNativeCode(child, contentEnd, isManagedImage ? region.ContainsCode : fillGaps, isManagedImage);
             }
 
-            foreach (var span in spans)
+            start = Math.Max(start, child.End);
+            if (start >= contentEnd)
             {
-                if (!Buffer.IsZeroFilled(span))
-                {
-                    section.Add(new NativeCode { Start = span.Start, Length = span.Length });
-                }
+                break;
+            }
+        }
+
+        if (start < contentEnd && fillGaps)
+        {
+            spans.Add(new Span(start, contentEnd - start));
+        }
+
+        foreach (var span in spans)
+        {
+            if (Buffer.IsZeroFilled(span))
+            {
+                continue;
+            }
+
+            if (IsCodePadding(span))
+            {
+                container.Add(new Padding { Start = span.Start, Length = span.Length });
+            }
+            else
+            {
+                container.Add(new NativeCode { Start = span.Start, Length = span.Length });
             }
         }
     }
@@ -609,27 +585,38 @@ public class PEFile : Node
         MetadataSectionHeader = GetSectionAtVirtualAddress(MetadataRVA);
         int metadata = ResolveDataDirectory(metadataDirectory);
 
+        // The managed native header goes in first: in ReadyToRun and NGEN
+        // images it is located between the CLI header and the metadata
+        AddManagedNativeHeader();
+
         if (metadata > 0)
         {
-            var il = new IL
+            // In an IL-only image everything between the CLI header and the
+            // metadata is method bodies. Precompiled images keep many other
+            // structures there, so the grouping node is left out.
+            bool isILOnly = ReadyToRunHeader == null && NativeImageHeader == null;
+            IL il = null;
+            if (isILOnly && metadata > CLIHeader.End)
             {
-                Start = CLIHeader.End,
-                Length = metadata - CLIHeader.End
-            };
-            Add(il);
+                il = new IL
+                {
+                    Start = CLIHeader.End,
+                    Length = metadata - CLIHeader.End
+                };
+                Add(il);
+            }
 
             Metadata = new Metadata { Start = metadata };
             Add(Metadata);
 
-            il.FillWithPadding();
+            il?.FillWithPadding();
         }
 
         AddTable<StrongNameSignature>(CLIHeader.StrongNameSignature);
-
-        AddReadyToRunHeader();
+        AddVTableFixups();
     }
 
-    private void AddReadyToRunHeader()
+    private void AddManagedNativeHeader()
     {
         int nativeHeaderRVA = CLIHeader.ManagedNativeHeader.ReadInt32();
         int nativeHeaderSize = Buffer.ReadInt32(CLIHeader.ManagedNativeHeader.Start + 4);
@@ -639,22 +626,80 @@ public class PEFile : Node
         }
 
         int offset = ResolveVirtualAddress(nativeHeaderRVA);
-        if (offset <= 0 || Buffer.ReadUInt32(offset) != 0x00525452)
+        if (offset <= 0)
         {
             return;
         }
 
-        if (!IsRangeAvailable(offset, nativeHeaderSize))
+        const uint ReadyToRunSignature = 0x00525452;
+        const uint NativeImageSignature = 0x0045474E;
+        uint signature = Buffer.ReadUInt32(offset);
+        if (signature == NativeImageSignature)
+        {
+            AddNativeImageHeader(offset, nativeHeaderSize);
+            return;
+        }
+
+        if (signature != ReadyToRunSignature || !IsRangeAvailable(offset, nativeHeaderSize))
         {
             return;
         }
 
-        var readyToRunHeader = new ReadyToRunHeader
+        ReadyToRunHeader = new ReadyToRunHeader
         {
             Start = offset,
             Length = nativeHeaderSize
         };
-        Add(readyToRunHeader);
+        Add(ReadyToRunHeader);
+    }
+
+    private void AddVTableFixups()
+    {
+        int rva = CLIHeader.VTableFixups.ReadInt32();
+        int size = Buffer.ReadInt32(CLIHeader.VTableFixups.Start + 4);
+        int offset = rva > 0 ? ResolveVirtualAddress(rva) : 0;
+        if (offset <= 0 || size < 8 || !IsRangeAvailable(offset, size))
+        {
+            return;
+        }
+
+        var table = new RecordTable
+        {
+            Start = offset,
+            Length = size / 8 * 8,
+            Count = size / 8,
+            Fields = [("Slots RVA", 4), ("Slot count", 2), ("Type", 2)],
+            RecordText = "VTable fixup"
+        };
+        Add(table);
+        table.Text = "VTable fixups";
+
+        foreach (var record in table.Children.OfType<Record>())
+        {
+            int slotsRva = record.ReadInt32(0);
+            int count = Buffer.ReadUInt16(record.Children[1].Start);
+            int type = Buffer.ReadUInt16(record.Children[2].Start);
+            const int Is64Bit = 0x02;
+            int slotSize = (type & Is64Bit) != 0 ? 8 : 4;
+            int slotsOffset = ResolveVirtualAddress(slotsRva);
+            if (slotsOffset <= 0 || count == 0)
+            {
+                continue;
+            }
+
+            var slots = new RecordTable
+            {
+                Start = slotsOffset,
+                Length = count * slotSize,
+                Count = count,
+                Fields = [("Method token", slotSize)],
+                RecordText = "VTable slot"
+            };
+            if (TryAdd(slots))
+            {
+                slots.Text = $"VTable fixup slots ({count})";
+            }
+        }
     }
 
     private Node AddCertificateTable(DataDirectory dataDirectory)
@@ -733,6 +778,8 @@ public class PEFile : Node
 
         var list = ImportTable.ImportsDirectories;
 
+        int entrySize = IsPE32Plus ? 8 : 4;
+
         for (int i = 0; i < list.Count - 1; i++)
         {
             var directory = list[i];
@@ -740,13 +787,30 @@ public class PEFile : Node
             var dllNameRva = directory.DllNameRVA;
             var lookupTableRva = directory.LookupTableRVA;
 
+            var dllName = ResolveVirtualAddress(dllNameRva.Value);
+            string dllNameText = ReadZeroTerminatedAscii(dllName) ?? "";
+            if (dllNameText.Length > 0)
+            {
+                directory.Text = $"Imports directory: {dllNameText}";
+            }
+
             var lookupTable = ResolveVirtualAddress(lookupTableRva.Value);
 
             if (lookupTable > 0)
             {
                 var importLookupTable = new ImportLookupTable() { Start = lookupTable, IsPE32Plus = IsPE32Plus };
                 ImportTable.Add(importLookupTable);
-                AddImportNames(importLookupTable);
+                importLookupTable.Text = $"Import Lookup Table: {dllNameText}";
+                for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
+                {
+                    var entry = importLookupTable.Entries[j];
+                    string name = AddImportName(entry.Start);
+                    if (name != null)
+                    {
+                        entry.Text = name;
+                        ImportNamesBySlotRva[addressTableRva.Value + j * entrySize] = $"{dllNameText}!{name}";
+                    }
+                }
             }
             else
             {
@@ -755,11 +819,23 @@ public class PEFile : Node
                 int addressTable = ResolveVirtualAddress(addressTableRva.Value);
                 if (addressTable > 0)
                 {
-                    AddImportNamesFromRawTable(addressTable);
+                    int index = 0;
+                    for (int offset = addressTable; offset + entrySize <= Buffer.Length; offset += entrySize, index++)
+                    {
+                        if (ReadPointer(offset) == 0)
+                        {
+                            break;
+                        }
+
+                        string name = AddImportName(offset);
+                        if (name != null)
+                        {
+                            ImportNamesBySlotRva[addressTableRva.Value + index * entrySize] = $"{dllNameText}!{name}";
+                        }
+                    }
                 }
             }
 
-            var dllName = ResolveVirtualAddress(dllNameRva.Value);
             if (dllName > 0)
             {
                 var dllNameNode = new ZeroTerminatedString() { Start = dllName };
@@ -768,32 +844,31 @@ public class PEFile : Node
         }
     }
 
-    private void AddImportNames(ImportLookupTable importLookupTable)
-    {
-        for (int j = 0; j < importLookupTable.Entries.Count - 1; j++)
-        {
-            AddImportName(importLookupTable.Entries[j].Start);
-        }
-    }
+    /// <summary>
+    /// Import names keyed by the RVA of the import address table slot that
+    /// receives the address.
+    /// </summary>
+    public Dictionary<int, string> ImportNamesBySlotRva { get; } = new();
 
-    private void AddImportNamesFromRawTable(int tableOffset)
+    private void NameImportAddressTableEntries()
     {
+        if (ImportAddressTable?.Entries == null)
+        {
+            return;
+        }
+
         int entrySize = IsPE32Plus ? 8 : 4;
-        for (int offset = tableOffset; offset + entrySize <= Buffer.Length; offset += entrySize)
+        int tableRva = OptionalHeader.DataDirectories.IAT.RVA.Value;
+        for (int i = 0; i < ImportAddressTable.Entries.Count; i++)
         {
-            long value = IsPE32Plus
-                ? (long)Buffer.ReadUInt64(offset)
-                : (long)Buffer.ReadUInt32(offset);
-            if (value == 0)
+            if (ImportNamesBySlotRva.TryGetValue(tableRva + i * entrySize, out var name))
             {
-                break;
+                ImportAddressTable.Entries[i].Text = name;
             }
-
-            AddImportName(offset);
         }
     }
 
-    private void AddImportName(int entryOffset)
+    private string AddImportName(int entryOffset)
     {
         // For PE32+, the ordinal flag is bit 63; for PE32 it's bit 31
         long value = IsPE32Plus
@@ -801,21 +876,27 @@ public class PEFile : Node
             : (long)Buffer.ReadUInt32(entryOffset);
         if (value == 0)
         {
-            return;
+            return null;
         }
 
         // High bit set means import by ordinal, not by name
         bool isOrdinal = IsPE32Plus ? (value & unchecked((long)0x8000000000000000)) != 0 : (value & 0x80000000) != 0;
-        if (!isOrdinal)
+        if (isOrdinal)
         {
-            int rva = (int)(value & 0x7FFFFFFF);
-            var resolved = ResolveVirtualAddress(rva);
-            if (resolved > 0)
-            {
-                var imageImportByName = new ImageImportByName() { Start = resolved };
-                ImportTable.Add(imageImportByName);
-            }
+            return $"Ordinal {value & 0xFFFF}";
         }
+
+        int rva = (int)(value & 0x7FFFFFFF);
+        var resolved = ResolveVirtualAddress(rva);
+        if (resolved > 0)
+        {
+            var imageImportByName = new ImageImportByName() { Start = resolved };
+            ImportTable.Add(imageImportByName);
+            imageImportByName.Text = imageImportByName.Name.Text;
+            return imageImportByName.Name.Text;
+        }
+
+        return null;
     }
 
     public DOSHeader DOSHeader { get; set; }
@@ -896,9 +977,8 @@ public class PEFile : Node
         }
 
         int end = start + length;
-        var section = Children.OfType<Section>()
-            .FirstOrDefault(candidate => start >= candidate.Start && end <= candidate.End);
-        if (section == null)
+        int sectionIndex = FindChildIndex(start);
+        if (sectionIndex < 0 || Children[sectionIndex] is not Section section || end > section.End)
         {
             return false;
         }
@@ -908,24 +988,28 @@ public class PEFile : Node
 
     private static Node FindAvailableParent(Node parent, int start, int end)
     {
-        foreach (var child in parent.Children)
+        while (parent.HasChildren)
         {
-            if (end <= child.Start)
+            int index = parent.FindChildIndex(start);
+            if (index >= 0)
             {
-                break;
+                var child = parent.Children[index];
+                if (end <= child.End && child.HasChildren)
+                {
+                    parent = child;
+                    continue;
+                }
+
+                return null;
             }
 
-            if (start >= child.End)
+            index = ~index;
+            if (index < parent.Children.Count && parent.Children[index].Start < end)
             {
-                continue;
+                return null;
             }
 
-            if (start >= child.Start && end <= child.End && child.HasChildren)
-            {
-                return FindAvailableParent(child, start, end);
-            }
-
-            return null;
+            break;
         }
 
         return parent;

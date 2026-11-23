@@ -87,7 +87,7 @@ public class Metadata : Node
             list[i] = stream;
 
             int offset = stream.Offset.Value;
-            int start = peFile != null ? peFile.ResolveMetadataOffset(offset) : offset;
+            int start = IsSecondary ? Start + offset : peFile != null ? peFile.ResolveMetadataOffset(offset) : offset;
             int length = stream.Size.Value;
             string streamName = stream.Name.Text;
 
@@ -129,6 +129,7 @@ public class Metadata : Node
             if (metadataStream != null)
             {
                 metadataStream.Name = streamName;
+                metadataStream.OwnerMetadata = this;
                 metadataStream.Text = $"{streamName} stream";
                 metadataStream.Start = start;
                 metadataStream.Length = length;
@@ -241,6 +242,13 @@ public class Metadata : Node
 
     public PEFile PEFile => FindAncestor<PEFile>();
 
+    /// <summary>
+    /// True for a metadata blob other than the one the CLI header points to,
+    /// such as the manifest metadata of a ReadyToRun or NGEN image. Its rows
+    /// do not describe methods or resources of this image.
+    /// </summary>
+    public bool IsSecondary { get; set; }
+
     public FourBytes BSJB { get; set; }
     public TwoBytes MajorVersion { get; set; }
     public TwoBytes MinorVersion { get; set; }
@@ -287,6 +295,7 @@ public class Utf8KeyValue : Node
 public class MetadataStream : Node
 {
     public string Name { get; set; }
+    public Metadata OwnerMetadata { get; set; }
 }
 
 public struct TableInfo
@@ -549,7 +558,7 @@ public class CompressedMetadataTableStream : MetadataStream
 
     public IReadOnlyList<MetadataTable> Tables { get; set; }
 
-    public Metadata Metadata => Parent switch
+    public Metadata Metadata => OwnerMetadata ?? Parent switch
     {
         Metadata m => m,
         PEFile peFile => peFile.Metadata,
@@ -1043,12 +1052,12 @@ public class CompressedMetadataTableStream : MetadataStream
                     // Only parse methods with IL code (ImplFlags CodeType == IL).
                     // Native and Runtime methods have non-IL code at the RVA.
                     int implFlags = methodTableRow.ImplFlags.Value;
-                    if ((implFlags & 0x0003) == 0)
+                    if ((implFlags & 0x0003) == 0 && !Metadata.IsSecondary)
                     {
                         FindMethod(methodTableRow.RVA.Value, zeroTerminatedString);
                     }
                 }
-                else if (tableRow is ManifestResourceTableRow manifestResourceTableRow)
+                else if (tableRow is ManifestResourceTableRow manifestResourceTableRow && !Metadata.IsSecondary)
                 {
                     FindManagedResource(manifestResourceTableRow);
                 }

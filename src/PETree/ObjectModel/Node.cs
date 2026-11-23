@@ -99,27 +99,90 @@ public class Node
             return null;
         }
 
-        for (int i = 0; i < Children.Count; i++)
+        if (!HasChildren)
         {
-            var child = Children[i];
-            if (offset < child.Start)
-            {
-                return null;
-            }
+            return this;
+        }
 
-            if (offset >= child.End)
-            {
-                continue;
-            }
-
-            var found = child.Find(offset);
+        int index = FindChildIndex(offset);
+        if (index >= 0)
+        {
+            var found = children[index].Find(offset);
             if (found != null)
             {
                 return found;
             }
+
+            index++;
+        }
+        else
+        {
+            index = ~index;
         }
 
-        return this;
+        // A gap in front of a child is reported as null, a gap after the
+        // last child as this node
+        return index < children.Count ? null : this;
+    }
+
+    /// <summary>
+    /// The deepest node that contains the offset, or null when the offset is
+    /// outside this node.
+    /// </summary>
+    public Node FindDeepest(int offset)
+    {
+        if (offset < Start || offset >= End)
+        {
+            return null;
+        }
+
+        var current = this;
+        while (current.HasChildren)
+        {
+            int index = current.FindChildIndex(offset);
+            if (index < 0)
+            {
+                break;
+            }
+
+            current = current.children[index];
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Index of the child that contains the offset, or the bitwise complement
+    /// of the index of the first child that starts after it.
+    /// </summary>
+    public int FindChildIndex(int offset)
+    {
+        if (children == null)
+        {
+            return ~0;
+        }
+
+        int lo = 0;
+        int hi = children.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            var child = children[mid];
+            if (offset < child.Start)
+            {
+                hi = mid - 1;
+            }
+            else if (offset >= child.End)
+            {
+                lo = mid + 1;
+            }
+            else
+            {
+                return mid;
+            }
+        }
+
+        return ~lo;
     }
 
     public virtual Node Add(Node node)
@@ -275,6 +338,42 @@ public class Node
         Add(node);
         return node;
     }
+
+    /// <summary>
+    /// Adds a field of the given size after the last child. Sizes 1, 2, 4, 8
+    /// and 16 produce the typed nodes.
+    /// </summary>
+    public Node AddField(string text, int size)
+    {
+        Node node = size switch
+        {
+            1 => new OneByte(),
+            2 => new TwoBytes(),
+            4 => new FourBytes(),
+            8 => new EightBytes(),
+            16 => new SixteenBytes(),
+            _ => new Node { Length = size }
+        };
+
+        if (size == 0)
+        {
+            return null;
+        }
+
+        node.Start = LastChildEnd;
+        if (text != null)
+        {
+            node.Text = text;
+        }
+
+        Add(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Bytes between the end of the last child and the end of this node.
+    /// </summary>
+    public int Remaining => End - LastChildEnd;
 
     public byte[] ReadBytes(int offset, int length) => Buffer.ReadBytes(offset, length);
 
