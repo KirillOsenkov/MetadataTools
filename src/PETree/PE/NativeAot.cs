@@ -22,8 +22,11 @@ public partial class PEFile
             return;
         }
 
+        // A row is an id, flags, a start and an end pointer. Since version 26
+        // (.NET 11) it is an id, a length and a start pointer.
         const uint ImageScnCntCode = 0x00000020;
         int rowSize = 8 + 2 * PointerSize;
+        int shortRowSize = 8 + PointerSize;
         foreach (var sectionHeader in SectionTable.SectionHeaders)
         {
             int raw = sectionHeader.PointerToRawData.Value;
@@ -46,12 +49,19 @@ public partial class PEFile
                 int entrySize = bytes[i + 14];
                 int entryType = bytes[i + 15];
                 int length = 16 + sectionCount * entrySize;
-                if (entryType != 1 || entrySize != rowSize || sectionCount == 0 || sectionCount > 512 || i + length > bytes.Length)
+                if (entryType != 1 || (entrySize != rowSize && entrySize != shortRowSize) ||
+                    sectionCount == 0 || sectionCount > 512 || i + length > bytes.Length)
                 {
                     continue;
                 }
 
-                var header = new NativeAotModuleHeader { Start = raw + i, Length = length, PointerSize = PointerSize };
+                var header = new NativeAotModuleHeader
+                {
+                    Start = raw + i,
+                    Length = length,
+                    PointerSize = PointerSize,
+                    HasLengthField = entrySize == shortRowSize
+                };
                 if (TryAdd(header))
                 {
                     NativeAotModuleHeaders.Add(header);
@@ -63,22 +73,32 @@ public partial class PEFile
         {
             foreach (var row in header.Rows)
             {
-                AddNativeAotRegion(row);
+                AddNativeAotRegion(row, header.HasLengthField);
             }
         }
     }
 
-    private void AddNativeAotRegion(Record row)
+    private void AddNativeAotRegion(Record row, bool hasLengthField)
     {
         int id = row.ReadInt32(0);
         int flags = row.ReadInt32(1);
         ulong start = ReadPointer(row.Children[2].Start);
-        ulong end = ReadPointer(row.Children[3].Start);
         string name = ReadyToRunSection.GetSectionTypeName(id);
         int startRva = VirtualAddressToRva(start);
         const int HasEndPointer = 1;
-        bool hasEnd = (flags & HasEndPointer) != 0 && end >= start;
-        long size = hasEnd ? (long)(end - start) : PointerSize;
+        bool hasEnd;
+        long size;
+        if (hasLengthField)
+        {
+            hasEnd = flags > 0;
+            size = flags;
+        }
+        else
+        {
+            ulong end = ReadPointer(row.Children[3].Start);
+            hasEnd = (flags & HasEndPointer) != 0 && end >= start;
+            size = hasEnd ? (long)(end - start) : PointerSize;
+        }
         row.Text = $"{name}: RVA 0x{startRva:X}, {size} bytes";
 
         int offset = startRva > 0 ? ResolveVirtualAddress(startRva) : 0;
@@ -434,6 +454,12 @@ public class NativeAotModuleHeader : Node
 {
     public int PointerSize { get; set; }
 
+    /// <summary>
+    /// True when a row holds the length of its region, false when it holds
+    /// flags and an end pointer.
+    /// </summary>
+    public bool HasLengthField { get; set; }
+
     public override void Parse()
     {
         AddFourBytes("Signature (RTR)");
@@ -449,7 +475,9 @@ public class NativeAotModuleHeader : Node
         {
             var row = new Record
             {
-                Fields = [("Section id", 4), ("Flags", 4), ("Start", PointerSize), ("End", PointerSize)]
+                Fields = HasLengthField
+                    ? [("Section id", 4), ("Length", 4), ("Start", PointerSize)]
+                    : [("Section id", 4), ("Flags", 4), ("Start", PointerSize), ("End", PointerSize)]
             };
             Add(row);
             rows.Add(row);

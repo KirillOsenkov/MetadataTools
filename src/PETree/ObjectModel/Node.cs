@@ -283,6 +283,50 @@ public class Node
         return node;
     }
 
+    /// <summary>
+    /// Adds nodes that are located between the children of this node and
+    /// do not overlap them. Start and Length of each node must be set. The
+    /// child list is merged once, so this is the way to add many nodes.
+    /// </summary>
+    public void AddBetweenChildren(List<Node> nodes)
+    {
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+
+        nodes.Sort((left, right) => left.Start.CompareTo(right.Start));
+
+        var existing = Children;
+        var merged = new List<Node>(existing.Count + nodes.Count);
+        int index = 0;
+        foreach (var node in nodes)
+        {
+            while (index < existing.Count && existing[index].Start < node.Start)
+            {
+                merged.Add(existing[index]);
+                index++;
+            }
+
+            merged.Add(node);
+        }
+
+        while (index < existing.Count)
+        {
+            merged.Add(existing[index]);
+            index++;
+        }
+
+        children = merged;
+
+        foreach (var node in nodes)
+        {
+            node.Buffer = Buffer;
+            node.Parent = this;
+            node.Parse();
+        }
+    }
+
     public Padding AddPadding(int length)
     {
         var node = new Padding { Length = length };

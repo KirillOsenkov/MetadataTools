@@ -292,11 +292,20 @@ public partial class PEFile
         var gaps = new List<(Node container, int start, int length)>();
         CollectGaps(this, gaps);
 
+        // The new nodes of a container are collected first and merged into
+        // its children once: a section can get hundreds of thousands of them
+        var newNodes = new Dictionary<Node, List<Node>>();
         foreach (var (container, start, length) in gaps)
         {
+            if (!newNodes.TryGetValue(container, out var output))
+            {
+                output = new List<Node>();
+                newNodes[container] = output;
+            }
+
             if (container is Section || container is Region)
             {
-                ClassifySectionGap(container, start, length);
+                ClassifySectionGap(output, start, length);
             }
             else
             {
@@ -306,8 +315,13 @@ public partial class PEFile
                     : new Unknown();
                 node.Start = start;
                 node.Length = length;
-                container.Add(node);
+                output.Add(node);
             }
+        }
+
+        foreach (var pair in newNodes)
+        {
+            pair.Key.AddBetweenChildren(pair.Value);
         }
     }
 
@@ -343,7 +357,7 @@ public partial class PEFile
         }
     }
 
-    private void ClassifySectionGap(Node container, int start, int length)
+    private void ClassifySectionGap(List<Node> output, int start, int length)
     {
         int end = start + length;
         int position = start;
@@ -372,8 +386,8 @@ public partial class PEFile
                 count++;
             }
 
-            ClassifyRawBytes(container, position, runStart);
-            container.Add(new PointerTable
+            ClassifyRawBytes(output, position, runStart);
+            output.Add(new PointerTable
             {
                 Start = runStart,
                 Length = count * pointerSize,
@@ -383,10 +397,10 @@ public partial class PEFile
             relocationIndex += count;
         }
 
-        ClassifyRawBytes(container, position, end);
+        ClassifyRawBytes(output, position, end);
     }
 
-    private void ClassifyRawBytes(Node container, int start, int end)
+    private void ClassifyRawBytes(List<Node> output, int start, int end)
     {
         int length = end - start;
         if (length <= 0)
@@ -397,7 +411,7 @@ public partial class PEFile
         var bytes = Buffer.ReadBytes(start, length);
         if (IsPaddingPattern(bytes))
         {
-            container.Add(new Padding { Start = start, Length = length });
+            output.Add(new Padding { Start = start, Length = length });
             return;
         }
 
@@ -413,7 +427,7 @@ public partial class PEFile
         {
             if (upTo > unknownStart)
             {
-                container.Add(new Unknown { Start = start + unknownStart, Length = upTo - unknownStart });
+                output.Add(new Unknown { Start = start + unknownStart, Length = upTo - unknownStart });
             }
         }
 
@@ -432,7 +446,7 @@ public partial class PEFile
                 if (run >= 4 || i == unknownStart || j == length)
                 {
                     Flush(i);
-                    container.Add(new Padding { Start = start + i, Length = run });
+                    output.Add(new Padding { Start = start + i, Length = run });
                     unknownStart = j;
                 }
 
@@ -459,7 +473,7 @@ public partial class PEFile
                 if (count > 0)
                 {
                     Flush(i);
-                    container.Add(new PointerTable
+                    output.Add(new PointerTable
                     {
                         Start = start + i,
                         Length = count * pointerSize,
@@ -481,7 +495,7 @@ public partial class PEFile
             if (stringLength > 0)
             {
                 Flush(i);
-                container.Add(new StringLiteral
+                output.Add(new StringLiteral
                 {
                     Start = start + i,
                     Length = stringLength,
