@@ -8,7 +8,8 @@ using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
-using GuiLabs.FileFormat.Wasm;
+
+namespace GuiLabs.FileFormat.Wasm;
 
 /// <summary>
 /// The method that a function of a module with Mono AOT code was compiled from.
@@ -52,6 +53,17 @@ public sealed class MonoAotMethod
     public string Symbol { get; set; }
 
     public bool IsUnboxTrampoline { get; set; }
+
+    /// <summary>
+    /// False when neither the assembly nor the object file gave a name.
+    /// </summary>
+    public bool HasName { get; set; } = true;
+
+    /// <summary>
+    /// The symbol could not be split into type and method, because the
+    /// assembly with the type was not found.
+    /// </summary>
+    public bool IsSymbolOnly { get; set; }
 
     public bool IsFromMetadata => Kind == KindMethod;
 
@@ -159,6 +171,11 @@ public sealed class MonoAotNames
 
     public int AssemblyCount { get; private set; }
     public int ObjectFileCount { get; private set; }
+
+    /// <summary>
+    /// An assembly or an object file of the module was not found in the folders.
+    /// </summary>
+    public bool HasMissingFiles { get; private set; }
 
     /// <summary>
     /// Reads the names for the functions of the module. The files are
@@ -276,9 +293,10 @@ public sealed class MonoAotNames
                 {
                     // No object file: the symbol map has the same symbol
                     method.Symbol = mapName;
-                    if (!method.IsFromMetadata && function.MethodIndex >= 0)
+                    if ((!method.IsFromMetadata || !method.HasName) && function.MethodIndex >= 0)
                     {
                         names.ParseSymbol(method, function.Owner.Name);
+                        method.HasName = true;
                     }
                 }
                 else
@@ -288,9 +306,13 @@ public sealed class MonoAotNames
                 }
             }
 
-            if (method.Kind != MonoAotMethod.KindHelper && method.Kind != MonoAotMethod.KindNotNamed && !isObjectFile)
+            if (method.Kind != MonoAotMethod.KindHelper && !isObjectFile)
             {
-                string name = method.FullName;
+                // A method without a name is described by its assembly and
+                // its index in the method table of the assembly
+                string name = !method.HasName ? $"{method.Assembly}, method {function.MethodIndex}"
+                    : method.IsSymbolOnly && method.Symbol != null ? method.Symbol
+                    : method.FullName;
                 file.FunctionNames[function.Index] = name;
                 function.Text = file.DescribeFunction(function.Index);
             }
@@ -313,13 +335,19 @@ public sealed class MonoAotNames
 
         if (missingAssemblies.Count > 0 || missingObjectFiles.Count > 0)
         {
-            names.Messages.Add($"Folders that were searched: {string.Join("; ", folders)}. Add folders with --names <folder>.");
+            names.Messages.Add($"Folders that were searched: {string.Join("; ", folders)}.");
+            names.HasMissingFiles = true;
         }
 
         return names;
     }
 
     private Dictionary<int, string> symbolMap;
+
+    /// <summary>
+    /// A symbol map of the same build was found.
+    /// </summary>
+    public bool HasSymbolMap => symbolMap != null;
 
     /// <summary>
     /// The library of each function that is in no method table, when the
@@ -336,47 +364,81 @@ public sealed class MonoAotNames
     /// </summary>
     private void ReadSymbolMap(WasmFile file, string filePath, List<string> folders)
     {
-        string fileName = Path.GetFileNameWithoutExtension(filePath) + ".js.symbols";
-        string path = folders.Select(f => Path.Combine(f, fileName)).FirstOrDefault(File.Exists);
-        if (path == null)
+        const string Extension = ".js.symbols";
+        string fileName = Path.GetFileNameWithoutExtension(filePath) + Extension;
+        var paths = folders.Select(f => Path.Combine(f, fileName)).Where(File.Exists).ToList();
+        if (paths.Count == 0)
+        {
+            // The name of a published file has a hash of the contents, so
+            // the name of the map cannot be told from the name of the module
+            foreach (string folder in folders)
+            {
+                paths.AddRange(Directory.GetFiles(folder, "*" + Extension));
+            }
+        }
+
+        if (paths.Count == 0)
         {
             Messages.Add($"No symbol map ({fileName}, written by a build with WasmEmitSymbolMap=true) was found: the functions in no method table have no names.");
             return;
         }
 
-        var map = new Dictionary<int, string>();
-        foreach (string line in File.ReadLines(path))
-        {
-            int colon = line.IndexOf(':');
-            if (colon > 0 && int.TryParse(line.AsSpan(0, colon), out int index))
-            {
-                map[index] = line.Substring(colon + 1);
-            }
-        }
-
+        Dictionary<int, string> map = null;
         int same = 0;
         int different = 0;
-        foreach (var (index, name) in file.FunctionNames)
+        foreach (string path in paths)
         {
-            bool isOwned = index >= file.ImportedFunctionCount && index - file.ImportedFunctionCount < file.Functions.Count && file.Functions[index - file.ImportedFunctionCount].Owner != null;
-            if (isOwned || !map.TryGetValue(index, out string mapName))
+            var candidate = new Dictionary<int, string>();
+            try
+            {
+                foreach (string line in File.ReadLines(path))
+                {
+                    int colon = line.IndexOf(':');
+                    if (colon > 0 && int.TryParse(line.Substring(0, colon), out int index))
+                    {
+                        candidate[index] = line.Substring(colon + 1);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
                 continue;
             }
 
-            if (name == mapName || name.EndsWith("." + mapName, StringComparison.Ordinal))
+            same = 0;
+            different = 0;
+            foreach (var pair in file.FunctionNames)
             {
-                same++;
+                int index = pair.Key;
+                string name = pair.Value;
+                bool isOwned = index >= file.ImportedFunctionCount && index - file.ImportedFunctionCount < file.Functions.Count && file.Functions[index - file.ImportedFunctionCount].Owner != null;
+                if (isOwned || !candidate.TryGetValue(index, out string mapName))
+                {
+                    continue;
+                }
+
+                if (name == mapName || name.EndsWith("." + mapName, StringComparison.Ordinal))
+                {
+                    same++;
+                }
+                else
+                {
+                    different++;
+                }
             }
-            else
+
+            if (different > same || same == 0)
             {
-                different++;
+                Messages.Add($"The symbol map {path} is from another build: {different:N0} of the {same + different:N0} names that the module has for its imports and exports differ. It is not used.");
+                continue;
             }
+
+            map = candidate;
+            break;
         }
 
-        if (different > same)
+        if (map == null)
         {
-            Messages.Add($"The symbol map {path} is from another build: {different:N0} of the {same + different:N0} names that the module has for its imports and exports differ. It is not used.");
             return;
         }
 
@@ -573,13 +635,18 @@ public sealed class MonoAotNames
             return reader.HasMetadata && AddAssembly(module, reader.GetMetadataReader(), path);
         }
 
-        var webcil = WasmFile.ReadFromFile(path).Webcil?.Metadata;
+        var image = WasmFile.ReadFromFile(path).Webcil;
+        var webcil = image?.Metadata;
         if (webcil == null)
         {
             return false;
         }
 
-        var bytes = webcil.Buffer.ReadBytes(webcil.Start, webcil.Length);
+        // The node of the metadata ends before the streams. The directory
+        // in the header of the assembly has the length of all of it.
+        int length = Math.Max(webcil.Length, image.CLIHeader?.Metadata?.Size.Value ?? 0);
+        length = Math.Min(length, (int)webcil.Buffer.Length - webcil.Start);
+        var bytes = webcil.Buffer.ReadBytes(webcil.Start, length);
         using var provider = MetadataReaderProvider.FromMetadataImage(ImmutableArray.Create(bytes));
         return AddAssembly(module, provider.GetMetadataReader(), path);
     }
@@ -705,7 +772,7 @@ public sealed class MonoAotNames
             {
                 // One underscore for each byte of the UTF-8 encoding
                 int length = char.IsHighSurrogate(c) && i + 1 < name.Length ? 2 : 1;
-                builder.Append('_', Encoding.UTF8.GetByteCount(name.AsSpan(i, length)));
+                builder.Append('_', Encoding.UTF8.GetByteCount(name.Substring(i, length)));
                 i += length - 1;
             }
         }
@@ -757,6 +824,7 @@ public sealed class MonoAotNames
         method.Kind = assembly == null ? MonoAotMethod.KindMethod : MonoAotMethod.KindNotNamed;
         method.Type = assembly == null ? "(methods without a name)" : "(generic instances and wrappers without a name)";
         method.Method = $"method {index}";
+        method.HasName = false;
         return method;
     }
 
@@ -859,6 +927,7 @@ public sealed class MonoAotNames
         {
             method.Type = "(type not found)";
             method.Method = symbol;
+            method.IsSymbolOnly = true;
         }
     }
 

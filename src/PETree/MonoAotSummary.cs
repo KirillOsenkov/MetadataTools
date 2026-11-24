@@ -161,6 +161,11 @@ public static class MonoAotSummary
             {
                 writer.WriteLine(message);
             }
+
+            if (names.HasMissingFiles)
+            {
+                writer.WriteLine("Add folders with --names <folder>.");
+            }
         }
 
         if (isCompressed)
