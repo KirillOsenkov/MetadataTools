@@ -147,14 +147,14 @@ public partial class PEFile
     }
 
     /// <summary>
-    /// Labels MethodTables: the type descriptors of the NativeAOT runtime.
-    /// Candidates are the types of frozen objects and the targets of the
-    /// reference tables; from each one the base type and the interfaces are
-    /// visited too. A candidate is accepted when every vtable slot is a
-    /// relocated pointer to code and every interface slot a relocated pointer
-    /// to data.
+    /// Used when the module header has no type manager cell to recognize
+    /// MethodTables by. Candidates are the types of frozen objects and the
+    /// targets of the reference tables; from each one the base type and the
+    /// interfaces are visited too. A candidate is accepted when every vtable
+    /// slot is a relocated pointer to code and every interface slot a
+    /// relocated pointer to data.
     /// </summary>
-    private void AddNativeAotMethodTables()
+    private void AddNativeAotMethodTablesFromReferences()
     {
         if (!IsNativeAot || !HasRelocations || PointerSize != 8)
         {
@@ -414,8 +414,24 @@ public partial class PEFile
         foreach (var unwindInfo in table.PlainUnwindInfos)
         {
             int start = unwindInfo.End;
-            int nextUnwindInfo = (start + 3) & ~3;
-            if (table.UnwindOffsets.Contains(nextUnwindInfo) || table.UnwindOffsets.Contains(start))
+
+            // The compiler does not pad an odd number of unwind codes: the
+            // data of a managed method starts right after the last code.
+            // Unwind info of the native runtime code has the two padding
+            // bytes, which are zero, and the next unwind info after them.
+            var lastChild = unwindInfo.Children[unwindInfo.Children.Count - 1];
+            if (lastChild.Length == 2 && lastChild.Text == "Alignment slot")
+            {
+                bool isPadding = Buffer.ReadUInt16(lastChild.Start) == 0 && table.UnwindOffsets.Contains(start);
+                if (!isPadding)
+                {
+                    unwindInfo.Children.RemoveAt(unwindInfo.Children.Count - 1);
+                    unwindInfo.Length -= 2;
+                    start -= 2;
+                }
+            }
+
+            if (table.UnwindOffsets.Contains(start))
             {
                 continue;
             }

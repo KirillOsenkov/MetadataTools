@@ -5,12 +5,16 @@ using System.Linq;
 using GuiLabs.FileFormat;
 using GuiLabs.FileFormat.PE;
 using GuiLabs.FileFormat.PE.Dotnet;
+using GuiLabs.FileFormat.Wasm;
 
 class Program
 {
     const string Usage = @"PETree <file>                     Write the full tree with hex bytes to a .txt file next to the input.
 PETree <file1> <file2>            Also diff two files.
-PETree <dir|@list|files...>       One summary line per .exe, .dll and .pdb (same as --summary).
+PETree <dir|@list|files...>       One summary line per .exe, .dll, .wasm and .pdb (same as --summary).
+
+A .wasm file is read as a WebAssembly module. A Webcil module (a .NET assembly of a
+browser build) is read down to the metadata tables of the assembly.
 
 Views of one file (printed to the console, or to a file with --out <path>):
   --outline                       Tree with offset, length and node type on each line.
@@ -26,6 +30,19 @@ Views of one file (printed to the console, or to a file with --out <path>):
   --hex <offset> [length]         Hex dump of a file range (default 256 bytes).
   --text                          The full tree with hex bytes, as written by the default mode.
   --summary                       One line: size, unknown, code, padding and parsed byte counts.
+  --map <file.map.xml>            NativeAOT image: compare the labels with the compiler's map file (IlcGenerateMapFile).
+  --mstat <file.mstat> [N]        NativeAOT image: bytes per assembly from the compiler's mstat file
+                                  (IlcGenerateMstatFile), and the N largest namespaces, types and methods
+                                  (default 20). With --map, each method is also found in the image: the
+                                  function nodes are named, and --brotli adds the compressed length of the code.
+  --aot [N]                       WebAssembly module with Mono AOT code: bytes of code and data per assembly, and
+                                  the N largest namespaces, types and methods (default 20). The names are read
+                                  from the assemblies (name.dll or name.wasm) and the object files (name.dll.o)
+                                  of the build, in the folder of the module and in its ""aot-in"" folder.
+      --names <folder> ...        More folders with these files.
+      --brotli [quality]          Also the Brotli-compressed length of the code and data of each assembly
+                                  (quality 0 to 11, default 11; slower).
+      --functions <path>          Write one line per function, with tabs between the columns.
 
 Numbers are decimal, or hexadecimal with a 0x prefix.";
 
@@ -47,7 +64,8 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
                 currentOption = arg;
                 options[currentOption] = new List<string>();
             }
-            else if (currentOption != null && AcceptsValue(currentOption, options[currentOption].Count))
+            else if (currentOption != null && AcceptsValue(currentOption, options[currentOption].Count) &&
+                (currentOption is not ("--aot" or "--brotli") || int.TryParse(arg, out _)))
             {
                 options[currentOption].Add(arg);
             }
@@ -99,7 +117,7 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
             }
 
             var root = Inspector.ReadFile(files[0]);
-            return RunViews(root, options, writer);
+            return RunViews(root, files[0], options, writer);
         }
         finally
         {
@@ -111,8 +129,9 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
     {
         int max = option switch
         {
-            "--depth" or "--run" or "--under" or "--at" or "--rva" or "--out" or "--stats" or "--unknowns" or "--analyze" => 1,
-            "--find" or "--hex" => 2,
+            "--depth" or "--run" or "--under" or "--at" or "--rva" or "--out" or "--stats" or "--unknowns" or "--analyze" or "--map" or "--functions" or "--aot" or "--brotli" => 1,
+            "--find" or "--hex" or "--mstat" => 2,
+            "--names" => 16,
             _ => 0
         };
         return valuesSoFar < max;
@@ -142,6 +161,7 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
                 files.AddRange(Directory.GetFiles(path, "*.*", SearchOption.AllDirectories)
                     .Where(f => f.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                         f.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                        f.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase) ||
                         f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
                     .OrderBy(f => f, StringComparer.OrdinalIgnoreCase));
             }
@@ -174,13 +194,27 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
         return 0;
     }
 
-    static int RunViews(Node root, Dictionary<string, List<string>> options, TextWriter writer)
+    static int RunViews(Node root, string filePath, Dictionary<string, List<string>> options, TextWriter writer)
     {
         string Value(string option, int index = 0) =>
             options.TryGetValue(option, out var values) && values.Count > index ? values[index] : null;
 
         int Number(string option, int defaultValue, int index = 0) =>
             Value(option, index) is { } text ? ParseNumber(text) : defaultValue;
+
+        // The names are read first, so that the other views show them too
+        MonoAotNames aotNames = null;
+        if (root is WasmFile wasmFile && wasmFile.MonoAotModules.Count > 0 &&
+            (options.ContainsKey("--aot") || options.ContainsKey("--names") || options.ContainsKey("--functions")))
+        {
+            aotNames = MonoAotNames.Read(wasmFile, filePath, options.TryGetValue("--names", out var folders) ? folders : []);
+        }
+
+        if (Value("--mstat") is { } mstatPath)
+        {
+            int quality = options.ContainsKey("--brotli") ? Math.Clamp(Number("--brotli", 11), 0, 11) : -1;
+            NativeAotSummary.Print(root, mstatPath, Value("--map"), Number("--mstat", 20, index: 1), quality, writer);
+        }
 
         if (options.ContainsKey("--outline"))
         {
@@ -201,6 +235,23 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
 
             Inspector.PrintOutline(start, writer, Number("--depth", 2), Number("--run", 3));
             return 0;
+        }
+
+        // With --mstat the map file is an input of that report
+        if (Value("--map") is { } mapPath && !options.ContainsKey("--mstat"))
+        {
+            MapComparison.Print(root, mapPath, writer);
+        }
+
+        if (options.ContainsKey("--aot"))
+        {
+            int quality = options.ContainsKey("--brotli") ? Math.Clamp(Number("--brotli", 11), 0, 11) : -1;
+            MonoAotSummary.Print(root, aotNames, Number("--aot", 20), quality, writer);
+        }
+
+        if (Value("--functions") is { } functionsPath)
+        {
+            MonoAotSummary.WriteFunctionList(root, aotNames, functionsPath);
         }
 
         if (options.ContainsKey("--stats"))

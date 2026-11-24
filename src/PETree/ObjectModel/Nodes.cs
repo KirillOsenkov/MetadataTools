@@ -159,7 +159,13 @@ public class FourBytes : BytesNode
     }
 
     public uint ReadUint32() => Buffer.ReadUInt32(Start);
-    public int ReadInt32() => Buffer.ReadInt32(Start);
+
+    /// <summary>
+    /// Virtual so that a field whose stored value needs a correction, such as
+    /// an offset that is relative to something other than the file start,
+    /// can present the corrected value to its readers.
+    /// </summary>
+    public virtual int ReadInt32() => Buffer.ReadInt32(Start);
 
     public int Value => ReadInt32();
 }

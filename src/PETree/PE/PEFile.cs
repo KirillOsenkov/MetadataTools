@@ -41,7 +41,7 @@ public partial class PEFile : Node
         Write(stream);
     }
 
-    public bool IsPE32Plus => OptionalHeader.StandardFields.IsPE32Plus;
+    public virtual bool IsPE32Plus => OptionalHeader.StandardFields.IsPE32Plus;
 
     private bool HasValidPESignatures()
     {
@@ -191,38 +191,7 @@ public partial class PEFile : Node
         var debugDirectoryAddress = OptionalHeader.DataDirectories.Debug;
         if (debugDirectoryAddress.RVA.Value != 0)
         {
-            int offset = ResolveDataDirectory(debugDirectoryAddress);
-            DebugDirectories = new DebugDirectories { Start = offset, Length = debugDirectoryAddress.Size.Value };
-            Add(DebugDirectories);
-
-            foreach (var debugDirectory in DebugDirectories.Directories)
-            {
-                var address = debugDirectory.AddressOfRawData.Value;
-                var start = address != 0
-                    ? ResolveVirtualAddress(address)
-                    : debugDirectory.PointerToRawData.Value;
-                int size = debugDirectory.SizeOfData.Value;
-                if (start > 0 && size > 0 && (long)start + size <= Buffer.Length)
-                {
-                    Node entry = debugDirectory.CreateDataNode(Buffer, start, size);
-                    entry.Start = start;
-                    if (entry is RSDS rsds)
-                    {
-                        RSDS = rsds;
-                    }
-                    else
-                    {
-                        entry.Length = size;
-                    }
-
-                    if (entry is EmbeddedPdb embeddedPdb)
-                    {
-                        EmbeddedPdb = embeddedPdb;
-                    }
-
-                    Add(entry);
-                }
-            }
+            AddDebugDirectory(ResolveDataDirectory(debugDirectoryAddress), debugDirectoryAddress.Size.Value, fileOffsetBase: 0);
         }
 
         ResourceTable = AddTable<ResourceTable>(OptionalHeader.DataDirectories.ResourceTable, text: "Resource table");
@@ -598,7 +567,47 @@ public partial class PEFile : Node
         }
     }
 
-    private void ReadDotnetMetadata(int cliHeader)
+    /// <summary>
+    /// Adds the debug directory and the data of its entries. An entry
+    /// without an RVA locates its data by file offset; in a Webcil image
+    /// that offset is relative to the start of the image.
+    /// </summary>
+    protected void AddDebugDirectory(int offset, int length, int fileOffsetBase)
+    {
+        DebugDirectories = new DebugDirectories { Start = offset, Length = length };
+        Add(DebugDirectories);
+
+        foreach (var debugDirectory in DebugDirectories.Directories)
+        {
+            var address = debugDirectory.AddressOfRawData.Value;
+            var start = address != 0
+                ? ResolveVirtualAddress(address)
+                : debugDirectory.PointerToRawData.Value + fileOffsetBase;
+            int size = debugDirectory.SizeOfData.Value;
+            if (start > 0 && size > 0 && (long)start + size <= Buffer.Length)
+            {
+                Node entry = debugDirectory.CreateDataNode(Buffer, start, size);
+                entry.Start = start;
+                if (entry is RSDS rsds)
+                {
+                    RSDS = rsds;
+                }
+                else
+                {
+                    entry.Length = size;
+                }
+
+                if (entry is EmbeddedPdb embeddedPdb)
+                {
+                    EmbeddedPdb = embeddedPdb;
+                }
+
+                Add(entry);
+            }
+        }
+    }
+
+    protected void ReadDotnetMetadata(int cliHeader)
     {
         CLIHeader = new CLIHeader { Start = cliHeader };
         Add(CLIHeader);
@@ -1081,19 +1090,28 @@ public partial class PEFile : Node
 
     public bool IsRangeAvailable(int start, int length)
     {
+        return FindAvailableParent(start, length) != null;
+    }
+
+    /// <summary>
+    /// The section or region that a node with this range would become a
+    /// child of, or null when the range is outside the sections or not free.
+    /// </summary>
+    private Node FindAvailableParent(int start, int length)
+    {
         if (start < 0 || length <= 0 || start > Buffer.Length - length)
         {
-            return false;
+            return null;
         }
 
         int end = start + length;
         int sectionIndex = FindChildIndex(start);
         if (sectionIndex < 0 || Children[sectionIndex] is not Section section || end > section.End)
         {
-            return false;
+            return null;
         }
 
-        return FindAvailableParent(section, start, end) != null;
+        return FindAvailableParent(section, start, end);
     }
 
     private static Node FindAvailableParent(Node parent, int start, int end)

@@ -7,6 +7,7 @@ using System.Text;
 using GuiLabs.FileFormat;
 using GuiLabs.FileFormat.PE;
 using GuiLabs.FileFormat.PE.Dotnet;
+using GuiLabs.FileFormat.Wasm;
 
 /// <summary>
 /// Text views of a parsed tree for use from the command line: an outline with
@@ -20,6 +21,11 @@ public static class Inspector
         if (Metadata.IsMetadataFile(filePath))
         {
             return Metadata.ReadFromFile(filePath);
+        }
+
+        if (WasmFile.IsWasmFile(filePath))
+        {
+            return WasmFile.ReadFromFile(filePath);
         }
 
         return PEFile.ReadFromFile(filePath);
@@ -62,7 +68,7 @@ public static class Inspector
             return ByteCategory.UnparsedSection;
         }
 
-        if (leaf is NativeCode || leaf is PCode || (leaf.GetType() == typeof(Node) && leaf.Text != null && leaf.Text.StartsWith("Native code")))
+        if (leaf is NativeCode || leaf is PCode || leaf is WasmCode || (leaf.GetType() == typeof(Node) && leaf.Text != null && leaf.Text.StartsWith("Native code")))
         {
             return ByteCategory.Code;
         }

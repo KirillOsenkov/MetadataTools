@@ -287,7 +287,7 @@ public partial class PEFile
     /// bytes are split into relocated pointers, strings, zero padding and
     /// unknown data; elsewhere a range is either padding or unknown.
     /// </summary>
-    private void ClassifyUncoveredSpans()
+    protected void ClassifyUncoveredSpans()
     {
         var gaps = new List<(Node container, int start, int length)>();
         CollectGaps(this, gaps);
@@ -312,7 +312,9 @@ public partial class PEFile
                 var span = new Span(start, length);
                 Node node = Buffer.IsZeroFilled(span) || IsPaddingFilled(span)
                     ? new Padding()
-                    : new Unknown();
+                    : container is Dotnet.IL && IsStrippedIL(span)
+                        ? new StrippedMethodBodies()
+                        : new Unknown();
                 node.Start = start;
                 node.Length = length;
                 output.Add(node);
@@ -357,6 +359,39 @@ public partial class PEFile
         }
     }
 
+    /// <summary>
+    /// The IL stripper of an ahead-of-time build fills a method body with
+    /// zeros and leaves the first bytes of its header. A range of the IL
+    /// area that no method claims and that is zero except for such
+    /// remnants is what the stripper left.
+    /// </summary>
+    private bool IsStrippedIL(Span span)
+    {
+        const int MinimumLength = 12;
+        if (span.Length < MinimumLength)
+        {
+            return false;
+        }
+
+        var bytes = Buffer.ReadBytes(span.Start, span.Length);
+        int nonZero = 0;
+        foreach (byte b in bytes)
+        {
+            if (b != 0)
+            {
+                nonZero++;
+            }
+        }
+
+        return nonZero * 4 <= bytes.Length;
+    }
+
+    /// <summary>
+    /// Names of pointer tables by file offset, for tables whose start is
+    /// known from a reference and whose bytes are labelled with the gaps.
+    /// </summary>
+    public Dictionary<int, string> PointerTableNames { get; } = new();
+
     private void ClassifySectionGap(List<Node> output, int start, int length)
     {
         int end = start + length;
@@ -378,21 +413,37 @@ public partial class PEFile
                 continue;
             }
 
+            // A run ends where a table with a known name starts
             int count = 1;
             while (relocationIndex + count < relocationOffsets.Length &&
                 relocationOffsets[relocationIndex + count] == runStart + count * pointerSize &&
-                runStart + (count + 1) * pointerSize <= end)
+                runStart + (count + 1) * pointerSize <= end &&
+                !PointerTableNames.ContainsKey(runStart + count * pointerSize))
             {
                 count++;
             }
 
             ClassifyRawBytes(output, position, runStart);
-            output.Add(new PointerTable
+            if (PointerTableNames.TryGetValue(runStart, out string tableName))
             {
-                Start = runStart,
-                Length = count * pointerSize,
-                PointerSize = pointerSize
-            });
+                output.Add(new RecordTable
+                {
+                    Start = runStart,
+                    Length = count * pointerSize,
+                    Count = count,
+                    Fields = [("Pointer", pointerSize)],
+                    Text = $"{tableName} ({count} entries)"
+                });
+            }
+            else
+            {
+                output.Add(new PointerTable
+                {
+                    Start = runStart,
+                    Length = count * pointerSize,
+                    PointerSize = pointerSize
+                });
+            }
             position = runStart + count * pointerSize;
             relocationIndex += count;
         }
@@ -415,10 +466,11 @@ public partial class PEFile
             return;
         }
 
-        bool guessPointers = !HasRelocations;
+        // An image without PE headers (Webcil) has no image base to compare with
+        bool guessPointers = !HasRelocations && OptionalHeader != null;
         int pointerSize = PointerSize;
-        ulong lowestAddress = ImageBase + (uint)OptionalHeader.WindowsFields.SectionAlignment.Value;
-        ulong highestAddress = ImageBase + SizeOfImage;
+        ulong lowestAddress = guessPointers ? ImageBase + (uint)OptionalHeader.WindowsFields.SectionAlignment.Value : 0;
+        ulong highestAddress = guessPointers ? ImageBase + SizeOfImage : 0;
 
         int unknownStart = 0;
         int i = 0;
@@ -537,7 +589,7 @@ public partial class PEFile
 
     private const int MinimumStringLength = 4;
 
-    private static int MeasureAsciiString(byte[] bytes, int start)
+    public static int MeasureAsciiString(byte[] bytes, int start)
     {
         int i = start;
         while (i < bytes.Length && IsTextByte(bytes[i]))
@@ -554,7 +606,7 @@ public partial class PEFile
         return characters + 1;
     }
 
-    private static int MeasureUtf16String(byte[] bytes, int start)
+    public static int MeasureUtf16String(byte[] bytes, int start)
     {
         int i = start;
         while (i + 1 < bytes.Length && bytes[i + 1] == 0 && IsTextByte(bytes[i]))
@@ -587,6 +639,17 @@ public class PointerTable : Node
         }
 
         Text = count == 1 ? "Pointer" : $"Pointers ({count})";
+    }
+}
+
+/// <summary>
+/// Method bodies that the IL stripper filled with zeros.
+/// </summary>
+public class StrippedMethodBodies : Padding
+{
+    public StrippedMethodBodies()
+    {
+        Text = "Method bodies removed by the IL stripper";
     }
 }
 
