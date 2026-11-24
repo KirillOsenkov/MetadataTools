@@ -148,6 +148,11 @@ public sealed class MonoAotNames
     public Dictionary<WasmFunction, MonoAotMethod> Methods { get; } = new();
 
     /// <summary>
+    /// The file that the metadata of each assembly was read from, by assembly name.
+    /// </summary>
+    public Dictionary<string, string> AssemblyPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// What was read and what was not found.
     /// </summary>
     public List<string> Messages { get; } = new();
@@ -252,6 +257,10 @@ public sealed class MonoAotNames
             }
         }
 
+        names.ReadSymbolMap(file, filePath, folders);
+
+        int comparedSymbols = 0;
+        int equalSymbols = 0;
         foreach (var function in file.Functions)
         {
             if (function.Owner == null)
@@ -261,12 +270,35 @@ public sealed class MonoAotNames
 
             var method = names.Describe(function, symbols);
             names.Methods[function] = method;
+            if (names.symbolMap != null && names.symbolMap.TryGetValue(function.Index, out string mapName))
+            {
+                if (method.Symbol == null)
+                {
+                    // No object file: the symbol map has the same symbol
+                    method.Symbol = mapName;
+                    if (!method.IsFromMetadata && function.MethodIndex >= 0)
+                    {
+                        names.ParseSymbol(method, function.Owner.Name);
+                    }
+                }
+                else
+                {
+                    comparedSymbols++;
+                    equalSymbols += method.Symbol == mapName ? 1 : 0;
+                }
+            }
+
             if (method.Kind != MonoAotMethod.KindHelper && method.Kind != MonoAotMethod.KindNotNamed && !isObjectFile)
             {
                 string name = method.FullName;
                 file.FunctionNames[function.Index] = name;
                 function.Text = file.DescribeFunction(function.Index);
             }
+        }
+
+        if (comparedSymbols > 0)
+        {
+            names.Messages.Add($"The symbol of the object file and the name in the symbol map are the same for {equalSymbols:N0} of {comparedSymbols:N0} functions of the assemblies.");
         }
 
         if (missingAssemblies.Count > 0)
@@ -285,6 +317,196 @@ public sealed class MonoAotNames
         }
 
         return names;
+    }
+
+    private Dictionary<int, string> symbolMap;
+
+    /// <summary>
+    /// The library of each function that is in no method table, when the
+    /// symbol map was found: the Mono runtime, Skia and so on.
+    /// </summary>
+    public Dictionary<WasmFunction, string> NativeLibraries { get; } = new();
+
+    /// <summary>
+    /// The symbol map is a text file that the linker writes beside the
+    /// module when the build has WasmEmitSymbolMap=true: one line per
+    /// function, with the function index, a colon and the name. The names
+    /// that the module has itself, for imports and exports, are compared
+    /// with it, to tell a map of another build.
+    /// </summary>
+    private void ReadSymbolMap(WasmFile file, string filePath, List<string> folders)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(filePath) + ".js.symbols";
+        string path = folders.Select(f => Path.Combine(f, fileName)).FirstOrDefault(File.Exists);
+        if (path == null)
+        {
+            Messages.Add($"No symbol map ({fileName}, written by a build with WasmEmitSymbolMap=true) was found: the functions in no method table have no names.");
+            return;
+        }
+
+        var map = new Dictionary<int, string>();
+        foreach (string line in File.ReadLines(path))
+        {
+            int colon = line.IndexOf(':');
+            if (colon > 0 && int.TryParse(line.AsSpan(0, colon), out int index))
+            {
+                map[index] = line.Substring(colon + 1);
+            }
+        }
+
+        int same = 0;
+        int different = 0;
+        foreach (var (index, name) in file.FunctionNames)
+        {
+            bool isOwned = index >= file.ImportedFunctionCount && index - file.ImportedFunctionCount < file.Functions.Count && file.Functions[index - file.ImportedFunctionCount].Owner != null;
+            if (isOwned || !map.TryGetValue(index, out string mapName))
+            {
+                continue;
+            }
+
+            if (name == mapName || name.EndsWith("." + mapName, StringComparison.Ordinal))
+            {
+                same++;
+            }
+            else
+            {
+                different++;
+            }
+        }
+
+        if (different > same)
+        {
+            Messages.Add($"The symbol map {path} is from another build: {different:N0} of the {same + different:N0} names that the module has for its imports and exports differ. It is not used.");
+            return;
+        }
+
+        symbolMap = map;
+        var native = new List<WasmFunction>();
+        var libraries = new List<string>();
+        foreach (var function in file.Functions)
+        {
+            if (function.Owner == null && map.TryGetValue(function.Index, out string name))
+            {
+                file.FunctionNames[function.Index] = name;
+                function.Text = file.DescribeFunction(function.Index);
+                native.Add(function);
+                libraries.Add(GetNativeLibrary(name));
+            }
+        }
+
+        // The functions of one library are stored one after another. A
+        // function whose name does not tell the library, such as a local
+        // helper function in C, gets the library of its neighbors when the
+        // nearest recognized functions before and after it agree.
+        int named = native.Count;
+        var before = new string[named];
+        string last = null;
+        for (int i = 0; i < named; i++)
+        {
+            last = libraries[i] ?? last;
+            before[i] = last;
+        }
+
+        last = null;
+        for (int i = named - 1; i >= 0; i--)
+        {
+            last = libraries[i] ?? last;
+            NativeLibraries[native[i]] = libraries[i] ?? (before[i] != null && before[i] == last ? last : OtherNativeCode);
+        }
+
+        Messages.Add($"Symbol map: {map.Count:N0} names, {named:N0} of them for functions in no method table. {same:N0} of the {same + different:N0} names that the module has for its imports and exports are the same in the map.");
+    }
+
+    public const string OtherNativeCode = "C library and other native code";
+
+    /// <summary>
+    /// The library of a native function, from its name, or null when the
+    /// name does not tell. The symbol map has C++ names in readable form,
+    /// with namespaces and parameter types. The C++ code of the module is
+    /// HarfBuzz, whose names have "hb_" or one of its namespaces, the C++
+    /// standard library, and Skia. A C function is recognized by the
+    /// prefix that its library uses.
+    /// </summary>
+    private static string GetNativeLibrary(string name)
+    {
+        bool Starts(params string[] prefixes) => prefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal));
+        bool Contains(params string[] texts) => texts.Any(t => name.Contains(t, StringComparison.Ordinal));
+
+        if (Contains("hb_", "OT::", "AAT::", "CFF::", "graph::"))
+        {
+            return "HarfBuzz";
+        }
+
+        if (Starts("wgpu", "emwgpu", "emscripten_gl", "emscripten_webgl", "_webgl", "dawn") || Contains("wgpu::", "dawn::"))
+        {
+            return "WebGL and WebGPU bindings";
+        }
+
+        bool isCpp = Contains("::", "(");
+        if (isCpp)
+        {
+            bool isSkia = Contains("Sk", "Gr", "skgpu", "skia", "skvx", "skif", "sktext", "skcms", "sk_sp", "portable::");
+            if (!isSkia && (Starts("std::", "__cxxabiv1::", "operator new", "operator delete") || Contains(" std::", "__cxa_")))
+            {
+                return "C++ standard library";
+            }
+
+            return "Skia";
+        }
+
+        if (Starts("mono_", "mini_", "sgen_", "ves_icall", "monoeg_", "interp_", "mint_", "jiterp", "m2n_", "_mono_", "dn_simdhash", "minipal_", "mono"))
+        {
+            return "Mono runtime";
+        }
+
+        if (Starts("SystemNative_", "GlobalizationNative_", "CompressionNative_", "CryptoNative_", "SystemInteropJS_", "BrowserNative_"))
+        {
+            return ".NET native libraries";
+        }
+
+        if (Starts("Sk", "sk_", "Gr", "gr_", "skcms_", "wuffs_"))
+        {
+            return "Skia";
+        }
+
+        if (Starts("FT_", "ft_", "af_", "cff_", "tt_", "TT_", "ps_", "t1_", "T1_", "pfr_", "sfnt_", "cid_", "psh_", "t42_", "cf2_", "afm_", "pcf_", "bdf_"))
+        {
+            return "FreeType";
+        }
+
+        if (Starts("jpeg_", "jinit", "j12init", "j16init", "jround", "jdiv", "jcopy", "jsimd", "jzero"))
+        {
+            return "libjpeg";
+        }
+
+        if (Starts("png_"))
+        {
+            return "libpng";
+        }
+
+        if (Starts("WebP", "VP8", "webp"))
+        {
+            return "libwebp";
+        }
+
+        if (Starts("XML_"))
+        {
+            return "expat";
+        }
+
+        if (Starts("Cr_z_", "inflate", "deflate", "adler32", "crc32", "zng_", "Brotli"))
+        {
+            return "zlib and Brotli";
+        }
+
+        int length = name.Length;
+        bool hasVersionSuffix = length > 3 && name[length - 3] == '_' && char.IsDigit(name[length - 2]) && char.IsDigit(name[length - 1]);
+        if (Starts("icu_") || (hasVersionSuffix && name[0] == 'u'))
+        {
+            return "ICU";
+        }
+
+        return null;
     }
 
     private static string Shorten(List<string> names)
@@ -443,6 +665,7 @@ public sealed class MonoAotNames
         }
 
         assemblies[module.Name] = info;
+        AssemblyPaths[module.Name] = path;
         return true;
     }
 

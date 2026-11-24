@@ -33,8 +33,9 @@ Views of one file (printed to the console, or to a file with --out <path>):
   --map <file.map.xml>            NativeAOT image: compare the labels with the compiler's map file (IlcGenerateMapFile).
   --mstat <file.mstat> [N]        NativeAOT image: bytes per assembly from the compiler's mstat file
                                   (IlcGenerateMstatFile), and the N largest namespaces, types and methods
-                                  (default 20). With --map, each method is also found in the image: the
-                                  function nodes are named, and --brotli adds the compressed length of the code.
+                                  (default 20). With --map, the methods, the types and other data of the map
+                                  file are also found in the image: their nodes are named, and --brotli adds
+                                  the compressed length of the code. --details lists the file ranges.
   --aot [N]                       WebAssembly module with Mono AOT code: bytes of code and data per assembly, and
                                   the N largest namespaces, types and methods (default 20). The names are read
                                   from the assemblies (name.dll or name.wasm) and the object files (name.dll.o)
@@ -43,6 +44,10 @@ Views of one file (printed to the console, or to a file with --out <path>):
       --brotli [quality]          Also the Brotli-compressed length of the code and data of each assembly
                                   (quality 0 to 11, default 11; slower).
       --functions <path>          Write one line per function, with tabs between the columns.
+
+PETree --downloads <manifest> [N]   Browser app: the published files with their Brotli-compressed lengths, by group,
+                                  and the N largest (default 20). The manifest is staticwebassets.publish.json
+                                  in the obj folder of the project.
 
 Numbers are decimal, or hexadecimal with a 0x prefix.";
 
@@ -74,6 +79,15 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
                 currentOption = null;
                 paths.Add(arg);
             }
+        }
+
+        // This view reads a manifest of the build and no binary file
+        if (options.TryGetValue("--downloads", out var downloadValues) && downloadValues.Count > 0)
+        {
+            int rows = downloadValues.Count > 1 && int.TryParse(downloadValues[1], out int count) ? count : 20;
+            using var output = options.TryGetValue("--out", out var paths2) && paths2.Count == 1 ? new StreamWriter(paths2[0]) : null;
+            DownloadSummary.Print(downloadValues[0], rows, output ?? Console.Out);
+            return 0;
         }
 
         var files = ExpandPaths(paths, out bool isSet);
@@ -130,7 +144,7 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
         int max = option switch
         {
             "--depth" or "--run" or "--under" or "--at" or "--rva" or "--out" or "--stats" or "--unknowns" or "--analyze" or "--map" or "--functions" or "--aot" or "--brotli" => 1,
-            "--find" or "--hex" or "--mstat" => 2,
+            "--find" or "--hex" or "--mstat" or "--downloads" => 2,
             "--names" => 16,
             _ => 0
         };
@@ -213,7 +227,7 @@ Numbers are decimal, or hexadecimal with a 0x prefix.";
         if (Value("--mstat") is { } mstatPath)
         {
             int quality = options.ContainsKey("--brotli") ? Math.Clamp(Number("--brotli", 11), 0, 11) : -1;
-            NativeAotSummary.Print(root, mstatPath, Value("--map"), Number("--mstat", 20, index: 1), quality, writer);
+            NativeAotSummary.Print(root, mstatPath, Value("--map"), Number("--mstat", 20, index: 1), quality, options.ContainsKey("--details"), writer);
         }
 
         if (options.ContainsKey("--outline"))

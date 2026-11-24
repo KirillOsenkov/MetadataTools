@@ -163,6 +163,11 @@ public static class MonoAotSummary
             }
         }
 
+        if (isCompressed)
+        {
+            PrintCostOfIntermediateLanguage(writer, rows.Select(r => r.module).ToArray(), compressedCode, compressedData, names, brotliQuality);
+        }
+
         var methods = file.Functions
             .Where(f => f.Owner != null && names.Methods.ContainsKey(f))
             .Select(f => (function: f, method: names.Methods[f]))
@@ -206,6 +211,20 @@ public static class MonoAotSummary
         {
             string stored = function.Owner.Name != method.Assembly ? $"  ({function.Owner.Name})" : "";
             writer.WriteLine($"{function.Length,10:N0}  {method.FullName}{stored}");
+        }
+
+        if (names.NativeLibraries.Count > 0)
+        {
+            var native = unowned.Where(names.NativeLibraries.ContainsKey).ToArray();
+            SizeTables.PrintGroups(
+                writer, "Functions in no method table, by library (from the names in the symbol map)", "Library", native,
+                f => names.NativeLibraries[f],
+                f => f.Length,
+                f => false,
+                f => null,
+                int.MaxValue, unownedCode, "share", bytes,
+                f => (f.Start, f.Length),
+                brotliQuality);
         }
 
         writer.WriteLine();
@@ -268,4 +287,61 @@ public static class MonoAotSummary
     }
 
     private static long Compress(byte[] bytes, IEnumerable<(int start, int length)> ranges, int quality) => SizeTables.Compress(bytes, ranges, quality);
+
+    /// <summary>
+    /// For each assembly: what its AOT code and data add to the download,
+    /// next to what its IL method bodies would add. The build has two
+    /// copies of an assembly: the one that was compiled, in the "aot-in"
+    /// folder, and in the "stripped" folder beside it the one that is
+    /// published, without the bodies of the methods that were compiled.
+    /// The difference of their compressed lengths is the cost of the bodies.
+    /// </summary>
+    private static void PrintCostOfIntermediateLanguage(TextWriter writer, MonoAotModule[] modules, long[] compressedCode, long[] compressedData, MonoAotNames names, int quality)
+    {
+        var full = new long[modules.Length];
+        var stripped = new long[modules.Length];
+        Parallel.For(0, modules.Length, i =>
+        {
+            full[i] = -1;
+            stripped[i] = -1;
+            if (!names.AssemblyPaths.TryGetValue(modules[i].Name, out string path) || !path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string strippedPath = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(path)) ?? "", "stripped", Path.GetFileName(path));
+            if (!File.Exists(strippedPath))
+            {
+                return;
+            }
+
+            var fullBytes = File.ReadAllBytes(path);
+            var strippedBytes = File.ReadAllBytes(strippedPath);
+            full[i] = SizeTables.Compress(fullBytes, [(0, fullBytes.Length)], quality);
+            stripped[i] = SizeTables.Compress(strippedBytes, [(0, strippedBytes.Length)], quality);
+        });
+
+        var table = Enumerable.Range(0, modules.Length)
+            .Where(i => full[i] >= 0)
+            .Select(i => (name: modules[i].Name, aot: compressedCode[i] + compressedData[i], full: full[i], stripped: stripped[i], bodies: full[i] - stripped[i]))
+            .OrderByDescending(r => r.aot - r.bodies)
+            .ToArray();
+        if (table.Length == 0)
+        {
+            return;
+        }
+
+        writer.WriteLine();
+        writer.WriteLine("AOT code against IL, compressed. \"AOT\" is the code and data of the assembly in the module. \"IL bodies\" is the");
+        writer.WriteLine("assembly as it was compiled less the assembly as it is published, which has no bodies for the compiled methods.");
+        writer.WriteLine("\"difference\" is what the download would lose if the assembly were interpreted and not compiled. The generic");
+        writer.WriteLine("instances in aot-instances are shared by all assemblies and are not part of these numbers.");
+        writer.WriteLine($"{"Assembly",-42} {"AOT",10} {"compiled",10} {"published",10} {"IL bodies",10} {"difference",10}");
+        foreach (var row in table)
+        {
+            writer.WriteLine($"{row.name,-42} {row.aot,10:N0} {row.full,10:N0} {row.stripped,10:N0} {row.bodies,10:N0} {row.aot - row.bodies,10:N0}");
+        }
+
+        writer.WriteLine($"{$"These {table.Length} assemblies",-42} {table.Sum(r => r.aot),10:N0} {table.Sum(r => r.full),10:N0} {table.Sum(r => r.stripped),10:N0} {table.Sum(r => r.bodies),10:N0} {table.Sum(r => r.aot - r.bodies),10:N0}");
+    }
 }

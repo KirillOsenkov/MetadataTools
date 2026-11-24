@@ -236,7 +236,7 @@ public static class NativeAotSummary
         }
     }
 
-    public static void Print(Node root, string mstatPath, string mapPath, int rowCount, int brotliQuality, TextWriter writer)
+    public static void Print(Node root, string mstatPath, string mapPath, int rowCount, int brotliQuality, bool withDetails, TextWriter writer)
     {
         using var stream = File.OpenRead(mstatPath);
         using var reader = new PEReader(stream);
@@ -309,10 +309,38 @@ public static class NativeAotSummary
             types.Add(new Item { Type = ResolveType(MetadataTokens.EntityHandle(first.Value)), Bytes = numbers.Count > 0 ? numbers[0] : 0 });
         }
 
+        // A frozen object entry is the token of the type of the object, the
+        // length, the index of the name, and then either the token of the
+        // type that owns the object or a number in its place. The bytes
+        // are counted for the owning type. A string literal has none.
         var frozenObjects = new List<Item>();
-        foreach (var (first, numbers, _) in ReadEntries(List("FrozenObjects")))
+        var frozenOperands = List("FrozenObjects");
+        var noOwner = new TypeDesc { Assembly = "(frozen objects without an owning type)" };
+        int operand = 0;
+        while (operand + 2 < frozenOperands.Count)
         {
-            frozenObjects.Add(new Item { Type = ResolveType(MetadataTokens.EntityHandle(first.Value)), Bytes = numbers.Count > 0 ? numbers[0] : 0 });
+            if (!frozenOperands[operand].IsToken || frozenOperands[operand + 1].IsToken || frozenOperands[operand + 2].IsToken)
+            {
+                operand++;
+                continue;
+            }
+
+            var objectType = ResolveType(MetadataTokens.EntityHandle(frozenOperands[operand].Value));
+            long length = frozenOperands[operand + 1].Value;
+            TypeDesc owner = null;
+            int next = operand + 3;
+            if (next < frozenOperands.Count)
+            {
+                if (frozenOperands[next].IsToken)
+                {
+                    owner = ResolveType(MetadataTokens.EntityHandle(frozenOperands[next].Value));
+                }
+
+                next++;
+            }
+
+            frozenObjects.Add(new Item { Type = owner ?? noOwner, Method = objectType.Display, Bytes = length });
+            operand = next;
         }
 
         var fields = new List<Item>();
@@ -445,6 +473,14 @@ public static class NativeAotSummary
         {
             writer.WriteLine();
             writer.WriteLine(layout.Message);
+            writer.WriteLine(layout.DataMessage);
+            if (withDetails)
+            {
+                foreach (string line in layout.Details)
+                {
+                    writer.WriteLine("  " + line);
+                }
+            }
         }
 
         writer.WriteLine();
