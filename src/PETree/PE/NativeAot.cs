@@ -785,7 +785,7 @@ public class NativeAotUnwindData : Node
         AddOneByte($"Flags: {string.Join(", ", flagNames)}");
         if ((Flags & HasAssociatedData) != 0)
         {
-            AddFourBytes("Associated data (relative)");
+            AddFourBytes("Associated data RVA");
         }
 
         if ((Flags & HasEHInfo) != 0)

@@ -204,6 +204,11 @@ public partial class PEFile
     public bool IsRelocated(int offset) => Array.BinarySearch(relocationOffsets, offset) >= 0;
 
     /// <summary>
+    /// The file offsets of the relocated slots, in ascending order.
+    /// </summary>
+    public IReadOnlyList<int> RelocationOffsets => relocationOffsets;
+
+    /// <summary>
     /// File offsets of every pointer-sized slot the base relocation table
     /// lists. A relocated slot holds a virtual address.
     /// </summary>
