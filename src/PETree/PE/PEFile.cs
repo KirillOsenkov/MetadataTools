@@ -284,8 +284,12 @@ public partial class PEFile : Node
         AddRtti();
         AddVisualBasicStructures();
         AddX86ExceptionData();
-        AddGcInfo();
+        AddRuntimeExports();
+
+        // The virtual sections first: the GC info after the last unwind info
+        // of a section ends where the section ends
         AddNativeImageVirtualSections();
+        AddGcInfo();
 
         AddNativeCode(allSections);
 

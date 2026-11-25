@@ -598,13 +598,13 @@ public partial class PEFile
     }
 
     /// <summary>
-    /// In ReadyToRun images the GC info of a method is stored right after its
-    /// unwind info and has no length field, so the bytes up to the next node
-    /// are labelled as GC info.
+    /// In ReadyToRun and NGEN images the GC info of a method is stored right
+    /// after its unwind info and has no length field, so the bytes up to the
+    /// next node are labelled as GC info.
     /// </summary>
     private void AddGcInfo()
     {
-        if (ReadyToRunHeader == null)
+        if (ReadyToRunHeader == null && NativeImageHeader == null)
         {
             return;
         }
@@ -898,7 +898,10 @@ public partial class PEFile
                 Length = length,
                 Text = $"NGEN {name} section{(range == null ? "" : $" ({range})")}",
                 ContainsCode = name is "Code" or "VirtualImportThunk" or "ExternalMethodThunk" or "HelperTable"
-                    or "MethodPrecode" or "MethodPrecodeWrite" or "MethodPrecodeWriteable" or "Stubs"
+                    or "MethodPrecode" or "MethodPrecodeWrite" or "MethodPrecodeWriteable" or "Stubs",
+
+                // The debug info of the methods is a compressed stream of bits
+                GapText = name == "Debug" ? "Debug info of methods (compressed)" : null
             });
         }
     }

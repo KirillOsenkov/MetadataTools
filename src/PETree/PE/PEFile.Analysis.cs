@@ -308,7 +308,11 @@ public partial class PEFile
                 newNodes[container] = output;
             }
 
-            if (container is Section || container is Region)
+            if (container is Region { GapText: not null } opaque)
+            {
+                output.Add(new Region { Start = start, Length = length, Text = opaque.GapText });
+            }
+            else if (container is Section || container is Region)
             {
                 ClassifySectionGap(output, start, length);
             }
@@ -403,6 +407,8 @@ public partial class PEFile
         int position = start;
         int pointerSize = PointerSize;
         int relocationIndex = FirstRelocationAtOrAfter(start);
+        int rva = SectionTable != null ? OffsetToRva(start) : 0;
+        bool isCode = rva != 0 && IsCodeAddress(rva);
 
         while (relocationIndex < relocationOffsets.Length)
         {
@@ -428,7 +434,7 @@ public partial class PEFile
                 count++;
             }
 
-            ClassifyRawBytes(output, position, runStart);
+            ClassifyRawBytes(output, position, runStart, isCode);
             if (PointerTableNames.TryGetValue(runStart, out string tableName))
             {
                 output.Add(new RecordTable
@@ -453,10 +459,10 @@ public partial class PEFile
             relocationIndex += count;
         }
 
-        ClassifyRawBytes(output, position, end);
+        ClassifyRawBytes(output, position, end, isCode);
     }
 
-    private void ClassifyRawBytes(List<Node> output, int start, int end)
+    private void ClassifyRawBytes(List<Node> output, int start, int end, bool isCode)
     {
         int length = end - start;
         if (length <= 0)
@@ -465,11 +471,14 @@ public partial class PEFile
         }
 
         var bytes = Buffer.ReadBytes(start, length);
-        if (IsPaddingPattern(bytes))
+        if (IsPaddingPattern(bytes) || (isCode && IsCodePadding(bytes, start)))
         {
             output.Add(new Padding { Start = start, Length = length });
             return;
         }
+
+        // Breakpoint bytes fill the space between functions and their data
+        bool hasBreakpointPadding = isCode && (Machine == MachineAmd64 || Machine == MachineI386);
 
         // An image without PE headers (Webcil) has no image base to compare with
         bool guessPointers = !HasRelocations && OptionalHeader != null;
@@ -488,11 +497,56 @@ public partial class PEFile
             }
         }
 
+        // A table of constants at the current place
+        bool AddConstantTable()
+        {
+            if (((start + i) & 3) != 0)
+            {
+                return false;
+            }
+
+            var table = ReadConstantTable(bytes, i, start);
+            if (table == null)
+            {
+                return false;
+            }
+
+            Flush(i);
+
+            // The first entry of a checksum table is zero and was taken for padding
+            if (table is ChecksumTable && output.Count > 0 && output[output.Count - 1] is Padding padding &&
+                padding.End == table.Start && padding.Length >= 4)
+            {
+                if (padding.Length == 4)
+                {
+                    output.RemoveAt(output.Count - 1);
+                }
+                else
+                {
+                    padding.Length -= 4;
+                }
+
+                table.Start -= 4;
+                table.Length += 4;
+            }
+
+            output.Add(table);
+            i = table.End - start;
+            unknownStart = i;
+            return true;
+        }
+
         while (i < length)
         {
             byte b = bytes[i];
             if (b == 0)
             {
+                // A value of a table can start with zero bytes
+                if (AddConstantTable())
+                {
+                    continue;
+                }
+
                 int j = i;
                 while (j < length && bytes[j] == 0)
                 {
@@ -501,6 +555,26 @@ public partial class PEFile
 
                 int run = j - i;
                 if (run >= 4 || i == unknownStart || j == length)
+                {
+                    Flush(i);
+                    output.Add(new Padding { Start = start + i, Length = run });
+                    unknownStart = j;
+                }
+
+                i = j;
+                continue;
+            }
+
+            if (b == 0xCC && hasBreakpointPadding)
+            {
+                int j = i;
+                while (j < length && bytes[j] == 0xCC)
+                {
+                    j++;
+                }
+
+                int run = j - i;
+                if (run >= 4 || i == 0 || j == length)
                 {
                     Flush(i);
                     output.Add(new Padding { Start = start + i, Length = run });
@@ -563,10 +637,145 @@ public partial class PEFile
                 continue;
             }
 
+            if (AddConstantTable())
+            {
+                continue;
+            }
+
             i++;
         }
 
         Flush(length);
+    }
+
+    /// <summary>
+    /// True when a range of a code section has nothing but the bytes that
+    /// compilers put between functions: breakpoints and instructions that
+    /// do nothing.
+    /// </summary>
+    private bool IsCodePadding(byte[] bytes, int start)
+    {
+        if (Machine == MachineArm64)
+        {
+            const uint Nop = 0xD503201F;
+            if ((start & 3) != 0 || (bytes.Length & 3) != 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < bytes.Length; i += 4)
+            {
+                // nop, brk with any number, or a zero word
+                uint word = BitConverter.ToUInt32(bytes, i);
+                if (word != 0 && word != Nop && (word & 0xFFE0001F) != 0xD4200000)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (Machine != MachineAmd64 && Machine != MachineI386)
+        {
+            return false;
+        }
+
+        int position = 0;
+        while (position < bytes.Length)
+        {
+            if (bytes[position] == 0xCC || bytes[position] == 0)
+            {
+                position++;
+                continue;
+            }
+
+            int length = MeasureNop(bytes, position);
+            if (length == 0)
+            {
+                return false;
+            }
+
+            position += length;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The length of an x86 instruction that does nothing and is used to
+    /// align code, or 0: nop with prefixes, the long nop, and the forms of
+    /// lea, mov and xchg with the same register on both sides.
+    /// </summary>
+    private static int MeasureNop(byte[] bytes, int start)
+    {
+        int end = bytes.Length;
+        int p = start;
+        while (p < end && bytes[p] == 0x66)
+        {
+            p++;
+        }
+
+        if (p < end && bytes[p] == 0x90)
+        {
+            return p + 1 - start;
+        }
+
+        if (p + 2 < end && bytes[p] == 0x0F && bytes[p + 1] == 0x1F)
+        {
+            // The long nop, by the addressing mode of its operand
+            int length = bytes[p + 2] switch
+            {
+                0x00 => 3,
+                0x40 => 4,
+                0x44 => 5,
+                0x80 => 7,
+                0x84 => 8,
+                _ => 0
+            };
+            return length > 0 && p + length <= end ? p + length - start : 0;
+        }
+
+        if (p != start)
+        {
+            return 0;
+        }
+
+        byte first = bytes[p];
+        byte second = p + 1 < end ? bytes[p + 1] : (byte)0;
+        if (p + 1 < end && ((first == 0x8B && (second == 0xFF || second == 0xC0)) || (first == 0x87 && second == 0xDB)))
+        {
+            return 2;
+        }
+
+        if (first != 0x8D)
+        {
+            return 0;
+        }
+
+        // lea of a register from itself, with a displacement of zero
+        if (p + 2 < end && (second == 0x49 || second == 0x40 || second == 0x76) && bytes[p + 2] == 0)
+        {
+            return 3;
+        }
+
+        if (p + 3 < end && second == 0x64 && bytes[p + 2] == 0x24 && bytes[p + 3] == 0)
+        {
+            return 4;
+        }
+
+        if (p + 5 < end && (second == 0x9B || second == 0x80 || second == 0xB6 || second == 0xBF) && BitConverter.ToInt32(bytes, p + 2) == 0)
+        {
+            return 6;
+        }
+
+        if (p + 6 < end && (second == 0xA4 || second == 0xB4 || second == 0xBC) &&
+            (bytes[p + 2] == 0x24 || bytes[p + 2] == 0x26 || bytes[p + 2] == 0x27) && BitConverter.ToInt32(bytes, p + 3) == 0)
+        {
+            return 7;
+        }
+
+        return 0;
     }
 
     private static bool IsPaddingPattern(byte[] bytes)

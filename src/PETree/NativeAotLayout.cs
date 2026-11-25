@@ -343,7 +343,14 @@ internal sealed class NativeAotLayout
         return true;
     }
 
-    private static bool IsGeneric(Node node) => node is Unknown || node is Padding || node is PointerTable || node is StringLiteral;
+    /// <summary>
+    /// A node that the reader of the image made from the look of the bytes
+    /// and not from a structure that refers to them. A node of the map file
+    /// can be placed over it.
+    /// </summary>
+    private static bool IsGeneric(Node node) =>
+        node is Unknown || node is Padding || node is PointerTable || node is StringLiteral ||
+        node is GuidTable || node is DoubleTable || node is CodeAddressTable || node is ChecksumTable;
 
     private const int NoMatch = 0;
 

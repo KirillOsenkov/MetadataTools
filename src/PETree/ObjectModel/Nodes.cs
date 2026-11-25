@@ -19,6 +19,13 @@ public class Region : Node
     /// True when the bytes of the region that no other node claims are machine code.
     /// </summary>
     public bool ContainsCode { get; set; }
+
+    /// <summary>
+    /// When set, the bytes of the region that no other node claims are data
+    /// of one kind that is not decoded, such as compressed data. They get
+    /// this text and are not searched for strings and pointers.
+    /// </summary>
+    public string GapText { get; set; }
 }
 
 /// <summary>
